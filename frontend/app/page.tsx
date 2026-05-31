@@ -29,6 +29,8 @@ export default function Home() {
   const [taskResult, setTaskResult] = useState<string | null>(null);
   const [collectedInfo, setCollectedInfo] = useState<Record<string, string>>({});
   const [scanning, setScanning] = useState(false);
+  const [profileSummary, setProfileSummary] = useState("");
+  const [profileInterests, setProfileInterests] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -37,16 +39,34 @@ export default function Home() {
 
   useEffect(() => { synthRef.current = window.speechSynthesis; }, []);
 
-  // Scan device on startup
+  // Scan device + fetch profile on startup
   useEffect(() => {
     (async () => {
       setScanning(true);
       try {
         await fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" });
-        setMessages((p) => [...p, { role: "assistant", content: "Device scanned. I know your files, calendar, and system. Ask me anything." }]);
+      } catch {}
+      try {
+        const res = await fetch(`${BASE}/api/profile?user_id=local`);
+        const data = await res.json();
+        setProfileSummary(data.summary || "");
+        const interests = data.profile?.interests?.slice(0, 8).map((i: any) => i.topic) || [];
+        setProfileInterests(interests);
+        setMessages((p) => [...p, { role: "assistant", content: `Device scanned. I know your system, apps, accounts, and ${interests.length} interest areas. Ask me anything.` }]);
       } catch {}
       setScanning(false);
     })();
+    // Periodic rescan every 10 min
+    const interval = setInterval(async () => {
+      try {
+        await fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" });
+        const res = await fetch(`${BASE}/api/profile?user_id=local`);
+        const data = await res.json();
+        setProfileSummary(data.summary || "");
+        setProfileInterests(data.profile?.interests?.slice(0, 8).map((i: any) => i.topic) || []);
+      } catch {}
+    }, 600000);
+    return () => clearInterval(interval);
   }, []);
 
   const speak = useCallback(async (text: string) => {
@@ -373,7 +393,7 @@ export default function Home() {
         </div>
       )}
 
-      <Sidebar messages={messages} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar messages={messages} open={sidebarOpen} onClose={() => setSidebarOpen(false)} summary={profileSummary} interests={profileInterests} />
 
       <footer className="absolute bottom-0 left-0 right-0 z-10 p-6">
         {/* Live transcript */}

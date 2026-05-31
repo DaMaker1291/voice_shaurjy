@@ -188,5 +188,32 @@ async def text_to_speech(req: TTSRequest):
 async def device_scan(user_id: str = "local"):
     from device_scanner import scan_device
 
-    data = scan_device(user_id)
-    return data
+    data = scan_device(user_id, force=True)
+    # Also update profile with fresh scan
+    try:
+        from user_profile import load_profile, save_profile, merge_device_data
+        p = load_profile(user_id)
+        merge_device_data(p, data)
+        save_profile(user_id, p)
+    except:
+        pass
+    return {"status": "ok", "scan_time": data.get("scan_time", "")}
+
+
+# ── User profile ─────────────────────────────────────────────
+
+@app.get("/api/profile")
+async def get_profile(user_id: str = "local"):
+    from user_profile import load_profile, generate_summary
+
+    profile = load_profile(user_id)
+    summary = generate_summary(user_id)
+    return {"profile": profile, "summary": summary}
+
+
+@app.delete("/api/profile")
+async def reset_profile(user_id: str = "local"):
+    from user_profile import save_profile, _default_profile
+
+    save_profile(user_id, _default_profile())
+    return {"status": "ok"}

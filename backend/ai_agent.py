@@ -116,30 +116,33 @@ def _get_device_context() -> str:
                     _DEVICE_INFO = scan_device("local")
                 except:
                     _DEVICE_INFO = {}
-    if not _DEVICE_INFO:
+        # Merge device data into profile
+        if _DEVICE_INFO:
+            try:
+                from user_profile import load_profile, save_profile, merge_device_data
+                p = load_profile("local")
+                merge_device_data(p, _DEVICE_INFO)
+                save_profile("local", p)
+            except:
+                pass
+    return ""
+
+def _get_profile_summary(user_id: str) -> str:
+    try:
+        from user_profile import generate_summary
+        return generate_summary(user_id)
+    except:
         return ""
-    parts = []
-    sys = _DEVICE_INFO.get("system", {})
-    if sys:
-        parts.append(f"User's system: {sys.get('os','')} on {sys.get('hostname','')}, {sys.get('ram_gb','')}GB RAM")
-    files = _DEVICE_INFO.get("recent_files", [])
-    if files:
-        names = ", ".join(f["name"] for f in files[:10])
-        parts.append(f"Recent files: {names}")
-    events = _DEVICE_INFO.get("calendar_events", [])
-    if events:
-        upcoming = "; ".join(f"{e['subject']} ({e['start']})" for e in events[:5])
-        parts.append(f"Calendar: {upcoming}")
-    return "\n".join(parts)
 
 
-def _build_prompt(user_text: str, context: str, history: list[dict] | None = None) -> str:
+def _build_prompt(user_text: str, context: str, history: list[dict] | None = None, user_id: str = "local") -> str:
     system = "You are Jason, a helpful AI assistant. You give concise, accurate answers. Never be rude or sarcastic."
     if context:
         system += f"\n\nRelevant notes:\n{context}"
-    device = _get_device_context()
-    if device:
-        system += f"\n\nDevice info (for personalization):\n{device}"
+    _get_device_context()
+    profile = _get_profile_summary(user_id)
+    if profile:
+        system += f"\n\n{profile}"
     messages = [{"role": "system", "content": system}]
     # Add conversation history
     if history:
@@ -270,7 +273,7 @@ def generate_response(user_id: str, user_text: str, tier: str = "free") -> dict:
 
     _load()
     history = _get_history(user_id)
-    prompt = _build_prompt(user_text, context, history)
+    prompt = _build_prompt(user_text, context, history, user_id)
     inputs = _TOKENIZER(prompt, return_tensors="pt")
     word_count = len(user_text.split())
     max_new_tokens = 96 if word_count > 8 else 64
@@ -290,6 +293,15 @@ def generate_response(user_id: str, user_text: str, tier: str = "free") -> dict:
     # Store in history
     _add_to_history(user_id, {"role": "user", "content": user_text})
     _add_to_history(user_id, {"role": "assistant", "content": reply})
+
+    # Update user profile in background
+    try:
+        from user_profile import load_profile, save_profile, update_from_conversation
+        p = load_profile(user_id)
+        update_from_conversation(p, user_text, reply)
+        save_profile(user_id, p)
+    except:
+        pass
 
     _cache_set(cache_key, result)
     return result
