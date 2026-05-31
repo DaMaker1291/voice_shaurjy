@@ -13,19 +13,11 @@ from models import TextQuery, DocumentUpload, LicenseActivate, LiveKitTokenReque
 from document_processor import process_upload
 from rag_engine import index_document, has_documents, count_chunks
 from billing import get_tier, activate_license, is_premium
-from ai_agent import generate_response, _load as _load_llm
-from reminders import create_reminder, list_reminders, update_reminder, delete_reminder
+from ai_agent import generate_response
 
 load_dotenv()
 
-app = FastAPI(title="Second Brain API", version="1.0.0")
-
-
-@app.on_event("startup")
-async def warmup():
-    print("Pre-loading LLM (this may take ~30s on first run)...")
-    import threading
-    threading.Thread(target=_load_llm, daemon=True).start()
+app = FastAPI(title="Second Brain API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,10 +38,9 @@ async def health():
         "livekit": bool(livekit_url),
         "livekit_url": livekit_url,
         "models": {
-            "llm": "SmolLM2-135M-Instruct (float32, greedy)",
-            "stt": "faster-whisper tiny.en",
-            "tts": "Piper lessac-medium",
-            "embed": "bge-small-en-v1.5",
+            "llm": "Groq Llama3-70B (cloud, instant)",
+            "stt": "Web Speech API",
+            "tts": "edge-tts AriaNeural",
         },
     }
 

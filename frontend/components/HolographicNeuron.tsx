@@ -9,9 +9,10 @@ interface Props {
   onClick?: () => void;
 }
 
+const LAYERS = [6, 10, 12, 8, 4]; // neurons per layer: input -> hidden1 -> hidden2 -> hidden3 -> output
+
 export default function HolographicNeuron({ listening, speaking, onClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -21,189 +22,269 @@ export default function HolographicNeuron({ listening, speaking, onClick }: Prop
     const h = container.clientHeight;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 100);
-    camera.position.z = 12;
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100);
+    camera.position.z = 14;
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
-    // ── Neural network nodes ──────────────────────────────────
-    const nodeCount = 120;
-    const nodes: THREE.Mesh[] = [];
-    const nodePositions: THREE.Vector3[] = [];
-    const nodeData: { phase: number; speed: number }[] = [];
+    // ── Build neural network layers ──────────────────────────
+    const allNodes: { mesh: THREE.Mesh; glow: THREE.Mesh; basePos: THREE.Vector3 }[] = [];
+    const connections: { line: THREE.Line; opacity: number }[] = [];
+    const signals: { start: number; end: number; progress: number; speed: number; mesh: THREE.Mesh }[] = [];
 
-    const sphereGeo = new THREE.SphereGeometry(0.08, 8, 8);
-    const glowGeo = new THREE.SphereGeometry(0.15, 8, 8);
+    const layerSpacing = 3.2;
+    const maxNeurons = Math.max(...LAYERS);
+    const startX = -((LAYERS.length - 1) * layerSpacing) / 2;
 
-    for (let i = 0; i < nodeCount; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const r = 2 + Math.random() * 4;
-      const pos = new THREE.Vector3(
-        r * Math.sin(phi) * Math.cos(theta),
-        r * Math.sin(phi) * Math.sin(theta),
-        r * Math.cos(phi)
-      );
+    LAYERS.forEach((numNeurons, layerIdx) => {
+      const x = startX + layerIdx * layerSpacing;
+      const verticalSpacing = 1.8;
+      const startY = -((numNeurons - 1) * verticalSpacing) / 2;
 
-      const mat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color().setHSL(0.75 + Math.random() * 0.1, 0.8, 0.5 + Math.random() * 0.3),
-        transparent: true,
-        opacity: 0.6 + Math.random() * 0.4,
-      });
-      const mesh = new THREE.Mesh(sphereGeo, mat);
-      mesh.position.copy(pos);
-      scene.add(mesh);
-      nodes.push(mesh);
-      nodePositions.push(pos);
-      nodeData.push({ phase: Math.random() * Math.PI * 2, speed: 0.3 + Math.random() * 0.7 });
+      for (let n = 0; n < numNeurons; n++) {
+        const y = startY + n * verticalSpacing;
+        const z = (Math.random() - 0.5) * 1.5;
+        const pos = new THREE.Vector3(x, y, z);
 
-      // Glow
-      const glowMat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color().setHSL(0.75, 0.9, 0.4),
-        transparent: true,
-        opacity: 0.15,
-      });
-      const glow = new THREE.Mesh(glowGeo, glowMat);
-      glow.position.copy(pos);
-      scene.add(glow);
-    }
+        // Neuron sphere
+        const size = 0.15 + Math.random() * 0.08;
+        const hue = 0.72 + (layerIdx / LAYERS.length) * 0.12;
+        const color = new THREE.Color().setHSL(hue, 0.8, 0.5 + Math.random() * 0.2);
+        const mat = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.7,
+        });
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(size, 12, 12), mat);
+        mesh.position.copy(pos);
+        scene.add(mesh);
 
-    // ── Connections ───────────────────────────────────────────
-    const connectionPairs: { a: number; b: number; line: THREE.Line }[] = [];
-    const connectionMat = new THREE.LineBasicMaterial({
-      color: 0x8855dd,
-      transparent: true,
-      opacity: 0.08,
+        // Glow
+        const glowMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color().setHSL(hue, 0.9, 0.3),
+          transparent: true,
+          opacity: 0.12,
+        });
+        const glow = new THREE.Mesh(new THREE.SphereGeometry(size * 2.2, 8, 8), glowMat);
+        glow.position.copy(pos);
+        scene.add(glow);
+
+        allNodes.push({ mesh, glow, basePos: pos.clone() });
+      }
     });
 
-    for (let i = 0; i < nodeCount; i++) {
-      for (let j = i + 1; j < nodeCount; j++) {
-        const dist = nodePositions[i].distanceTo(nodePositions[j]);
-        if (dist < 2.5 && Math.random() < 0.15) {
-          const geo = new THREE.BufferGeometry().setFromPoints([
-            nodePositions[i],
-            nodePositions[j],
-          ]);
-          const line = new THREE.Line(geo, connectionMat.clone());
+    // ── Connect layers ───────────────────────────────────────
+    for (let l = 0; l < LAYERS.length - 1; l++) {
+      const layerStart = LAYERS.slice(0, l).reduce((a, b) => a + b, 0);
+      const layerEnd = LAYERS.slice(0, l + 1).reduce((a, b) => a + b, 0);
+      const nextStart = LAYERS.slice(0, l + 1).reduce((a, b) => a + b, 0);
+      const nextEnd = LAYERS.slice(0, l + 2).reduce((a, b) => a + b, 0);
+
+      // Connect each neuron in this layer to a subset in the next
+      for (let i = layerStart; i < layerEnd; i++) {
+        const from = allNodes[i];
+        const targets = [];
+        for (let j = nextStart; j < nextEnd; j++) {
+          if (Math.random() < 0.35) {
+            targets.push(j);
+          }
+        }
+        // Ensure at least 1 connection
+        if (targets.length === 0) {
+          targets.push(nextStart + Math.floor(Math.random() * (nextEnd - nextStart)));
+        }
+        for (const j of targets) {
+          const to = allNodes[j];
+          const points = [];
+          points.push(from.basePos.clone());
+          // Curved connection
+          const mid = from.basePos.clone().lerp(to.basePos, 0.5);
+          mid.y += 0.3 + Math.random() * 0.6;
+          points.push(mid);
+          points.push(to.basePos.clone());
+          const curve = new THREE.QuadraticBezierCurve3(from.basePos, mid, to.basePos);
+          const curvePoints = curve.getPoints(12);
+          const geo = new THREE.BufferGeometry().setFromPoints(curvePoints);
+          const opacity = 0.03 + Math.random() * 0.07;
+          const line = new THREE.Line(
+            geo,
+            new THREE.LineBasicMaterial({
+              color: new THREE.Color().setHSL(0.74, 0.7, 0.4 + Math.random() * 0.2),
+              transparent: true,
+              opacity,
+            })
+          );
           scene.add(line);
-          connectionPairs.push({ a: i, b: j, line });
+          connections.push({ line, opacity });
         }
       }
     }
 
     // ── Floating particles ────────────────────────────────────
-    const particleCount = 600;
+    const particleCount = 400;
     const particleGeo = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
-    const particleSizes = new Float32Array(particleCount);
+    const sizes = new Float32Array(particleCount);
     for (let i = 0; i < particleCount; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 20;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
-      particleSizes[i] = 0.01 + Math.random() * 0.03;
+      positions[i * 3] = (Math.random() - 0.5) * 18;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 14;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 8 - 2;
+      sizes[i] = 0.01 + Math.random() * 0.03;
     }
     particleGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    particleGeo.setAttribute("size", new THREE.BufferAttribute(particleSizes, 1));
-
     const particleMat = new THREE.PointsMaterial({
-      color: 0x9966ff,
-      size: 0.035,
+      color: 0x8855dd,
+      size: 0.025,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.2,
       blending: THREE.AdditiveBlending,
     });
     const particles = new THREE.Points(particleGeo, particleMat);
     scene.add(particles);
 
-    // ── Ring ──────────────────────────────────────────────────
-    const ringGeo = new THREE.RingGeometry(3.8, 4.0, 64);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x7744cc,
-      transparent: true,
-      opacity: 0.12,
-      side: THREE.DoubleSide,
+    // ── Label layers ──────────────────────────────────────────
+    const layerLabels = ["INPUT", "HIDDEN 1", "HIDDEN 2", "HIDDEN 3", "OUTPUT"];
+    // Use sprites for labels
+    layerLabels.forEach((label, i) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 128;
+      canvas.height = 32;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "rgba(120,60,220,0.3)";
+      ctx.font = "10px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(label, 64, 18);
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.4 });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.position.set(startX + i * layerSpacing, -4.5, 0);
+      sprite.scale.set(2, 0.5, 1);
+      scene.add(sprite);
     });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = Math.PI / 3;
-    ring.rotation.z = 0.2;
-    scene.add(ring);
 
-    const ring2 = new THREE.Mesh(
-      new THREE.RingGeometry(4.2, 4.3, 64),
-      new THREE.MeshBasicMaterial({ color: 0x9955ee, transparent: true, opacity: 0.06, side: THREE.DoubleSide })
-    );
-    ring2.rotation.x = -Math.PI / 4;
-    ring2.rotation.z = 0.5;
-    scene.add(ring2);
+    // ── Signal propagation ────────────────────────────────────
+    function fireSignal() {
+      const fromLayer = Math.floor(Math.random() * (LAYERS.length - 1));
+      const layerStart = LAYERS.slice(0, fromLayer).reduce((a, b) => a + b, 0);
+      const layerEnd = LAYERS.slice(0, fromLayer + 1).reduce((a, b) => a + b, 0);
+      const nextStart = LAYERS.slice(0, fromLayer + 1).reduce((a, b) => a + b, 0);
+      const nextEnd = LAYERS.slice(0, fromLayer + 2).reduce((a, b) => a + b, 0);
 
-    // ── Center glow ───────────────────────────────────────────
-    const centerGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.4, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0x7733dd, transparent: true, opacity: 0.2 })
-    );
-    scene.add(centerGlow);
+      const from = allNodes[layerStart + Math.floor(Math.random() * (layerEnd - layerStart))];
+      const to = allNodes[nextStart + Math.floor(Math.random() * (nextEnd - nextStart))];
+
+      const sigMat = new THREE.MeshBasicMaterial({
+        color: 0xcc88ff,
+        transparent: true,
+        opacity: 0.8,
+      });
+      const sigMesh = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), sigMat);
+      scene.add(sigMesh);
+      signals.push({
+        start: 0,
+        end: 1,
+        progress: 0,
+        speed: 0.02 + Math.random() * 0.03,
+        mesh: sigMesh,
+      });
+      // Store from/to positions on the object
+      (sigMesh as any)._fromPos = from.basePos.clone();
+      (sigMesh as any)._toPos = to.basePos.clone();
+    }
+
+    // Fire initial signals
+    for (let i = 0; i < 8; i++) {
+      setTimeout(() => fireSignal(), i * 400);
+    }
+
+    // ── Rings ─────────────────────────────────────────────────
+    const rings: THREE.Mesh[] = [];
+    for (let i = 0; i < 2; i++) {
+      const r = new THREE.Mesh(
+        new THREE.RingGeometry(4.5 + i * 0.5, 4.7 + i * 0.5, 48),
+        new THREE.MeshBasicMaterial({
+          color: 0x6633cc,
+          transparent: true,
+          opacity: 0.06 + i * 0.03,
+          side: THREE.DoubleSide,
+        })
+      );
+      r.rotation.x = Math.PI / 3 + i * 0.3;
+      r.rotation.z = i * 0.5;
+      scene.add(r);
+      rings.push(r);
+    }
 
     // ── Animation ─────────────────────────────────────────────
     let time = 0;
-    let pulseTarget = 0;
-    let pulse = 0;
-    let currentPulse = 0;
+    let pulseState = 0;
 
     const animate = () => {
       requestAnimationFrame(animate);
-      time += 0.003;
+      time += 0.005;
 
-      // Read pulse from container CSS variable
-      const pulseVal = parseFloat(container.style.getPropertyValue("--pulse")) || 0;
-      pulseTarget = pulseVal;
-      pulse += (pulseTarget - pulse) * 0.08;
-      currentPulse = pulse;
+      // Read pulse
+      const pulseVal = parseFloat(container.style.getPropertyValue("--pulse") || "0");
+      pulseState += (pulseVal - pulseState) * 0.06;
 
-      // Pulse nodes
-      nodes.forEach((mesh, i) => {
-        const d = nodeData[i];
-        const offset = Math.sin(time * d.speed + d.phase) * 0.15;
-        const base = 1;
-        mesh.scale.setScalar(base + offset + pulse * 0.3);
-        (mesh.material as THREE.MeshBasicMaterial).opacity = 0.5 + offset * 0.8 + pulse * 0.4;
+      // Animate nodes (gentle floating)
+      allNodes.forEach((node, i) => {
+        const offset = Math.sin(time * 0.5 + i * 0.3) * 0.04;
+        const pulseOffset = pulseState * 0.15;
+        node.mesh.position.y = node.basePos.y + offset + pulseOffset;
+        node.mesh.position.x = node.basePos.x + Math.sin(time * 0.3 + i * 0.5) * 0.03;
+        (node.mesh.material as THREE.MeshBasicMaterial).opacity = 0.5 + offset * 2 + pulseState * 0.3;
+        node.glow.position.copy(node.mesh.position);
+        node.glow.scale.setScalar(1 + pulseState * 0.3);
       });
 
-      // Pulse connections
-      connectionPairs.forEach(({ line }) => {
-        (line.material as THREE.LineBasicMaterial).opacity = 0.04 + pulse * 0.15;
+      // Animate connections
+      connections.forEach((conn) => {
+        (conn.line.material as THREE.LineBasicMaterial).opacity = conn.opacity + pulseState * 0.08;
       });
 
-      // Rotate network
-      nodes.forEach((mesh, i) => {
-        mesh.position.copy(nodePositions[i]);
-        mesh.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), time * 0.1);
-        mesh.position.applyAxisAngle(new THREE.Vector3(1, 0, 0), time * 0.05);
-      });
-      connectionPairs.forEach(({ a, b, line }) => {
-        const pa = nodes[a].position;
-        const pb = nodes[b].position;
-        line.geometry.dispose();
-        line.geometry = new THREE.BufferGeometry().setFromPoints([pa, pb]);
+      // Animate signals
+      for (let i = signals.length - 1; i >= 0; i--) {
+        const sig = signals[i];
+        sig.progress += sig.speed;
+        if (sig.progress >= 1) {
+          scene.remove(sig.mesh);
+          signals.splice(i, 1);
+          continue;
+        }
+        const from = (sig.mesh as any)._fromPos as THREE.Vector3;
+        const to = (sig.mesh as any)._toPos as THREE.Vector3;
+        const mid = from.clone().lerp(to, 0.5);
+        mid.y += 0.5;
+        const t = sig.progress;
+        const x = (1 - t) * (1 - t) * from.x + 2 * (1 - t) * t * mid.x + t * t * to.x;
+        const y = (1 - t) * (1 - t) * from.y + 2 * (1 - t) * t * mid.y + t * t * to.y;
+        const z = (1 - t) * (1 - t) * from.z + 2 * (1 - t) * t * mid.z + t * t * to.z;
+        sig.mesh.position.set(x, y, z);
+        (sig.mesh.material as THREE.MeshBasicMaterial).opacity = Math.sin(sig.progress * Math.PI) * 0.8;
+      }
+
+      // Spawn new signals periodically
+      if (Math.random() < 0.03 || pulseState > 0.3) {
+        fireSignal();
+      }
+
+      // Rotate rings
+      rings.forEach((r, i) => {
+        r.rotation.z += 0.003 * (i + 1);
+        r.rotation.x += 0.001 * (i + 1);
       });
 
-      // Rotate particles
+      // Particles
       particles.rotation.y = time * 0.02;
       particles.rotation.x = time * 0.01;
 
-      // Rotate rings
-      ring.rotation.z += 0.002;
-      ring2.rotation.x += 0.001;
-
-      // Center glow pulse
-      centerGlow.scale.setScalar(1 + Math.sin(time * 2) * 0.2 + pulse * 0.5);
-      (centerGlow.material as THREE.MeshBasicMaterial).opacity = 0.15 + Math.sin(time * 2) * 0.08 + pulse * 0.2;
-
       // Camera sway
-      camera.position.x = Math.sin(time * 0.05) * 0.5;
-      camera.position.y = Math.cos(time * 0.07) * 0.3;
+      camera.position.x = Math.sin(time * 0.04) * 0.4;
+      camera.position.y = Math.cos(time * 0.06) * 0.3;
       camera.lookAt(0, 0, 0);
 
       renderer.render(scene, camera);
@@ -211,7 +292,6 @@ export default function HolographicNeuron({ listening, speaking, onClick }: Prop
 
     animate();
 
-    // ── Resize ────────────────────────────────────────────────
     const resize = () => {
       const w2 = container.clientWidth;
       const h2 = container.clientHeight;
@@ -231,8 +311,9 @@ export default function HolographicNeuron({ listening, speaking, onClick }: Prop
   // ── Pulse on state change ───────────────────────────────────
   useEffect(() => {
     if (listening || speaking) {
-      // Trigger pulse via CSS variable hack — the Three.js scene reads it
       containerRef.current?.style.setProperty("--pulse", listening ? "1" : "0.5");
+    } else {
+      containerRef.current?.style.setProperty("--pulse", "0");
     }
   }, [listening, speaking]);
 
@@ -240,19 +321,18 @@ export default function HolographicNeuron({ listening, speaking, onClick }: Prop
     <div
       ref={containerRef}
       onClick={onClick}
-      className="relative w-72 h-72 cursor-pointer group"
-      style={{ filter: "drop-shadow(0 0 40px rgba(120, 60, 220, 0.3))" }}
+      className="relative w-80 h-80 cursor-pointer group"
+      style={{ filter: "drop-shadow(0 0 60px rgba(120, 60, 220, 0.25))" }}
     >
-      {/* Holographic ring overlay */}
-      <div className="absolute inset-0 rounded-full pointer-events-none"
+      <div
+        className="absolute inset-0 rounded-full pointer-events-none"
         style={{
-          background: "radial-gradient(circle, transparent 40%, rgba(120, 60, 220, 0.08) 60%, transparent 70%)",
-          animation: "spin-slow 8s linear infinite",
+          background: "radial-gradient(circle, transparent 35%, rgba(120, 60, 220, 0.06) 55%, transparent 70%)",
+          animation: "spin-slow 10s linear infinite",
         }}
       />
-      {/* Label */}
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-center pointer-events-none">
-        <p className="text-[10px] font-mono text-purple-400/50 tracking-[0.3em] uppercase">
+      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-center pointer-events-none">
+        <p className="text-[9px] font-mono text-purple-500/40 tracking-[0.3em] uppercase">
           {listening ? "listening" : speaking ? "processing" : "idle"}
         </p>
       </div>

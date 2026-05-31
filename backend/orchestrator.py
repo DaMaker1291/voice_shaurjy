@@ -2,35 +2,17 @@
 
 import json
 import re
-import backend.ai_agent as llm
+import urllib.parse
+import subprocess
 
 
 _SESSIONS: dict[str, dict] = {}
 
 
 def _llm_generate(user_input: str, max_tokens: int = 256) -> str:
-    """Generate using proper Qwen2.5 chat template."""
-    llm._load()
-    system = "You are a task planning AI. Break down user requests into steps. Output ONLY valid JSON. No other text."
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user_input},
-    ]
-    prompt = llm._TOKENIZER.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inputs = llm._TOKENIZER(prompt, return_tensors="pt")
-    import torch
-    with torch.no_grad():
-        out = llm._MODEL.generate(
-            **inputs,
-            max_new_tokens=max_tokens,
-            temperature=0.3,
-            top_p=0.9,
-            do_sample=True,
-            repetition_penalty=1.1,
-            pad_token_id=llm._TOKENIZER.eos_token_id,
-        )
-    reply = llm._TOKENIZER.decode(out[0][inputs.input_ids.shape[1]:], skip_special_tokens=True).strip()
-    return reply
+    """Generate a task plan using Groq."""
+    from groq_agent import generate_plan
+    return generate_plan(user_input, "")
 
 
 def _extract_json(text: str) -> dict | None:
