@@ -12,6 +12,21 @@ interface Message {
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+const SUGGESTIONS = [
+  "play some music",
+  "what's the time",
+  "scan my network",
+  "volume to 50",
+  "lock my PC",
+  "take a screenshot",
+  "open Spotify",
+  "battery status",
+  "dim the screen",
+  "search Wikipedia quantum physics",
+  "wake my desktop",
+  "show my clipboard",
+];
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -31,6 +46,7 @@ export default function Home() {
   const [scanning, setScanning] = useState(false);
   const [profileSummary, setProfileSummary] = useState("");
   const [profileInterests, setProfileInterests] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -43,20 +59,19 @@ export default function Home() {
   useEffect(() => {
     (async () => {
       setScanning(true);
-      try {
-        await fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" });
-      } catch {}
+      try { await fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" }); } catch {}
       try {
         const res = await fetch(`${BASE}/api/profile?user_id=local`);
         const data = await res.json();
         setProfileSummary(data.summary || "");
-        const interests = data.profile?.interests?.slice(0, 8).map((i: any) => i.topic) || [];
-        setProfileInterests(interests);
-        setMessages((p) => [...p, { role: "assistant", content: `Device scanned. I know your system, apps, accounts, and ${interests.length} interest areas. Ask me anything.` }]);
+        setProfileInterests(data.profile?.interests?.slice(0, 8).map((i: any) => i.topic) || []);
+        setMessages((p) => [...p, {
+          role: "assistant",
+          content: `Device scanned. I see ${data.profile?.device?.installed_apps?.length || 0} apps, ${data.profile?.interests?.length || 0} interest areas. Ask me anything — or try a suggestion below.`
+        }]);
       } catch {}
       setScanning(false);
     })();
-    // Periodic rescan every 10 min
     const interval = setInterval(async () => {
       try {
         await fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" });
@@ -81,7 +96,6 @@ export default function Home() {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.onended = () => URL.revokeObjectURL(url);
-      // Pre-load then play immediately
       audio.load();
       await audio.play();
     } catch {
@@ -97,7 +111,7 @@ export default function Home() {
     }
   }, []);
 
-  // ── Handle task response from user ─────────────────────────
+  // ── Task response ──────────────────────────────────────────
   const sendTaskResponse = useCallback(async (response: string) => {
     if (!taskSession || !response.trim()) return;
     setMessages((p) => [...p, { role: "user", content: response }]);
@@ -118,25 +132,22 @@ export default function Home() {
     setThinking(false);
   }, [taskSession]);
 
-  // ── Handle query (new message or task answer) ──────────────
+  // ── Handle query ───────────────────────────────────────────
   const handleQuery = useCallback(async (text: string) => {
     if (!text.trim()) return;
     setMessages((p) => [...p, { role: "user", content: text }]);
     setSidebarOpen(true);
     setThinking(true);
+    setShowSuggestions(false);
     try {
       const res = await textChat(text);
       const reply = res.text;
-
-      // Show action feedback
       if (res.action) {
         setActionFeedback(reply);
         setTimeout(() => setActionFeedback(null), 4000);
       } else if (!res.task) {
         speak(reply);
       }
-
-      // Task flow
       if (res.task) {
         _handleTaskResponse(res.task);
       } else {
@@ -162,9 +173,6 @@ export default function Home() {
       setActionFeedback(data.text);
       setTaskStep(data.step || 0);
       setTaskTotal(data.total || 0);
-      if (data.next_action) {
-        // Will show next ask automatically
-      }
       setTimeout(() => setActionFeedback(null), 3000);
     } else if (data.type === "complete") {
       setTaskSession(null);
@@ -180,18 +188,16 @@ export default function Home() {
     }
   }, [taskSession, speak]);
 
-  // ── Speech (improved) ──────────────────────────────────────
+  // ── Speech ─────────────────────────────────────────────────
   const startListening = useCallback(() => {
     if (typeof window === "undefined") return;
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { setShowInput(true); setTimeout(() => inputRef.current?.focus(), 100); return; }
-
     const r = new SR();
     r.lang = "en-US";
     r.interimResults = true;
     r.continuous = true;
     r.maxAlternatives = 3;
-
     let final = "";
 
     r.onresult = (e: any) => {
@@ -210,43 +216,28 @@ export default function Home() {
       }
       setInterim(bestInterim || final);
       setConfidence(Math.round(bestConfidence * 100));
-
-      // Auto-stop after 1.5s of silence once we have final text
       if (final) {
         clearTimeout((r as any)._silenceTimer);
         (r as any)._silenceTimer = setTimeout(() => {
           r.stop();
-          const text = final.trim();
-          if (!text) return;
+          const t = final.trim();
+          if (!t) return;
           setListening(false);
           setInterim("");
           retryCountRef.current = 0;
-          if (taskQuestion) sendTaskResponse(text);
-          else handleQuery(text);
+          setShowSuggestions(false);
+          if (taskQuestion) sendTaskResponse(t);
+          else handleQuery(t);
         }, 1500);
       }
     };
 
     r.onerror = (e: any) => {
-      if (e.error === "not-allowed") {
-        setInterim("Microphone access denied");
-        setListening(false);
-        return;
-      }
-      if (e.error === "no-speech" && retryCountRef.current < 2) {
-        retryCountRef.current++;
-        r.start();
-        return;
-      }
-      setListening(false);
-      setInterim("");
+      if (e.error === "not-allowed") { setInterim("Mic blocked"); setListening(false); return; }
+      if (e.error === "no-speech" && retryCountRef.current < 2) { retryCountRef.current++; r.start(); return; }
+      setListening(false); setInterim("");
     };
-
-    r.onend = () => {
-      setListening(false);
-      if (!final) setInterim("");
-    };
-
+    r.onend = () => { setListening(false); if (!final) setInterim(""); };
     retryCountRef.current = 0;
     recognitionRef.current = r;
     r.start();
@@ -262,11 +253,11 @@ export default function Home() {
     setInterim("");
   }, []);
 
-  // ── Text send ──────────────────────────────────────────────
   const sendText = useCallback(() => {
     const txt = textInput.trim();
     if (!txt) return;
     setTextInput("");
+    setShowSuggestions(false);
     if (taskQuestion) { sendTaskResponse(txt); setShowInput(false); }
     else { setShowInput(false); handleQuery(txt); }
   }, [textInput, taskQuestion, handleQuery, sendTaskResponse]);
@@ -275,6 +266,11 @@ export default function Home() {
     if (listening) stopListening();
     else startListening();
   }, [listening, startListening, stopListening]);
+
+  const pickSuggestion = useCallback((s: string) => {
+    setShowSuggestions(false);
+    handleQuery(s);
+  }, [handleQuery]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -286,60 +282,97 @@ export default function Home() {
     return () => window.removeEventListener("keydown", h);
   }, [showInput, listening, stopListening, taskQuestion, textInput, sendTaskResponse]);
 
-  const statusText = taskQuestion ? `step ${taskStep}/${taskTotal} — answering...` :
-    listening ? (interim ? `"${interim}"` : "listening...") :
-    thinking ? "jason is thinking..." :
-    showInput ? "type and press Enter" : "tap the orb or press / to talk";
+  const statusText = taskQuestion ? `answer step ${taskStep}/${taskTotal}` :
+    listening ? (interim ? `"${interim}"` : "listening") :
+    thinking ? "processing" :
+    showInput ? "type & enter" : "tap orb or press /";
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-gray-950">
+      {/* Background layers */}
+      <div className="gradient-bg" />
+      <div className="aurora" />
+      <div className="scan-overlay" />
+      <div className="particle-field" id="particles" />
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="stars" /><div className="stars2" /><div className="stars3" />
       </div>
 
       {/* Action toast */}
-      <div className={`absolute top-20 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 ${actionFeedback ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
-        <div className="glass rounded-xl px-5 py-3 flex items-center gap-3 glow-purple">
+      <div className={`fixed top-20 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 ${actionFeedback ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
+        <div className="holo-card px-5 py-3 flex items-center gap-3">
           <span className="text-lg">⚡</span>
           <div>
-            <p className="text-xs text-cyan-300 font-mono">Action executed</p>
+            <p className="text-xs text-cyan-300 font-mono">Action</p>
             <p className="text-sm text-gray-200">{actionFeedback}</p>
           </div>
         </div>
       </div>
 
-      {/* Reminder toast — removed; AI learns from device data now */}
-
-      {/* Top-right */}
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-        {scanning && <span className="text-[10px] font-mono text-purple-500 animate-pulse">scanning device...</span>}
-        <button onClick={() => setSidebarOpen((o) => !o)} className="text-gray-600 hover:text-gray-300 transition-colors p-2" title="Transcript">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
-          </svg>
-        </button>
+      {/* Top bar */}
+      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-6 py-3">
+        <div className="flex items-center gap-3">
+          <div className={`w-2 h-2 rounded-full ${listening ? "bg-green-500 recording-indicator" : thinking ? "bg-purple-500 animate-pulse" : "bg-gray-700"}`} />
+          <span className="status-text">{scanning ? "scanning device..." : statusText}</span>
+          {confidence > 0 && <span className="text-[10px] font-mono text-gray-600">{confidence}%</span>}
+        </div>
+        <div className="flex items-center gap-3">
+          {profileInterests.length > 0 && (
+            <div className="hidden md:flex items-center gap-1.5">
+              {profileInterests.slice(0, 3).map((t, i) => (
+                <span key={i} className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-purple-900/20 text-purple-500/70 border border-purple-800/20">{t}</span>
+              ))}
+            </div>
+          )}
+          <button onClick={() => setSidebarOpen((o) => !o)} className="text-gray-600 hover:text-gray-300 transition-colors p-1.5 rounded-lg hover:bg-gray-800/30">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {/* Center neuron */}
-      <div className="absolute inset-0 flex items-center justify-center" style={{ marginTop: taskQuestion ? -60 : 0 }}>
-        <HolographicNeuron listening={listening} speaking={thinking} onClick={handleOrbClick} />
-      </div>
-
-      {/* Task progress bar */}
+      {/* Task progress */}
       {taskTotal > 0 && taskStep > 0 && (
-        <div className="absolute top-28 left-1/2 -translate-x-1/2 z-10 w-64">
-          <div className="h-1 rounded-full bg-gray-800 overflow-hidden">
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-10 w-64">
+          <div className="h-0.5 rounded-full bg-gray-800 overflow-hidden">
             <div className="h-full bg-gradient-to-r from-purple-600 to-cyan-500 transition-all duration-500" style={{ width: `${(taskStep / taskTotal) * 100}%` }} />
           </div>
-          <p className="text-[10px] font-mono text-gray-600 text-center mt-1">Step {taskStep} of {taskTotal}</p>
+          <p className="text-[9px] font-mono text-gray-700 text-center mt-1">step {taskStep}/{taskTotal}</p>
         </div>
       )}
 
-      {/* Task follow-up question */}
+      {/* Center content */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        {/* Holographic neuron */}
+        <div className="flex-shrink-0" style={{ marginTop: taskQuestion ? -80 : -40 }}>
+          <HolographicNeuron listening={listening} speaking={thinking} onClick={handleOrbClick} />
+        </div>
+
+        {/* Suggestions */}
+        {showSuggestions && messages.length <= 1 && (
+          <div className="mt-6 max-w-lg w-full px-6">
+            <p className="text-[10px] font-mono text-gray-700 text-center mb-3 tracking-[0.2em] uppercase">try saying</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {SUGGESTIONS.slice(0, 8).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => pickSuggestion(s)}
+                  className="text-[11px] font-mono px-3 py-1.5 rounded-full bg-gray-900/60 border border-gray-800/50 text-gray-500 hover:text-purple-300 hover:border-purple-700/40 hover:bg-purple-900/10 transition-all duration-200"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Task follow-up */}
       {taskQuestion && (
         <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
-          <div className="glass rounded-2xl px-6 py-4 glow-purple">
-            <p className="text-xs text-purple-400 font-mono mb-1">Jason needs to know</p>
+          <div className="holo-card px-6 py-4">
+            <p className="text-[10px] font-mono text-purple-400 tracking-wider mb-1">Jason needs to know</p>
             <p className="text-sm text-gray-200 mb-3">{taskQuestion}</p>
             <div className="flex gap-2">
               <input
@@ -349,44 +382,39 @@ export default function Home() {
                 onChange={(e) => setTextInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
                 placeholder="Type your answer..."
-                className="flex-1 bg-gray-800/80 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-purple-500/50"
+                className="flex-1 bg-gray-800/50 border border-gray-700/50 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-700 outline-none focus:border-purple-600/50 transition-colors"
                 autoFocus
               />
-              <button onClick={sendText} className="px-4 py-2.5 bg-purple-600/20 border border-purple-600/30 rounded-lg text-sm text-purple-300 hover:bg-purple-600/30 transition-colors whitespace-nowrap">
-                Send
-              </button>
+              <button onClick={sendText} className="px-4 py-2.5 bg-purple-600/10 border border-purple-600/30 rounded-lg text-sm text-purple-400 hover:bg-purple-600/20 transition-colors whitespace-nowrap">Send</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Task result panel */}
+      {/* Task result */}
       {taskResult && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
-          <div className="glass rounded-2xl px-6 py-4 glow-purple">
-            <p className="text-xs text-green-400 font-mono mb-1">✅ Task complete</p>
+          <div className="holo-card px-6 py-4">
+            <p className="text-[10px] font-mono text-green-400 tracking-wider mb-1">Task complete</p>
             <p className="text-sm text-gray-300 whitespace-pre-wrap">{taskResult}</p>
             {Object.keys(collectedInfo).length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-800">
-                <p className="text-[10px] text-gray-600 font-mono mb-1">Collected info</p>
+              <div className="mt-3 pt-3 border-t border-gray-800/50">
                 {Object.entries(collectedInfo).map(([k, v]) => (
-                  <p key={k} className="text-xs text-gray-400"><span className="text-purple-400">{k}:</span> {v}</p>
+                  <p key={k} className="text-xs text-gray-500"><span className="text-purple-400">{k}:</span> {v}</p>
                 ))}
               </div>
             )}
-            <button onClick={() => setTaskResult(null)} className="mt-3 text-xs text-gray-600 hover:text-gray-400 font-mono">Dismiss</button>
+            <button onClick={() => setTaskResult(null)} className="mt-3 text-[10px] text-gray-700 hover:text-gray-400 font-mono tracking-wider">Dismiss</button>
           </div>
         </div>
       )}
 
-      {/* Reminder chips — removed; AI has full device context now */}
-
-      {/* Text input (fallback) */}
+      {/* Text input */}
       {!taskQuestion && (
-        <div className={`absolute bottom-20 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${showInput ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}>
-          <div className="glass rounded-full px-5 py-3 w-96 flex items-center gap-2 glow-purple">
-            <input ref={inputRef} type="text" value={textInput} onChange={(e) => setTextInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendText(); }} placeholder="Ask Jason anything..." className="bg-transparent text-sm text-gray-200 placeholder-gray-600 outline-none flex-1" />
-            <button onClick={sendText} className="text-purple-400 hover:text-purple-300 transition-colors">
+        <div className={`absolute bottom-16 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${showInput ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}>
+          <div className="glass-strong rounded-full px-5 py-3 w-96 flex items-center gap-2 glow-purple">
+            <input ref={inputRef} type="text" value={textInput} onChange={(e) => setTextInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendText(); }} placeholder="Ask Jason anything..." className="bg-transparent text-sm text-gray-200 placeholder-gray-700 outline-none flex-1" />
+            <button onClick={sendText} className="text-purple-500 hover:text-purple-400 transition-colors">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" /></svg>
             </button>
           </div>
@@ -395,25 +423,17 @@ export default function Home() {
 
       <Sidebar messages={messages} open={sidebarOpen} onClose={() => setSidebarOpen(false)} summary={profileSummary} interests={profileInterests} />
 
-      <footer className="absolute bottom-0 left-0 right-0 z-10 p-6">
-        {/* Live transcript */}
-        {listening && interim && (
-          <div className="mb-4 text-center max-w-lg mx-auto">
-            <div className="glass rounded-xl px-4 py-2">
-              <p className="text-sm text-cyan-300 font-mono">{interim}</p>
-              {confidence > 0 && (
-                <div className="mt-1.5 h-0.5 rounded-full bg-gray-800 overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-purple-600 to-cyan-400 transition-all duration-200" style={{ width: `${confidence}%` }} />
-                </div>
-              )}
+      {/* Live transcript footer */}
+      {listening && interim && (
+        <div className="fixed bottom-0 left-0 right-0 z-20 p-4 pointer-events-none">
+          <div className="max-w-lg mx-auto">
+            <div className="holo-card px-4 py-2.5 text-center">
+              <p className="text-sm text-cyan-300 font-mono cursor-blink">{interim}</p>
+              {confidence > 0 && <div className="mt-1.5 confidence-bar" style={{ width: `${confidence}%` }} />}
             </div>
           </div>
-        )}
-        <div className="flex items-center justify-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full transition-colors ${listening ? "bg-green-500 animate-pulse" : thinking ? "bg-purple-500" : "bg-gray-700"}`} />
-          <span className="text-xs font-mono text-gray-600">{statusText}</span>
         </div>
-      </footer>
+      )}
     </div>
   );
 }

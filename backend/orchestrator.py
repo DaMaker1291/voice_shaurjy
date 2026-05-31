@@ -45,14 +45,24 @@ def _extract_json(text: str) -> dict | None:
 
 
 def start_task(session_id: str, user_input: str) -> dict:
-    # Include examples in the user input for the LLM
-    examples = """Examples:
-User: book a holiday to Paris
-{"task":"book a holiday to Paris","steps":[{"id":1,"action":"ask","question":"What dates?","field":"dates"},{"id":2,"action":"ask","question":"Budget?","field":"budget"},{"id":3,"action":"open","url":"https://google.com/travel","note":"Flights"},{"id":4,"action":"present","note":"Plan"}],"follow_up_question":"What dates?"}
+    # Load available actions so the LLM knows what it can do
+    from actions import get_all_actions
+    all_actions = get_all_actions()
+    actions_list = "\n".join(f"  - {k}: {v['tip']}" for k, v in sorted(all_actions.items()) if v['tip'])
 
-User: find the cheapest flight to Tokyo
-{"task":"find cheap flight to Tokyo","steps":[{"id":1,"action":"ask","question":"Departure city?","field":"from"},{"id":2,"action":"ask","question":"Dates?","field":"dates"},{"id":3,"action":"open","url":"https://google.com/travel","note":"Search"},{"id":4,"action":"present","note":"Options"}],"follow_up_question":"Departure city?"}"""
-    reply = _llm_generate(f"{examples}\n\nUser: {user_input}", max_tokens=300)
+    instructions = f"""You are a task planning AI. Break down the user's request into steps.
+
+Available actions you can use:
+{actions_list}
+
+For each step, output an action from the list above, or use: ask (for user info), open (URL), search (web search), present (show results).
+
+Output ONLY valid JSON. No other text.
+
+Examples:
+User: book a holiday to Paris
+{{"task":"book a holiday to Paris","steps":[{{"id":1,"action":"ask","question":"What dates?","field":"dates"}},{{"id":2,"action":"ask","question":"Budget?","field":"budget"}},{{"id":3,"action":"open","url":"https://google.com/travel","note":"Flights"}},{{"id":4,"action":"present","note":"Plan"}}],"follow_up_question":"What dates?"}}"""
+    reply = _llm_generate(f"{instructions}\n\nUser: {user_input}", max_tokens=300)
     plan = _extract_json(reply)
 
     if not plan or "steps" not in plan:
@@ -150,7 +160,20 @@ def _process_current_step(session_id: str) -> dict:
         return _finalize_task(session_id)
 
     else:
-        return {"type": "notify", "text": f"Executing step {idx + 1}...", "step": idx + 1, "total": len(steps), "task": session["task"]}
+        # Try executing as a system action
+        try:
+            from actions import execute_action, detect_action
+            detected = detect_action(action) or action
+            result = execute_action(detected, action)
+            return {
+                "type": "notify",
+                "text": result,
+                "step": idx + 1,
+                "total": len(steps),
+                "task": session["task"],
+            }
+        except Exception:
+            return {"type": "notify", "text": f"Executing step {idx + 1}...", "step": idx + 1, "total": len(steps), "task": session["task"]}
 
 
 def _open_urls(urls: list[str]):
