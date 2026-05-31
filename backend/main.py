@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from models import TextQuery, DocumentUpload, LicenseActivate, LiveKitTokenRequest, ReminderCreate, ReminderUpdate
+from models import TextQuery, DocumentUpload, LicenseActivate, LiveKitTokenRequest, ReminderCreate, ReminderUpdate, TaskRespond
 from document_processor import process_upload
 from rag_engine import index_document, has_documents, count_chunks
 from billing import get_tier, activate_license, is_premium
@@ -72,6 +72,14 @@ async def text_chat(query: TextQuery):
         )
         result["reminder"] = {"id": r["id"], "title": r["title"], "due_date": r["due_date"]}
 
+    return result
+
+
+@app.post("/api/task/respond")
+async def task_respond(req: TaskRespond):
+    from backend.orchestrator import continue_task
+
+    result = continue_task(req.session_id, req.response)
     return result
 
 
@@ -149,3 +157,26 @@ async def livekit_token(req: LiveKitTokenRequest):
     token.identity = req.identity or "second-brain-user"
     token.add_grant(VideoGrants(room_join=True, room=req.room_name or "second-brain"))
     return {"token": token.jwt, "url": os.getenv("LIVEKIT_URL")}
+
+
+# ── Text-to-Speech via edge-tts ───────────────────────────────
+
+from pydantic import BaseModel
+
+class TTSRequest(BaseModel):
+    text: str
+    voice: str = "en-US-JennyNeural"
+
+@app.post("/api/tts")
+async def text_to_speech(req: TTSRequest):
+    import edge_tts
+    import tempfile
+    from fastapi.responses import FileResponse
+
+    communicate = edge_tts.Communicate(req.text, req.voice)
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+    tmp_path = tmp.name
+    tmp.close()
+
+    await communicate.save(tmp_path)
+    return FileResponse(tmp_path, media_type="audio/mpeg", headers={"Content-Disposition": "inline"})

@@ -23,6 +23,11 @@ class LiveKitTokenRequest(BaseModel):
     room_name: str = "second-brain"
 
 
+class TaskRespond(BaseModel):
+    session_id: str
+    response: str
+
+
 class ReminderCreate(BaseModel):
     user_id: str = "local"
     title: str

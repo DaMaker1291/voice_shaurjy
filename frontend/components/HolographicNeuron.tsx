@@ -150,11 +150,17 @@ export default function HolographicNeuron({ listening, speaking, onClick }: Prop
     let time = 0;
     let pulseTarget = 0;
     let pulse = 0;
+    let currentPulse = 0;
 
     const animate = () => {
       requestAnimationFrame(animate);
       time += 0.003;
-      pulse += (pulseTarget - pulse) * 0.05;
+
+      // Read pulse from container CSS variable
+      const pulseVal = parseFloat(container.style.getPropertyValue("--pulse")) || 0;
+      pulseTarget = pulseVal;
+      pulse += (pulseTarget - pulse) * 0.08;
+      currentPulse = pulse;
 
       // Pulse nodes
       nodes.forEach((mesh, i) => {
