@@ -3,7 +3,11 @@
 import threading
 from collections import OrderedDict
 import torch
+import os
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# Maximize CPU threads for inference
+torch.set_num_threads(min(8, os.cpu_count() or 4))
 
 _MODEL = None
 _TOKENIZER = None
@@ -58,10 +62,6 @@ def _load():
             torch_dtype=torch.float32,
         )
         _MODEL.eval()
-        # Dynamic quantization: 2-3x speedup on CPU, no C++ compiler needed
-        _MODEL = torch.quantization.quantize_dynamic(
-            _MODEL, {torch.nn.Linear}, dtype=torch.qint8
-        )
     finally:
         _LOADING.set()
         _LOAD_LOCK.release()
