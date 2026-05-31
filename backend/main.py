@@ -46,7 +46,7 @@ async def health():
         "livekit": bool(livekit_url),
         "livekit_url": livekit_url,
         "models": {
-            "llm": "Qwen2.5-0.5B-Instruct (float32)",
+            "llm": "SmolLM2-135M-Instruct (float32, greedy)",
             "stt": "faster-whisper tiny.en",
             "tts": "Piper lessac-medium",
             "embed": "bge-small-en-v1.5",

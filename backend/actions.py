@@ -120,6 +120,60 @@ _ACTION_PATTERNS = {
     r"(?:search|find)\s+(?:on\s+)?(?:amazon|shop)\s+(.+?)$": "search_amazon",
 }
 
+# Broader fallback patterns — catch natural speech the specific regex patterns miss
+_BROAD_PATTERNS = [
+    (r"(?:scan|list|find|show)\s+(?:all\s+)?(?:devices|hosts|machines)\s*(?:on\s+(?:the\s+)?(?:network|wifi|lan))?", "scan_network"),
+    (r"(?:scan|list|find|show)\s+(?:the\s+)?(?:network|wifi|lan)\s+(?:for\s+)?(?:devices|hosts|machines)?", "scan_network"),
+    (r"(?:what|which)\s+(?:devices|hosts)\s+(?:are\s+)?(?:on|connected)", "scan_network"),
+    (r"(?:who|what)\s*(?:'s|is)\s+(?:on|connected\s+to)\s+(?:my\s+)?(?:network|wifi)", "scan_network"),
+    (r"(?:wake|turn\s+on|power\s+on|start)\s+up?\s+(?:my\s+)?(?:computer|pc|desktop|laptop)", "wol"),
+    (r"(?:ping|check\s+if)\s+(?:\w+\.)*\w+\.\w+", "ping"),
+    (r"(?:turn\s+(?:the\s+)?)?(?:volume|sound|audio)\s+(?:up|down|higher|lower)", "vol_up"),
+    (r"(?:turn\s+(?:the\s+)?)?(?:volume|sound|audio)\s+(?:to\s+)?(\d+)", "vol_set"),
+    (r"(?:set|change|adjust)\s+(?:the\s+)?(?:volume|sound|audio)", "vol_up"),
+    (r"(?:play|start)\s+(?:some\s+)?(?:music|song|audio|beats)", "music"),
+    (r"(?:play|start)\s+(?:a\s+)?(?:song|track)\s+(?:called\s+|named\s+)?(.+)", "music"),
+    (r"(?:next|skip|change)\s+(?:the\s+)?(?:song|track|music)", "media_next"),
+    (r"(?:previous|prev|go\s+back)\s+(?:the\s+)?(?:song|track)", "media_prev"),
+    (r"(?:stop|pause)\s+(?:the\s+)?(?:music|song|audio|video|playback)", "media_pause"),
+    (r"(?:resume|continue|unpause)\s+(?:the\s+)?(?:music|song|audio)", "media_play"),
+    (r"(?:mute|unmute|silence)\s+(?:the\s+)?(?:audio|sound|system|pc)", "vol_mute"),
+    (r"(?:lock|secure)\s+(?:my\s+)?(?:computer|pc|laptop|system|workstation)", "lock"),
+    (r"(?:shut\s*(?:down|off)|power\s*(?:off|down)|turn\s*off)\s+(?:the\s+)?(?:computer|pc|laptop|system)", "shutdown"),
+    (r"(?:restart|reboot)\s+(?:the\s+)?(?:computer|pc|laptop|system)", "restart"),
+    (r"(?:put|send)\s+(?:the\s+)?(?:computer|pc|laptop)\s+(?:to\s+)?sleep", "sleep"),
+    (r"(?:take|make|capture)\s+(?:a\s+)?(?:screenshot|screen\s*(?:shot|cap))", "screenshot"),
+    (r"(?:what|show|tell)\s+(?:time|date|day)", "time"),
+    (r"(?:set|start)\s+(?:a\s+)?timer\s+(?:for\s+)?(\d+\s*(?:seconds?|secs?|minutes?|mins?|hours?))", "timer"),
+    (r"(?:search|google|look\s+up|find)\s+(?:for\s+)?(.+)", "search"),
+    (r"(?:open|launch|start)\s+(?:the\s+)?(?:camera|webcam)", "camera"),
+    (r"(?:open|launch|start)\s+(?:the\s+)?(?:settings|windows\s+settings)", "settings"),
+    (r"(?:open|launch|start)\s+(?:the\s+)?(?:task\s+manager|taskmgr)", "taskmgr"),
+    (r"(?:open|launch|start)\s+(?:terminal|command\s+prompt|cmd|powershell|console)", "terminal"),
+    (r"(?:open|launch|start)\s+(?:vs\s*code|visual\s+studio|code\s+editor)", "vscode"),
+    (r"(?:open|launch|start)\s+(?:notepad|text\s+editor)", "notepad"),
+    (r"(?:open|launch|start)\s+(?:calculator|calc)", "calc"),
+    (r"(?:open|launch|start)\s+(?:my\s+)?(?:email|gmail|outlook|mail)", "email"),
+    (r"(?:open|launch|start)\s+(?:my\s+)?(?:youtube|yt)", "youtube"),
+    (r"(?:open|launch|start)\s+(?:my\s+)?(?:github|repos)", "github"),
+    (r"(?:open|launch|start)\s+(?:my\s+)?(?:discord|chat)", "discord"),
+    (r"(?:open|launch|start)\s+(?:my\s+)?(?:spotify|music\s+player)", "spotify"),
+    (r"(?:bluetooth|bt)\s+(?:on|enable|turn\s+on)", "bt_on"),
+    (r"(?:bluetooth|bt)\s+(?:off|disable|turn\s+off)", "bt_off"),
+    (r"(?:wifi|wireless)\s+(?:on|enable|turn\s+on)", "wifi_on"),
+    (r"(?:wifi|wireless)\s+(?:off|disable|turn\s+off)", "wifi_off"),
+    (r"(?:brightness|screen|display)\s+(?:up|higher|brighter)", "brightness_up"),
+    (r"(?:brightness|screen|display)\s+(?:down|lower|dimmer)", "brightness_down"),
+    (r"(?:battery|power)\s+(?:level|status|life|remaining|percentage)", "battery_status"),
+    (r"(?:show|read|what.*on)\s+(?:my\s+)?(?:clipboard|clip)", "clipboard_show"),
+    (r"(?:show|open|list)\s+(?:my\s+)?(?:recent|recent\s+files|files)", "recent_files"),
+    (r"(?:empty|clear|clean)\s+(?:the\s+)?(?:trash|recycle\s*bin|bin)", "trash"),
+    (r"(?:show|minimize)\s+(?:the\s+)?(?:desktop)", "show_desktop"),
+    (r"(?:minimize|hide)\s+(?:all\s+)?(?:windows|apps)", "minimize_all"),
+    (r"(?:switch|change)\s+(?:windows|apps|tasks)", "alt_tab"),
+    (r"(?:dark|light)\s+mode", "toggle_theme"),
+]
+
 _ACTION_LABELS = {
     "music": "🎵 Opening music player...",
     "music_lofi": "🎵 Starting lo-fi beats...",
@@ -240,7 +294,12 @@ _ACTION_TIPS = {
 
 def detect_action(text: str) -> str | None:
     lower = text.lower().strip()
+    # Try specific patterns first
     for pat, action in _ACTION_PATTERNS.items():
+        if re.search(pat, lower):
+            return action
+    # Try broad fallback patterns
+    for pat, action in _BROAD_PATTERNS:
         if re.search(pat, lower):
             return action
     return None
