@@ -13,12 +13,19 @@ from models import TextQuery, DocumentUpload, LicenseActivate, LiveKitTokenReque
 from document_processor import process_upload
 from rag_engine import index_document, has_documents, count_chunks
 from billing import get_tier, activate_license, is_premium
-from ai_agent import generate_response
+from ai_agent import generate_response, _load as _load_llm
 from reminders import create_reminder, list_reminders, update_reminder, delete_reminder
 
 load_dotenv()
 
 app = FastAPI(title="Second Brain API", version="1.0.0")
+
+
+@app.on_event("startup")
+async def warmup():
+    print("Pre-loading LLM (this may take ~30s on first run)...")
+    import threading
+    threading.Thread(target=_load_llm, daemon=True).start()
 
 app.add_middleware(
     CORSMiddleware,

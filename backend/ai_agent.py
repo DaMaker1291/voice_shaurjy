@@ -1,10 +1,13 @@
 """Local LLM — Qwen2.5-0.5B-Instruct (2 GB RAM, fast CPU inference)."""
 
+import threading
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 _MODEL = None
 _TOKENIZER = None
+_LOADING = threading.Event()
+_LOAD_LOCK = threading.Lock()
 MODEL_ID = "Qwen/Qwen2.5-0.5B-Instruct"
 
 FEW_SHOT = """User: hey
@@ -25,14 +28,22 @@ def _load():
     if _MODEL is not None:
         return
 
-    _TOKENIZER = AutoTokenizer.from_pretrained(MODEL_ID)
-    _MODEL = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        device_map=None,
-        low_cpu_mem_usage=True,
-        torch_dtype=torch.float32,
-    )
-    _MODEL.eval()
+    if not _LOAD_LOCK.acquire(blocking=False):
+        _LOADING.wait()
+        return
+
+    try:
+        _TOKENIZER = AutoTokenizer.from_pretrained(MODEL_ID)
+        _MODEL = AutoModelForCausalLM.from_pretrained(
+            MODEL_ID,
+            device_map=None,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.float32,
+        )
+        _MODEL.eval()
+    finally:
+        _LOADING.set()
+        _LOAD_LOCK.release()
 
 
 def _build_prompt(user_text: str, context: str) -> str:
