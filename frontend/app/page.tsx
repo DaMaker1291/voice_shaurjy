@@ -19,10 +19,17 @@ export default function Home() {
   const [thinking, setThinking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
-  const synthRef = useRef(window.speechSynthesis);
+  const synthRef = useRef<SpeechSynthesis | null>(null);
+  const [voiceReady, setVoiceReady] = useState(false);
+
+  useEffect(() => {
+    synthRef.current = window.speechSynthesis;
+    setVoiceReady(true);
+  }, []);
 
   // ── Web Speech API: Speech-to-Text ─────────────────────────
   const startListening = useCallback(() => {
+    if (typeof window === "undefined") return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setShowInput(true);
@@ -54,14 +61,16 @@ export default function Home() {
 
   // ── Web Speech API: Text-to-Speech ─────────────────────────
   const speak = useCallback((text: string) => {
-    synthRef.current.cancel();
+    const synth = synthRef.current;
+    if (!synth) return;
+    synth.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.0;
     utterance.pitch = 0.9;
-    const voices = synthRef.current.getVoices();
+    const voices = synth.getVoices();
     const deep = voices.find((v) => v.name.includes("Female") || v.name.includes("Google UK"));
     if (deep) utterance.voice = deep;
-    synthRef.current.speak(utterance);
+    synth.speak(utterance);
   }, []);
 
   // ── Send query ─────────────────────────────────────────────
