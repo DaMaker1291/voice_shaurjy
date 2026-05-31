@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import HolographicNeuron from "@/components/HolographicNeuron";
 import Sidebar from "@/components/Sidebar";
+import SimulationPanel from "@/components/SimulationPanel";
 import { textChat } from "@/lib/api";
 
 interface Message {
@@ -52,6 +53,7 @@ export default function Home() {
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const taskInputRef = useRef<HTMLInputElement>(null);
   const retryCountRef = useRef(0);
+  const [simTask, setSimTask] = useState<string | null>(null);
 
   useEffect(() => { synthRef.current = window.speechSynthesis; }, []);
 
@@ -139,14 +141,23 @@ export default function Home() {
     setSidebarOpen(true);
     setThinking(true);
     setShowSuggestions(false);
+
+    // Detect complex tasks for simulation
+    const complexTriggers = ["essay","document","report","write","type","compose","holiday","vacation","trip","plan","research","investigate","create","make","build","set up","configure","scan","network scan","install"];
+    const lower = text.toLowerCase();
+    const isComplex = complexTriggers.some(t => lower.includes(t)) && lower.split(" ").length >= 3;
+    if (isComplex) setSimTask(text);
+
     try {
       const res = await textChat(text);
       const reply = res.text;
       if (res.action) {
         setActionFeedback(reply);
         setTimeout(() => setActionFeedback(null), 4000);
+        if (simTask) setSimTask(null);
       } else if (!res.task) {
         speak(reply);
+        setSimTask(null);
       }
       if (res.task) {
         _handleTaskResponse(res.task);
@@ -157,7 +168,7 @@ export default function Home() {
       setMessages((p) => [...p, { role: "assistant", content: "(backend unreachable)" }]);
     }
     setThinking(false);
-  }, [speak]);
+  }, [speak, simTask]);
 
   const _handleTaskResponse = useCallback((data: any) => {
     if (data.type === "ask") {
@@ -288,7 +299,7 @@ export default function Home() {
     showInput ? "type & enter" : "tap orb or press /";
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-gray-950">
+    <div className="relative h-screen w-full overflow-hidden bg-gray-950 flex flex-row">
       {/* Background layers */}
       <div className="gradient-bg" />
       <div className="aurora" />
@@ -298,142 +309,152 @@ export default function Home() {
         <div className="stars" /><div className="stars2" /><div className="stars3" />
       </div>
 
-      {/* Action toast */}
-      <div className={`fixed top-20 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 ${actionFeedback ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
-        <div className="holo-card px-5 py-3 flex items-center gap-3">
-          <span className="text-lg">⚡</span>
-          <div>
-            <p className="text-xs text-cyan-300 font-mono">Action</p>
-            <p className="text-sm text-gray-200">{actionFeedback}</p>
+      {/* ── LEFT: Chat interface ─────────────────────────────── */}
+      <div className="flex-[3] relative min-w-0 flex flex-col">
+        {/* Action toast */}
+        <div className={`fixed top-20 left-1/4 -translate-x-1/2 z-30 transition-all duration-500 ${actionFeedback ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
+          <div className="holo-card px-5 py-3 flex items-center gap-3">
+            <span className="text-lg">⚡</span>
+            <div>
+              <p className="text-xs text-cyan-300 font-mono">Action</p>
+              <p className="text-sm text-gray-200">{actionFeedback}</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Top bar */}
-      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-6 py-3">
-        <div className="flex items-center gap-3">
-          <div className={`w-2 h-2 rounded-full ${listening ? "bg-green-500 recording-indicator" : thinking ? "bg-purple-500 animate-pulse" : "bg-gray-700"}`} />
-          <span className="status-text">{scanning ? "scanning device..." : statusText}</span>
-          {confidence > 0 && <span className="text-[10px] font-mono text-gray-600">{confidence}%</span>}
+        {/* Top bar */}
+        <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-6 py-3">
+          <div className="flex items-center gap-3">
+            <div className={`w-2 h-2 rounded-full ${listening ? "bg-green-500 recording-indicator" : thinking ? "bg-purple-500 animate-pulse" : "bg-gray-700"}`} />
+            <span className="status-text">{scanning ? "scanning device..." : statusText}</span>
+            {confidence > 0 && <span className="text-[10px] font-mono text-gray-600">{confidence}%</span>}
+          </div>
+          <div className="flex items-center gap-3">
+            {profileInterests.length > 0 && (
+              <div className="hidden md:flex items-center gap-1.5">
+                {profileInterests.slice(0, 3).map((t, i) => (
+                  <span key={i} className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-purple-900/20 text-purple-500/70 border border-purple-800/20">{t}</span>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setSidebarOpen((o) => !o)} className="text-gray-600 hover:text-gray-300 transition-colors p-1.5 rounded-lg hover:bg-gray-800/30">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+              </svg>
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {profileInterests.length > 0 && (
-            <div className="hidden md:flex items-center gap-1.5">
-              {profileInterests.slice(0, 3).map((t, i) => (
-                <span key={i} className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-purple-900/20 text-purple-500/70 border border-purple-800/20">{t}</span>
-              ))}
+
+        {/* Task progress */}
+        {taskTotal > 0 && taskStep > 0 && (
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-10 w-64">
+            <div className="h-0.5 rounded-full bg-gray-800 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-purple-600 to-cyan-500 transition-all duration-500" style={{ width: `${(taskStep / taskTotal) * 100}%` }} />
+            </div>
+            <p className="text-[9px] font-mono text-gray-700 text-center mt-1">step {taskStep}/{taskTotal}</p>
+          </div>
+        )}
+
+        {/* Center content */}
+        <div className="flex-1 flex flex-col items-center justify-center">
+          {/* Holographic neuron */}
+          <div className="flex-shrink-0" style={{ marginTop: taskQuestion ? -80 : -40 }}>
+            <HolographicNeuron listening={listening} speaking={thinking} onClick={handleOrbClick} />
+          </div>
+
+          {/* Suggestions */}
+          {showSuggestions && messages.length <= 1 && (
+            <div className="mt-6 max-w-lg w-full px-6">
+              <p className="text-[10px] font-mono text-gray-700 text-center mb-3 tracking-[0.2em] uppercase">try saying</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {SUGGESTIONS.slice(0, 8).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => pickSuggestion(s)}
+                    className="text-[11px] font-mono px-3 py-1.5 rounded-full bg-gray-900/60 border border-gray-800/50 text-gray-500 hover:text-purple-300 hover:border-purple-700/40 hover:bg-purple-900/10 transition-all duration-200"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
-          <button onClick={() => setSidebarOpen((o) => !o)} className="text-gray-600 hover:text-gray-300 transition-colors p-1.5 rounded-lg hover:bg-gray-800/30">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
-            </svg>
-          </button>
         </div>
-      </div>
 
-      {/* Task progress */}
-      {taskTotal > 0 && taskStep > 0 && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-10 w-64">
-          <div className="h-0.5 rounded-full bg-gray-800 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-purple-600 to-cyan-500 transition-all duration-500" style={{ width: `${(taskStep / taskTotal) * 100}%` }} />
+        {/* Task follow-up */}
+        {taskQuestion && (
+          <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
+            <div className="holo-card px-6 py-4">
+              <p className="text-[10px] font-mono text-purple-400 tracking-wider mb-1">Jason needs to know</p>
+              <p className="text-sm text-gray-200 mb-3">{taskQuestion}</p>
+              <div className="flex gap-2">
+                <input
+                  ref={taskInputRef}
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
+                  placeholder="Type your answer..."
+                  className="flex-1 bg-gray-800/50 border border-gray-700/50 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-700 outline-none focus:border-purple-600/50 transition-colors"
+                  autoFocus
+                />
+                <button onClick={sendText} className="px-4 py-2.5 bg-purple-600/10 border border-purple-600/30 rounded-lg text-sm text-purple-400 hover:bg-purple-600/20 transition-colors whitespace-nowrap">Send</button>
+              </div>
+            </div>
           </div>
-          <p className="text-[9px] font-mono text-gray-700 text-center mt-1">step {taskStep}/{taskTotal}</p>
-        </div>
-      )}
+        )}
 
-      {/* Center content */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        {/* Holographic neuron */}
-        <div className="flex-shrink-0" style={{ marginTop: taskQuestion ? -80 : -40 }}>
-          <HolographicNeuron listening={listening} speaking={thinking} onClick={handleOrbClick} />
-        </div>
+        {/* Task result */}
+        {taskResult && (
+          <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
+            <div className="holo-card px-6 py-4">
+              <p className="text-[10px] font-mono text-green-400 tracking-wider mb-1">Task complete</p>
+              <p className="text-sm text-gray-300 whitespace-pre-wrap">{taskResult}</p>
+              {Object.keys(collectedInfo).length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-800/50">
+                  {Object.entries(collectedInfo).map(([k, v]) => (
+                    <p key={k} className="text-xs text-gray-500"><span className="text-purple-400">{k}:</span> {v}</p>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => setTaskResult(null)} className="mt-3 text-[10px] text-gray-700 hover:text-gray-400 font-mono tracking-wider">Dismiss</button>
+            </div>
+          </div>
+        )}
 
-        {/* Suggestions */}
-        {showSuggestions && messages.length <= 1 && (
-          <div className="mt-6 max-w-lg w-full px-6">
-            <p className="text-[10px] font-mono text-gray-700 text-center mb-3 tracking-[0.2em] uppercase">try saying</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.slice(0, 8).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => pickSuggestion(s)}
-                  className="text-[11px] font-mono px-3 py-1.5 rounded-full bg-gray-900/60 border border-gray-800/50 text-gray-500 hover:text-purple-300 hover:border-purple-700/40 hover:bg-purple-900/10 transition-all duration-200"
-                >
-                  {s}
-                </button>
-              ))}
+        {/* Text input */}
+        {!taskQuestion && (
+          <div className={`absolute bottom-16 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${showInput ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}>
+            <div className="glass-strong rounded-full px-5 py-3 w-96 flex items-center gap-2 glow-purple">
+              <input ref={inputRef} type="text" value={textInput} onChange={(e) => setTextInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendText(); }} placeholder="Ask Jason anything..." className="bg-transparent text-sm text-gray-200 placeholder-gray-700 outline-none flex-1" />
+              <button onClick={sendText} className="text-purple-500 hover:text-purple-400 transition-colors">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" /></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Live transcript footer */}
+        {listening && interim && (
+          <div className="fixed bottom-0 left-0 right-0 z-20 p-4 pointer-events-none">
+            <div className="max-w-lg mx-auto">
+              <div className="holo-card px-4 py-2.5 text-center">
+                <p className="text-sm text-cyan-300 font-mono cursor-blink">{interim}</p>
+                {confidence > 0 && <div className="mt-1.5 confidence-bar" style={{ width: `${confidence}%` }} />}
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Task follow-up */}
-      {taskQuestion && (
-        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
-          <div className="holo-card px-6 py-4">
-            <p className="text-[10px] font-mono text-purple-400 tracking-wider mb-1">Jason needs to know</p>
-            <p className="text-sm text-gray-200 mb-3">{taskQuestion}</p>
-            <div className="flex gap-2">
-              <input
-                ref={taskInputRef}
-                type="text"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
-                placeholder="Type your answer..."
-                className="flex-1 bg-gray-800/50 border border-gray-700/50 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-700 outline-none focus:border-purple-600/50 transition-colors"
-                autoFocus
-              />
-              <button onClick={sendText} className="px-4 py-2.5 bg-purple-600/10 border border-purple-600/30 rounded-lg text-sm text-purple-400 hover:bg-purple-600/20 transition-colors whitespace-nowrap">Send</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Task result */}
-      {taskResult && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
-          <div className="holo-card px-6 py-4">
-            <p className="text-[10px] font-mono text-green-400 tracking-wider mb-1">Task complete</p>
-            <p className="text-sm text-gray-300 whitespace-pre-wrap">{taskResult}</p>
-            {Object.keys(collectedInfo).length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-800/50">
-                {Object.entries(collectedInfo).map(([k, v]) => (
-                  <p key={k} className="text-xs text-gray-500"><span className="text-purple-400">{k}:</span> {v}</p>
-                ))}
-              </div>
-            )}
-            <button onClick={() => setTaskResult(null)} className="mt-3 text-[10px] text-gray-700 hover:text-gray-400 font-mono tracking-wider">Dismiss</button>
-          </div>
-        </div>
-      )}
-
-      {/* Text input */}
-      {!taskQuestion && (
-        <div className={`absolute bottom-16 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${showInput ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}>
-          <div className="glass-strong rounded-full px-5 py-3 w-96 flex items-center gap-2 glow-purple">
-            <input ref={inputRef} type="text" value={textInput} onChange={(e) => setTextInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendText(); }} placeholder="Ask Jason anything..." className="bg-transparent text-sm text-gray-200 placeholder-gray-700 outline-none flex-1" />
-            <button onClick={sendText} className="text-purple-500 hover:text-purple-400 transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" /></svg>
-            </button>
-          </div>
+      {/* ── RIGHT: Simulation panel ──────────────────────────── */}
+      {simTask && (
+        <div className="flex-[2] relative min-w-0 border-l border-white/5 overflow-hidden">
+          <SimulationPanel task={simTask} active={true} />
         </div>
       )}
 
       <Sidebar messages={messages} open={sidebarOpen} onClose={() => setSidebarOpen(false)} summary={profileSummary} interests={profileInterests} />
-
-      {/* Live transcript footer */}
-      {listening && interim && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 p-4 pointer-events-none">
-          <div className="max-w-lg mx-auto">
-            <div className="holo-card px-4 py-2.5 text-center">
-              <p className="text-sm text-cyan-300 font-mono cursor-blink">{interim}</p>
-              {confidence > 0 && <div className="mt-1.5 confidence-bar" style={{ width: `${confidence}%` }} />}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

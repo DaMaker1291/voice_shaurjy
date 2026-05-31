@@ -208,3 +208,38 @@ async def reset_profile(user_id: str = "local"):
 
     save_profile(user_id, _default_profile())
     return {"status": "ok"}
+
+
+# ── Autonomous task execution with SSE streaming ─────────────
+
+from fastapi.responses import StreamingResponse
+import json
+
+
+@app.post("/api/task/execute")
+async def execute_task(task: str, user_id: str = "local"):
+    """Execute a complex task, streaming real-time progress + visual simulation data via SSE."""
+
+    async def event_stream():
+        from task_agent import execute_task as run_task
+
+        for event in run_task(task):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.get("/api/task/scenes")
+async def list_scenes():
+    """Return list of all visual simulation scene types."""
+    return {
+        "scenes": [
+            {"id": "travel", "name": "Travel / Globe", "description": "Rotating globe with flight paths, destination markers, and animated routes"},
+            {"id": "document", "name": "Document", "description": "Simulated Word document with typing animation, formatting, and source citations"},
+            {"id": "network", "name": "Network", "description": "Network topology graph with devices, connections, and data flow"},
+            {"id": "system", "name": "System", "description": "System control viz with terminal, progress bars, and settings panels"},
+            {"id": "research", "name": "Research", "description": "Knowledge graph with sources, connections, and insights"},
+            {"id": "media", "name": "Media", "description": "Media player / playlist visualization"},
+            {"id": "file", "name": "Files", "description": "File system tree with operations animation"},
+        ]
+    }
