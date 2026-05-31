@@ -260,6 +260,19 @@ _KEYWORD_MAP: dict[str, str] = {
     "start app": "open_app",
     "run": "run_dialog",
     "execute": "run_dialog",
+    "installed apps": "app_list", "installed programs": "app_list",
+    "list apps": "app_list", "list programs": "app_list", "list software": "app_list",
+    "show apps": "app_list", "show programs": "app_list",
+    "uninstall": "app_uninstall", "remove program": "app_uninstall",
+    "force quit": "app_quit", "close app": "app_quit",
+    "running apps": "app_running", "open windows": "app_running",
+    "which apps are running": "app_running", "what is running": "app_running",
+    "what apps are open": "app_running", "what programs are open": "app_running",
+    "deep scan": "net_scan_deep", "full network scan": "net_scan_deep",
+    "scan all devices": "net_scan_deep", "port scan": "net_port_scan",
+    "open ports": "net_port_scan",
+    "network shares": "net_shares", "shared folders": "net_shares",
+    "device info": "net_device_info", "device details": "net_device_info",
     "command": "run_dialog",
     "environment": "env_list",
     "environment variable": "env_list",
@@ -401,6 +414,15 @@ _ACTION_PATTERNS = {
     r"^open\s+(?:my\s+)?(?:vscode|visual\s+studio\s+code|code\s+editor)": "vscode",
     r"^open\s+(?:my\s+)?(?:terminal|cmd|powershell|console)": "terminal",
     r"^open\s+(?:the\s+)?(?:calculator|calc)": "calc",
+    r"^(?:list|show|find|what)\s+(?:all\s+)?(?:installed\s+)?(?:apps|programs|software)": "app_list",
+    r"^(?:list|show)\s+(?:all\s+)?(?:installed\s+)?(?:apps|programs|software)\s+(?:matching|like|for|named)\s+(.+?)$": "app_list",
+    r"^(?:app|program|software)\s+(?:info|details|about)\s+(.+?)$": "app_info",
+    r"^info\s+(?:about|on|for)\s+(?:app|program|software)\s+(.+?)$": "app_info",
+    r"^(?:uninstall|remove)\s+(?:app|program|software)\s+(.+?)$": "app_uninstall",
+    r"^(?:quit|close|exit|kill|stop)\s+(?:app|program)\s+(.+?)$": "app_quit",
+    r"^force\s+(?:quit|close)\s+(.+?)$": "app_quit",
+    r"^(?:list|show)\s+(?:running|open)\s+(?:apps|programs|windows|tasks)": "app_running",
+    r"^(?:what|which)\s+(?:apps|programs)\s+(?:are\s+)?(?:running|open)": "app_running",
     r"^open\s+(?:the\s+)?(?:notepad|text\s+editor)": "notepad",
     r"^open\s+(?:the\s+)?(?:camera|webcam)": "camera",
     r"^open\s+(?:the\s+)?(?:snipping\s+tool|snip|screenshot\s+tool)": "snipping_tool",
@@ -544,6 +566,10 @@ _ACTION_PATTERNS = {
     r"^(?:switch|go\s+to)\s+(?:desktop|virtual\s+desktop)\s+(\d+)": "switch_desktop",
     r"^open\s+(?:my\s+)?(?:camera|webcam)": "camera",
     r"^(?:network|network\s*&?\s*internet)\s+(?:settings|panel)": "network_settings",
+    r"^(?:deep\s+)?(?:scan|list|find)\s+(?:all\s+)?(?:network\s+)?(?:devices|hosts)\s+(?:in\s+)?(?:detail|deep|full)": "net_scan_deep",
+    r"^(?:scan|check|list)\s+(?:open\s+)?ports\s+(?:on|of|for)\s+(.+?)$": "net_port_scan",
+    r"^(?:network\s+)?(?:shares|shared\s+(?:folders|drives))": "net_shares",
+    r"^(?:device|network\s+device)\s+(?:info|details|about)\s+(.+?)$": "net_device_info",
     r"^(?:date\s+and\s+time|time\s+&?\s*date)\s+(?:settings|panel)": "datetime_settings",
     r"^(?:personalization|personalize|theme)\s+(?:settings|panel)": "personalization_settings",
     r"^(?:apps\s+&?\s*features|installed\s+apps)\s+(?:settings|panel)": "apps_features",
@@ -649,6 +675,10 @@ _ACTION_LABELS = {
     "bt_devices": "📡 Bluetooth devices", "bt_pair": "📡 Pairing...",
     "bt_unpair": "📡 Unpairing...",
     "scan_network": "🔍 Scanning network...", "wol": "⚡ Wake signal sent",
+    "net_scan_deep": "🔍 Deep network scan...",
+    "net_device_info": "📡 Device details",
+    "net_port_scan": "🔍 Port scanning...",
+    "net_shares": "📂 Discovering shares...",
     "ping": "📡 Pinging...",
     "process_list": "📊 Running processes", "process_kill": "⛔ Killing process...",
     "process_start": "▶ Starting process...", "cpu_usage": "📊 CPU usage",
@@ -667,6 +697,11 @@ _ACTION_LABELS = {
     "calc": "🧮 Opening Calculator...", "notepad": "📝 Opening Notepad...",
     "camera": "📷 Opening Camera...", "snipping_tool": "✂ Opening Snipping Tool...",
     "open_app": "▶ Opening app...",
+    "app_list": "📋 Listing installed apps...",
+    "app_info": "📋 App details",
+    "app_uninstall": "🗑 Uninstalling...",
+    "app_quit": "⛔ Forcing quit...",
+    "app_running": "🪟 Running apps",
     "windows_update": "🔄 Windows Update", "windows_features": "⚙ Windows Features",
     "recent_files": "📁 Recent files", "open_downloads": "📁 Opening Downloads...",
     "open_documents": "📁 Opening Documents...", "open_desktop": "🖥 Opening Desktop...",
@@ -747,6 +782,10 @@ _ACTION_TIPS = {
     "night_light": "Toggle night light", "screenshot": "Take screenshot",
     "wifi_on": "Enable WiFi", "wifi_off": "Disable WiFi",
     "wifi_list": "Show WiFi networks", "scan_network": "Scan network devices",
+    "net_scan_deep": "Deep scan: ARP + ports + vendor + OS",
+    "net_device_info": "Detailed info on a network device",
+    "net_port_scan": "Scan for open ports on a device",
+    "net_shares": "Discover SMB shares on the network",
     "wol": "Wake device via WoL", "ping": "Ping a device",
     "process_list": "List running processes", "kill": "Stop a process",
     "service_list": "Show Windows services", "clipboard_show": "Read clipboard",
@@ -1235,6 +1274,259 @@ def _wol(text):
         return f"WoL failed: {e}"
 
 
+_MAC_VENDORS: dict[str, str] | None = None
+
+def _mac_vendor(mac: str) -> str:
+    """Look up MAC prefix vendor from a built-in prefix database."""
+    global _MAC_VENDORS
+    if _MAC_VENDORS is None:
+        # Compact prefix list: first 3 bytes → known manufacturers
+        _MAC_VENDORS = {
+            "00:00:0C": "Cisco", "00:01:42": "Google", "00:03:93": "Apple",
+            "00:05:02": "Intel", "00:09:0F": "Nokia", "00:0A:27": "D-Link",
+            "00:0C:29": "VMware", "00:0E:35": "Huawei", "00:11:24": "Netgear",
+            "00:11:50": "Samsung", "00:12:17": "Apple", "00:12:3F": "Dell",
+            "00:12:56": "Amazon", "00:13:A9": "ASUS", "00:14:22": "Dell",
+            "00:14:51": "Apple", "00:15:5D": "Microsoft", "00:15:E9": "HP",
+            "00:16:32": "HTC", "00:16:EA": "TP-Link", "00:17:88": "Nintendo",
+            "00:18:0A": "Intel", "00:18:42": "Apple", "00:18:4D": "Apple",
+            "00:18:71": "Cisco", "00:19:D1": "Raspberry Pi", "00:1A:11": "Google",
+            "00:1B:63": "Linksys", "00:1C:42": "Sony", "00:1C:B3": "Broadcom",
+            "00:1D:43": "Sony", "00:1E:58": "LG", "00:1F:01": "Panasonic",
+            "00:1F:5B": "Microsoft", "00:1F:81": "Samsung", "00:1F:C6": "Hon Hai",
+            "00:21:5A": "RIM", "00:21:6B": "Apple", "00:21:CC": "Apple",
+            "00:22:41": "Cisco", "00:22:4D": "LG", "00:22:69": "Alcatel",
+            "00:22:6D": "Google", "00:23:5A": "HP", "00:23:DF": "ASUS",
+            "00:23:F8": "Sony", "00:24:2C": "Samsung", "00:24:D6": "Nest Labs",
+            "00:25:00": "Apple", "00:25:4B": "Apple", "00:25:9C": "ZTE",
+            "00:25:D3": "Ruckus", "00:26:08": "T-Mobile", "00:26:55": "TP-Link",
+            "00:26:6C": "Dell", "00:26:BB": "Dell", "00:26:F2": "Microsoft",
+            "00:27:22": "ASUS", "00:27:51": "LG", "00:27:CB": "Fitbit",
+            "00:28:F8": "Netgear", "00:2A:6B": "Sony",
+            "04:4B:ED": "Dell", "04:92:26": "Raspberry Pi", "08:00:27": "Oracle",
+            "08:00:46": "Sony", "08:05:1B": "Emerson", "08:74:02": "Intel",
+            "08:96:D7": "Apple", "0C:4E:C9": "HTC", "0C:74:C2": "Realtek",
+            "10:08:B1": "Intel", "10:13:EE": "Canon", "10:2C:6B": "Samsung",
+            "10:68:38": "QNAP", "14:10:9F": "Oculus", "14:59:C0": "Apple",
+            "14:7D:DA": "Dell", "18:31:BF": "Apple", "1C:1B:0D": "Samsung",
+            "1C:69:7A": "Intel", "20:65:8E": "Linksys", "24:06:5A": "Nest Labs",
+            "24:65:11": "Apple", "24:AB:81": "Dell", "28:16:2E": "Cisco",
+            "28:25:7F": "HTC", "28:C0:DA": "Synology", "2C:30:33": "Apple",
+            "2C:54:91": "HP", "2C:56:DC": "LG", "30:D1:A4": "Samsung",
+            "34:02:86": "Apple", "34:08:BC": "Google", "34:15:9E": "Netgear",
+            "34:3C:0A": "Dell", "34:95:DB": "ASUS", "38:2C:4A": "HTC",
+            "38:87:D5": "Dell", "3C:07:54": "Intel", "3C:22:FB": "Dell",
+            "3C:5A:37": "Intel", "3C:A6:F6": "HP", "40:1C:83": "Synaptics",
+            "40:4D:7F": "Apple", "40:E2:30": "LG", "44:00:BA": "HTC",
+            "44:07:0B": "Google", "44:38:39": "HP", "44:8A:5B": "Intel",
+            "44:D1:FA": "Amazon", "4C:0B:BE": "HP", "4C:09:D4": "Xerox",
+            "4C:77:6B": "Canon", "4C:E6:76": "HTC", "50:2B:73": "Intel",
+            "50:76:AF": "Google", "50:F5:DA": "HP", "54:04:A6": "Palmer",
+            "54:33:CB": "Intel", "54:9F:13": "HP", "58:55:CA": "Intel",
+            "58:8A:5A": "Intel", "5C:51:88": "Intel", "5C:95:AE": "Intel",
+            "60:30:41": "LG", "60:6B:BD": "Samsung", "60:92:17": "Synaptics",
+            "60:A4:4C": "Intel", "60:E7:01": "TP-Link", "64:00:6A": "Samsung",
+            "64:09:22": "Samsung", "64:51:06": "Microsoft", "64:6E:69": "Intel",
+            "64:9A:18": "ASUS", "68:3E:34": "D-Link", "68:72:51": "HP",
+            "68:94:23": "Samsung", "68:DB:CA": "Intel", "6C:0B:84": "LG",
+            "6C:3E:6D": "Raspberry Pi", "6C:83:36": "Samsung", "6C:96:C9": "HP",
+            "6C:9C:ED": "Intel", "70:14:A6": "LG", "70:5A:6E": "Samsung",
+            "70:62:B8": "Google", "70:66:55": "TCL", "70:A8:D3": "Amazon",
+            "74:D0:2B": "Netgear", "74:E5:0B": "ASRock", "78:24:AF": "Intel",
+            "78:31:C1": "Cisco", "78:45:61": "Apple", "78:46:85": "HP",
+            "7C:05:07": "Intel", "7C:10:C9": "Samsung", "7C:50:79": "Synaptics",
+            "80:38:BC": "Google", "80:4A:14": "Sony", "84:16:F9": "HP",
+            "84:7B:3B": "LG", "88:03:55": "Google", "88:08:1B": "Samsung",
+            "88:1F:A1": "Intel", "88:4A:EA": "Dell", "88:66:5A": "NVIDIA",
+            "88:C6:26": "Netgear", "8C:04:BA": "Intel", "8C:8C:AA": "Apple",
+            "8C:AE:4C": "Intel", "90:17:AC": "Intel", "90:2B:34": "Dell",
+            "90:9A:4A": "Intel", "94:65:2D": "Intel", "94:DB:DA": "LG",
+            "98:01:A7": "Apple", "98:90:96": "Intel", "9C:2E:A1": "Dell",
+            "9C:4E:36": "Intel", "9C:B6:54": "Intel", "A0:36:9F": "Intel",
+            "A0:40:41": "Intel", "A0:45:36": "Samsung", "A0:8C:15": "D-Link",
+            "A0:CE:C8": "Intel", "A4:34:D9": "HP", "A4:5E:60": "Apple",
+            "A4:77:33": "Dell", "A8:20:66": "Apple", "A8:5E:45": "Microsoft",
+            "AC:3A:68": "Intel", "B0:48:7A": "Intel", "B0:7D:64": "Dell",
+            "B4:2E:99": "Intel", "B4:B6:76": "Intel", "B8:38:61": "Intel",
+            "B8:8D:12": "Apple", "BC:5F:F4": "Intel", "BC:6E:64": "ASUS",
+            "BC:AE:C5": "Dell", "BC:92:6B": "Intel", "C0:3F:0E": "Netgear",
+            "C0:51:7E": "Intel", "C0:6C:6D": "Netgear", "C0:7B:BC": "Dell",
+            "C0:B3:21": "Dell", "C4:65:16": "Intel", "C4:75:95": "Google",
+            "C4:85:E1": "Intel", "C8:1E:E7": "Intel", "C8:34:8E": "Dell",
+            "C8:5B:76": "LG", "C8:D9:D4": "Intel", "CC:2D:8C": "Intel",
+            "CC:3D:AF": "Dell", "CC:96:A0": "Intel", "D0:22:BE": "Dell",
+            "D0:37:45": "Intel", "D0:50:99": "Dell", "D0:57:4B": "Cisco",
+            "D0:67:E5": "Dell", "D0:95:A6": "Dell", "D4:81:D7": "Google",
+            "D4:AE:52": "Dell", "D8:12:65": "Intel", "D8:1C:79": "Samsung",
+            "D8:3A:DD": "Intel", "D8:5C:79": "LG", "D8:B3:77": "Intel",
+            "DC:A6:32": "Intel", "DC:D9:16": "LG", "E0:2A:82": "Intel",
+            "E0:3E:45": "Intel", "E0:55:3D": "Intel", "E0:AC:CB": "Apple",
+            "E0:D4:62": "ASUS", "E0:D5:5E": "Intel", "E4:11:5B": "Intel",
+            "E4:22:A5": "Google", "E4:A4:71": "Cisco", "E8:50:8B": "Intel",
+            "E8:9E:0C": "Intel", "EC:0E:C4": "Intel", "EC:8C:A2": "Intel",
+            "EC:B1:D7": "Intel", "EC:DC:E6": "Dell", "F0:18:98": "Intel",
+            "F0:4D:A2": "Intel", "F0:7B:CB": "Samsung", "F0:7D:68": "Intel",
+            "F0:BD:89": "HP", "F4:0E:22": "Intel", "F4:4D:30": "Dell",
+            "F4:6D:04": "Dell", "F4:B5:20": "Intel", "F8:1E:DF": "Intel",
+            "F8:2F:A8": "Intel", "F8:5C:7D": "HTC", "F8:8E:85": "Intel",
+            "F8:D1:11": "Intel", "FC:15:B4": "Intel", "FC:3F:7C": "Apple",
+            "FC:AA:14": "Intel", "FC:F8:AE": "Intel",
+        }
+    prefix = mac.upper()[:8]  # "XX:XX:XX"
+    return _MAC_VENDORS.get(prefix, "Unknown")
+
+
+@register("net_scan_deep")
+def _net_scan_deep(_):
+    """Deep network scan: ARP + hostname + MAC vendor + port scan common ports + OS guess."""
+    subnet = _ps("(Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'Wi-Fi','Ethernet' -ErrorAction SilentlyContinue).IPAddress")
+    if not subnet: subnet = "192.168.1.1"
+    base = ".".join(subnet.split(".")[:3])
+
+    arp = _ps("arp -a")
+    raw_devices = []
+    for line in (arp or "").splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 3 and parts[0].startswith(base):
+            ip = parts[0]
+            mac = parts[1].replace("-", ":").upper()
+            if ip not in [d["ip"] for d in raw_devices]:
+                raw_devices.append({"ip": ip, "mac": mac})
+
+    if not raw_devices:
+        for i in [1, 254, 100, 101, 50, 150, 200]:
+            _ps(f"ping -n 1 -w 200 {base}.{i}")
+        arp = _ps("arp -a")
+        for line in (arp or "").splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 3 and parts[0].startswith(base):
+                ip = parts[0]
+                mac = parts[1].replace("-", ":").upper()
+                if ip not in [d["ip"] for d in raw_devices]:
+                    raw_devices.append({"ip": ip, "mac": mac})
+
+    if not raw_devices:
+        return "No devices found on network."
+
+    # Batch resolve hostnames + port scan common ports on a subset
+    result = "Network scan — devices:\n"
+    for d in raw_devices[:15]:
+        vendor = _mac_vendor(d["mac"])
+        host = _ps(f"(Resolve-DnsName {d['ip']} -ErrorAction SilentlyContinue).NameHost")
+        hostname = host.split(".")[0] if host else "unknown"
+
+        # Quick port check: common web/admin ports
+        http = _ps(f"Test-NetConnection {d['ip']} -Port 80 -WarningAction SilentlyContinue -InformationLevel Quiet 2>$null")
+        https = _ps(f"Test-NetConnection {d['ip']} -Port 443 -WarningAction SilentlyContinue -InformationLevel Quiet 2>$null")
+        rdp = _ps(f"Test-NetConnection {d['ip']} -Port 3389 -WarningAction SilentlyContinue -InformationLevel Quiet 2>$null")
+        ssh = _ps(f"Test-NetConnection {d['ip']} -Port 22 -WarningAction SilentlyContinue -InformationLevel Quiet 2>$null")
+        smb = _ps(f"Test-NetConnection {d['ip']} -Port 445 -WarningAction SilentlyContinue -InformationLevel Quiet 2>$null")
+
+        ports_open = []
+        if http == "True": ports_open.append("80/http")
+        if https == "True": ports_open.append("443/https")
+        if rdp == "True": ports_open.append("3389/RDP")
+        if ssh == "True": ports_open.append("22/SSH")
+        if smb == "True": ports_open.append("445/SMB")
+        port_str = f" [{', '.join(ports_open)}]" if ports_open else ""
+
+        result += f"  • {hostname} ({d['ip']}) — {vendor} — {d['mac']}{port_str}\n"
+    return result
+
+
+@register("net_device_info")
+def _net_device_info(text):
+    """Get detailed info on a specific network device."""
+    target = extract_param(text, r"(?:info|details|about)\s+(?:device\s+)?(.+?)$")
+    if not target: target = text.replace("device info", "").replace("details", "").strip()
+    if not target: return "Which device?"
+
+    arp = _ps("arp -a")
+    mac = None; ip = None
+    for line in (arp or "").splitlines():
+        if target.lower() in line.lower():
+            parts = line.strip().split()
+            if len(parts) >= 3:
+                ip = parts[0]; mac = parts[1].replace("-", ":").upper()
+                break
+
+    if not ip:
+        return f"Device '{target}' not found in ARP cache. Try 'scan network' first."
+
+    vendor = _mac_vendor(mac)
+    host = _ps(f"(Resolve-DnsName {ip} -ErrorAction SilentlyContinue).NameHost")
+    hostname = host.split(".")[0] if host else "unknown"
+    ping = _ps(f"ping -n 2 {ip} | Select-String 'TTL='")
+    ttl_val = re.search(r"TTL=(\d+)", ping)
+    os_guess = ""
+    if ttl_val:
+        ttl = int(ttl_val.group(1))
+        if ttl <= 64: os_guess = "(likely Linux/Unix/Android)"
+        elif ttl <= 128: os_guess = "(likely Windows)"
+        else: os_guess = "(likely Cisco/network device)"
+
+    # Scan common ports
+    ports = []
+    for p, name in [(22, "SSH"), (80, "HTTP"), (443, "HTTPS"), (3389, "RDP"), (445, "SMB"),
+                     (139, "NetBIOS"), (53, "DNS"), (8080, "HTTP-alt"), (8443, "HTTPS-alt")]:
+        r = _ps(f"Test-NetConnection {ip} -Port {p} -WarningAction SilentlyContinue -InformationLevel Quiet 2>$null")
+        if r == "True": ports.append(f"{p}/{name}")
+
+    result = f"Device: {hostname}\nIP: {ip}\nMAC: {mac}\nVendor: {vendor}\nOS: {os_guess or 'unknown'}"
+    if ports: result += f"\nOpen ports: {', '.join(ports)}"
+    return result
+
+
+@register("net_port_scan")
+def _net_port_scan(text):
+    """Scan common ports on a specific device."""
+    target = extract_param(text, r"(?:scan|check|list)\s+(?:ports\s+(?:on|of)\s+)?(.+?)$")
+    if not target: return "Which device?"
+    p = _ps(f'$ip="{target}"; $ports=@(22,23,25,53,80,110,135,139,143,443,445,993,995,1433,1521,2049,3306,3389,5432,5900,6379,8080,8443,27017); $r=@(); foreach($p in $ports){{$t=Test-NetConnection $ip -Port $p -WarningAction SilentlyContinue -InformationLevel Quiet 2>$null; if($t -eq "True"){{$r+=$p}}; $r -join ","')
+    if not p: return f"{target} has no open ports on common ports (or is offline)."
+    port_nums = [int(x) for x in p.split(",") if x.strip().isdigit()]
+    names = {22:"SSH",23:"Telnet",25:"SMTP",53:"DNS",80:"HTTP",110:"POP3",135:"RPC",139:"NetBIOS",
+             143:"IMAP",443:"HTTPS",445:"SMB",993:"IMAPS",995:"POP3S",1433:"MSSQL",1521:"Oracle",
+             2049:"NFS",3306:"MySQL",3389:"RDP",5432:"PostgreSQL",5900:"VNC",6379:"Redis",
+             8080:"HTTP-alt",8443:"HTTPS-alt",27017:"MongoDB"}
+    descs = [f"{n}/{names.get(n,'?')}" for n in port_nums]
+    return f"Open ports on {target}: {', '.join(descs)}"
+
+
+@register("net_shares")
+def _net_shares(_):
+    """Discover SMB shares on the network."""
+    subnet = _ps("(Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'Wi-Fi','Ethernet' -ErrorAction SilentlyContinue).IPAddress")
+    if not subnet: subnet = "192.168.1.1"
+    base = ".".join(subnet.split(".")[:3])
+
+    arp = _ps("arp -a")
+    ips = []
+    for line in (arp or "").splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 3 and parts[0].startswith(base):
+            ips.append(parts[0])
+
+    # Check SMB (port 445) on each device
+    result = "Network shares discovered:\n"
+    found = False
+    for ip in ips[:10]:
+        smb_check = _ps(f"Test-NetConnection {ip} -Port 445 -WarningAction SilentlyContinue -InformationLevel Quiet 2>$null")
+        if smb_check == "True":
+            shares = _ps(f'net view \\\\{ip} 2>$null | Select-String "Disk" | Out-String')
+            host = _ps(f"(Resolve-DnsName {ip} -ErrorAction SilentlyContinue).NameHost")
+            h = host.split(".")[0] if host else ip
+            if shares:
+                found = True
+                result += f"\n  {h} ({ip}):\n"
+                for s in shares.splitlines():
+                    s = s.strip()
+                    if s: result += f"    \\\\{ip}\\{s.split()[0]}\n"
+    if not found:
+        result += "  No SMB shares found on local network."
+    return result
+
+
 # ── Processes ──────────────────────────────────────────────────────
 
 @register("process_list")
@@ -1391,9 +1683,70 @@ def _open_app(text):
     if name.lower() in APP_MAP:
         _ps(f'Start-Process "{APP_MAP[name.lower()]}"')
         return f"Opening {name}..."
+    # Search installed apps by name (fuzzy match)
+    found = _ps(f'$n="{name}"; $r=Get-ChildItem "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths" -ErrorAction SilentlyContinue | Where-Object {{$_.PSChildName -like "*$n*"}} | Select-Object -First 1; if($r){{(Get-ItemProperty $r.PSPath)."(default)"}}; if(-not$r){{$r=Get-ChildItem "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths" -ErrorAction SilentlyContinue | Where-Object {{$_.PSChildName -like "*$n*"}} | Select-Object -First 1; if($r){{(Get-ItemProperty $r.PSPath)."(default)"}}}}')
+    if found and found != "Not found":
+        _ps(f'Start-Process "{found}"')
+        return f"Opening {name}..."
     # Try as executable
     _ps(f'Start-Process "{name}" 2>$null; if(-not$?){{Start-Process "{name}.exe" 2>$null; if(-not$?){{return "Not found: {name}"}}}}')
     return f"Opening {name}..."
+
+@register("app_list")
+def _app_list(text):
+    q = extract_param(text, r"(?:list|find|search)\s+(?:all\s+)?(?:installed\s+)?(?:apps|programs|software)\s*(?:matching|for|named)?\s*(.+?)$")
+    results = _ps(f'''
+        $apps = @();
+        $regPaths = @(
+            "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*",
+            "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*",
+            "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*"
+        );
+        foreach($p in $regPaths) {{ $apps += Get-ItemProperty $p -ErrorAction SilentlyContinue | Where-Object {{$_.DisplayName}} }};
+        $apps = $apps | Sort-Object DisplayName -Unique;
+        if("{q}") {{ $apps = $apps | Where-Object {{$_.DisplayName -like "*{q}*"}} }};
+        $apps | Select-Object -First 50 @{{N="App";E={{$_.DisplayName}}}},@{{N="Version";E={{$_.DisplayVersion}}}} | Format-Table -Auto | Out-String
+    ''')
+    if not results or results == "timed_out":
+        results = _ps(f'winget list --accept-source-agreements 2>$null | Select-String -Pattern "{q or "."}" | Select-Object -First 30 | Out-String')
+    if not results: return "No apps found."
+    return f"Installed apps:\n{results[:800]}"
+
+@register("app_info")
+def _app_info(text):
+    name = extract_param(text, r"(?:app|program|software)\s+(?:info|details|about|properties)\s+(.+?)$")
+    if not name: name = extract_param(text, r"info\s+(?:about|on|for)\s+(.+?)$")
+    if not name: return "Which app?"
+    info = _ps(f'''
+        $apps = @();
+        $regPaths = @(
+            "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*",
+            "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*"
+        );
+        foreach($p in $regPaths) {{ $apps += Get-ItemProperty $p -ErrorAction SilentlyContinue | Where-Object {{$_.DisplayName -like "*{name}*"}} }};
+        $apps[0] | Select-Object DisplayName,DisplayVersion,Publisher,InstallDate,InstallLocation,UninstallString | Format-List | Out-String
+    ''')
+    return info[:500] or f"App '{name}' not found."
+
+@register("app_uninstall")
+def _app_uninstall(text):
+    name = extract_param(text, r"(?:uninstall|remove)\s+(?:app|program|software)\s+(.+?)$")
+    if not name: return "Which app?"
+    _ps(f'winget uninstall "{name}" --accept-source-agreements 2>$null')
+    return f"Uninstalling {name}... Check winget for progress."
+
+@register("app_quit")
+def _app_quit(text):
+    name = extract_param(text, r"(?:quit|close|exit|kill|stop)\s+(?:app|program)\s+(.+?)$")
+    if not name: name = extract_param(text, r"force\s+(?:quit|close)\s+(.+?)$")
+    if not name: return "Which app?"
+    r = _ps(f'(Get-Process -Name "{name}" -ErrorAction SilentlyContinue) | Stop-Process -Force; if(-not$?){{(Get-Process | Where-Object {{$_.MainWindowTitle -like "*{name}*"}}) | Stop-Process -Force}}; "done"')
+    return f"Forced quit {name}."
+
+@register("app_running")
+def _app_running(_):
+    r = _ps('Get-Process | Where-Object {$_.MainWindowTitle -ne ""} | Select-Object Name,@{N="Window";E={$_.MainWindowTitle}},Id | Sort-Object Name | Format-Table -Auto | Out-String')
+    return f"Running apps:\n{r[:800] or 'No windowed apps running.'}"
 
 
 # ── Windows Update ─────────────────────────────────────────────────
@@ -1935,7 +2288,7 @@ def _help(_):
         "Search": ["search","search_youtube","search_wiki","weather"],
         "Misc": ["time","timer","screenshot","clipboard_show","system_info"],
     }
-    text = "I can control 180+ things on your PC. Categories:\n"
+    text = "I control 215+ things on your PC & network. Categories:\n"
     for cat, actions in cats.items():
         text += f"  {cat}: {', '.join(actions)}\n"
     text += "\nTry: 'what can you control?' or just ask for anything!"
