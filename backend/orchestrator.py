@@ -4,34 +4,26 @@ import json
 import re
 import backend.ai_agent as llm
 
-_PLAN_PROMPT = """You are a task planning AI. Break down the user's request into steps.
-You can ask questions, open URLs, search the web, or present results.
-
-Output ONLY valid JSON. No other text.
-
-Examples:
-
-User: book a holiday to Paris
-{"task":"book a holiday to Paris","steps":[{"id":1,"action":"ask","question":"What dates are you planning to travel?","field":"dates"},{"id":2,"action":"ask","question":"What is your budget?","field":"budget"},{"id":3,"action":"open","url":"https://google.com/travel/flights?q=flights+to+Paris","note":"Search flights to Paris"},{"id":4,"action":"open","url":"https://booking.com","note":"Search hotels in Paris"},{"id":5,"action":"ask","question":"Any specific activities?","field":"activities"},{"id":6,"action":"present","note":"Compile the final plan"}],"follow_up_question":"What dates are you thinking?"}
-
-User: find me the cheapest flight to Tokyo
-{"task":"find cheap flight to Tokyo","steps":[{"id":1,"action":"ask","question":"What departure city?","field":"from"},{"id":2,"action":"ask","question":"What dates?","field":"dates"},{"id":3,"action":"open","url":"https://google.com/travel/flights?q=flights+to+Tokyo","note":"Search flights to Tokyo"},{"id":4,"action":"open","url":"https://skyscanner.net","note":"Compare on Skyscanner"},{"id":5,"action":"present","note":"Present cheapest options"}],"follow_up_question":"Which city are you flying from?"}
-
-User: %s
-"""
 
 _SESSIONS: dict[str, dict] = {}
 
 
-def _llm_generate(prompt: str, max_tokens: int = 256) -> str:
+def _llm_generate(user_input: str, max_tokens: int = 256) -> str:
+    """Generate using proper Qwen2.5 chat template."""
     llm._load()
+    system = "You are a task planning AI. Break down user requests into steps. Output ONLY valid JSON. No other text."
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_input},
+    ]
+    prompt = llm._TOKENIZER.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = llm._TOKENIZER(prompt, return_tensors="pt")
     import torch
     with torch.no_grad():
         out = llm._MODEL.generate(
             **inputs,
             max_new_tokens=max_tokens,
-            temperature=0.7,
+            temperature=0.3,
             top_p=0.9,
             do_sample=True,
             repetition_penalty=1.1,
@@ -53,8 +45,14 @@ def _extract_json(text: str) -> dict | None:
 
 
 def start_task(session_id: str, user_input: str) -> dict:
-    prompt = _PLAN_PROMPT % user_input
-    reply = _llm_generate(prompt, max_tokens=300)
+    # Include examples in the user input for the LLM
+    examples = """Examples:
+User: book a holiday to Paris
+{"task":"book a holiday to Paris","steps":[{"id":1,"action":"ask","question":"What dates?","field":"dates"},{"id":2,"action":"ask","question":"Budget?","field":"budget"},{"id":3,"action":"open","url":"https://google.com/travel","note":"Flights"},{"id":4,"action":"present","note":"Plan"}],"follow_up_question":"What dates?"}
+
+User: find the cheapest flight to Tokyo
+{"task":"find cheap flight to Tokyo","steps":[{"id":1,"action":"ask","question":"Departure city?","field":"from"},{"id":2,"action":"ask","question":"Dates?","field":"dates"},{"id":3,"action":"open","url":"https://google.com/travel","note":"Search"},{"id":4,"action":"present","note":"Options"}],"follow_up_question":"Departure city?"}"""
+    reply = _llm_generate(f"{examples}\n\nUser: {user_input}", max_tokens=300)
     plan = _extract_json(reply)
 
     if not plan or "steps" not in plan:
