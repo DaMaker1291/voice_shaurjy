@@ -24,6 +24,7 @@ export default function Home() {
   const [thinking, setThinking] = useState(false);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [showReminders, setShowReminders] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -93,10 +94,16 @@ export default function Home() {
       const res = await textChat(text);
       const reply = res.text;
       setMessages((p) => [...p, { role: "assistant", content: reply }]);
-      speak(reply);
 
-      // Auto-create reminders from certain patterns
-      const lower = text.toLowerCase();
+      // Show action feedback
+      if (res.action) {
+        setActionFeedback(reply);
+        setTimeout(() => setActionFeedback(null), 4000);
+      } else {
+        speak(reply);
+      }
+
+      // Auto-create reminders
       if (res.reminder) {
         await createReminder(res.reminder.title, res.reminder.description || text, res.reminder.due_date || "");
         const r = await listReminders();
@@ -152,8 +159,21 @@ export default function Home() {
         <div className="stars" /><div className="stars2" /><div className="stars3" />
       </div>
 
-      {/* Reminder toast */}
+      {/* Action feedback toast */}
       <div className={`absolute top-20 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 ${
+        actionFeedback ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
+      }`}>
+        <div className="glass rounded-xl px-5 py-3 flex items-center gap-3 glow-purple">
+          <span className="text-lg">⚡</span>
+          <div>
+            <p className="text-xs text-cyan-300 font-mono">Action executed</p>
+            <p className="text-sm text-gray-200">{actionFeedback}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Reminder toast */}
+      <div className={`absolute top-32 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 ${
         showReminders ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
       }`}>
         <div className="glass rounded-xl px-5 py-3 flex items-center gap-3 glow-purple">

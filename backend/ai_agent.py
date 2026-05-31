@@ -96,11 +96,19 @@ def _detect_reminder(text: str) -> dict | None:
 
 def generate_response(user_id: str, user_text: str, tier: str = "free") -> dict:
     from backend.rag_engine import query_context, has_documents
+    from backend.actions import detect_action, execute_action, _ACTION_LABELS
 
     text = user_text.strip().lower()
 
     # Detect reminder intent
     reminder = _detect_reminder(user_text)
+
+    # Action path: check for cross-app commands
+    action = detect_action(user_text)
+    if action:
+        result = execute_action(action, user_text)
+        label = _ACTION_LABELS.get(action, "")
+        return {"text": f"{label}\n{result}", "action": action, "reminder": reminder}
 
     # Fast path: pattern-matched replies
     for pattern, reply in _FAST_REPLIES.items():
