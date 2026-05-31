@@ -16,6 +16,11 @@ _CACHE = OrderedDict()
 _CACHE_MAX = 64
 _CACHE_LOCK = threading.Lock()
 
+# Conversation history per user (last 20 turns)
+_HISTORY: dict[str, list[dict]] = {}
+_HISTORY_MAX = 20
+_HISTORY_LOCK = threading.Lock()
+
 FEW_SHOT = """User: what is the capital of France?
 Jason: The capital of France is Paris.
 
@@ -80,14 +85,67 @@ def _cache_set(key: str, val: dict):
             _CACHE.popitem(last=False)
 
 
-def _build_prompt(user_text: str, context: str) -> str:
+def _get_history(user_id: str) -> list[dict]:
+    with _HISTORY_LOCK:
+        return list(_HISTORY.get(user_id, []))
+
+def _add_to_history(user_id: str, entry: dict):
+    with _HISTORY_LOCK:
+        if user_id not in _HISTORY:
+            _HISTORY[user_id] = []
+        _HISTORY[user_id].append(entry)
+        if len(_HISTORY[user_id]) > _HISTORY_MAX:
+            _HISTORY[user_id] = _HISTORY[user_id][-_HISTORY_MAX:]
+
+def _clear_history(user_id: str):
+    with _HISTORY_LOCK:
+        _HISTORY.pop(user_id, None)
+
+
+_DEVICE_INFO: dict | None = None
+_DEVICE_LOCK = threading.Lock()
+
+def _get_device_context() -> str:
+    """Get formatted device information for the system prompt."""
+    global _DEVICE_INFO
+    if _DEVICE_INFO is None:
+        with _DEVICE_LOCK:
+            if _DEVICE_INFO is None:
+                try:
+                    from device_scanner import scan_device
+                    _DEVICE_INFO = scan_device("local")
+                except:
+                    _DEVICE_INFO = {}
+    if not _DEVICE_INFO:
+        return ""
+    parts = []
+    sys = _DEVICE_INFO.get("system", {})
+    if sys:
+        parts.append(f"User's system: {sys.get('os','')} on {sys.get('hostname','')}, {sys.get('ram_gb','')}GB RAM")
+    files = _DEVICE_INFO.get("recent_files", [])
+    if files:
+        names = ", ".join(f["name"] for f in files[:10])
+        parts.append(f"Recent files: {names}")
+    events = _DEVICE_INFO.get("calendar_events", [])
+    if events:
+        upcoming = "; ".join(f"{e['subject']} ({e['start']})" for e in events[:5])
+        parts.append(f"Calendar: {upcoming}")
+    return "\n".join(parts)
+
+
+def _build_prompt(user_text: str, context: str, history: list[dict] | None = None) -> str:
     system = "You are Jason, a helpful AI assistant. You give concise, accurate answers. Never be rude or sarcastic."
     if context:
         system += f"\n\nRelevant notes:\n{context}"
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user_text},
-    ]
+    device = _get_device_context()
+    if device:
+        system += f"\n\nDevice info (for personalization):\n{device}"
+    messages = [{"role": "system", "content": system}]
+    # Add conversation history
+    if history:
+        for h in history:
+            messages.append(h)
+    messages.append({"role": "user", "content": user_text})
     return _TOKENIZER.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
 
@@ -211,7 +269,8 @@ def generate_response(user_id: str, user_text: str, tier: str = "free") -> dict:
             context = "\n---\n".join(chunks)
 
     _load()
-    prompt = _build_prompt(user_text, context)
+    history = _get_history(user_id)
+    prompt = _build_prompt(user_text, context, history)
     inputs = _TOKENIZER(prompt, return_tensors="pt")
     word_count = len(user_text.split())
     max_new_tokens = 96 if word_count > 8 else 64
@@ -227,5 +286,10 @@ def generate_response(user_id: str, user_text: str, tier: str = "free") -> dict:
         )
     reply = _TOKENIZER.decode(out[0][inputs.input_ids.shape[1]:], skip_special_tokens=True).strip()
     result = {"text": reply or "I don't have an answer for that.", "reminder": reminder}
+
+    # Store in history
+    _add_to_history(user_id, {"role": "user", "content": user_text})
+    _add_to_history(user_id, {"role": "assistant", "content": reply})
+
     _cache_set(cache_key, result)
     return result

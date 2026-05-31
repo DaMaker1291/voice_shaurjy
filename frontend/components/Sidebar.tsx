@@ -32,7 +32,7 @@ export default function Sidebar({ messages, open, onClose }: Props) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 right-0 h-full w-80 bg-gray-950/90 backdrop-blur-xl border-l border-gray-800/50 z-50 transition-transform duration-300 ${
+        className={`fixed top-0 right-0 h-full w-[28rem] bg-gray-950/90 backdrop-blur-xl border-l border-gray-800/50 z-50 transition-transform duration-300 ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -65,7 +65,7 @@ export default function Sidebar({ messages, open, onClose }: Props) {
                 <p className={`text-[10px] font-mono uppercase tracking-wider mb-1 ${m.role === "user" ? "text-cyan-500" : "text-purple-400"}`}>
                   {m.role === "user" ? "> you" : "> jason"}
                 </p>
-                <p className="text-sm text-gray-300 leading-relaxed">{m.content}</p>
+                <p className="text-base text-gray-300 leading-relaxed">{m.content}</p>
               </div>
             ))
           )}

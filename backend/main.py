@@ -159,24 +159,34 @@ async def livekit_token(req: LiveKitTokenRequest):
     return {"token": token.jwt, "url": os.getenv("LIVEKIT_URL")}
 
 
-# ── Text-to-Speech via edge-tts ───────────────────────────────
+# ── Text-to-Speech via edge-tts (streaming) ───────────────────
 
 from pydantic import BaseModel
 
 class TTSRequest(BaseModel):
     text: str
-    voice: str = "en-US-JennyNeural"
+    voice: str = "en-US-AriaNeural"
 
 @app.post("/api/tts")
 async def text_to_speech(req: TTSRequest):
     import edge_tts
-    import tempfile
-    from fastapi.responses import FileResponse
+    from fastapi.responses import StreamingResponse
 
     communicate = edge_tts.Communicate(req.text, req.voice)
-    tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-    tmp_path = tmp.name
-    tmp.close()
 
-    await communicate.save(tmp_path)
-    return FileResponse(tmp_path, media_type="audio/mpeg", headers={"Content-Disposition": "inline"})
+    async def stream():
+      async for chunk in communicate.stream():
+          if chunk["type"] == "audio":
+              yield chunk["data"]
+
+    return StreamingResponse(stream(), media_type="audio/mpeg")
+
+
+# ── Device scanner ───────────────────────────────────────────
+
+@app.post("/api/device/scan")
+async def device_scan(user_id: str = "local"):
+    from device_scanner import scan_device
+
+    data = scan_device(user_id)
+    return data

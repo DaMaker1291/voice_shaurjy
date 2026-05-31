@@ -3,28 +3,24 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import HolographicNeuron from "@/components/HolographicNeuron";
 import Sidebar from "@/components/Sidebar";
-import { textChat, createReminder, listReminders } from "@/lib/api";
+import { textChat } from "@/lib/api";
 
 interface Message {
   role: string;
   content: string;
 }
 
-interface Reminder { id: string; title: string }
-
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [textInput, setTextInput] = useState("");
   const [showInput, setShowInput] = useState(false);
   const [listening, setListening] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [interim, setInterim] = useState("");
   const [confidence, setConfidence] = useState(0);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [showReminders, setShowReminders] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [taskSession, setTaskSession] = useState<string | null>(null);
   const [taskQuestion, setTaskQuestion] = useState<string | null>(null);
@@ -32,6 +28,7 @@ export default function Home() {
   const [taskTotal, setTaskTotal] = useState(0);
   const [taskResult, setTaskResult] = useState<string | null>(null);
   const [collectedInfo, setCollectedInfo] = useState<Record<string, string>>({});
+  const [scanning, setScanning] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -40,12 +37,15 @@ export default function Home() {
 
   useEffect(() => { synthRef.current = window.speechSynthesis; }, []);
 
+  // Scan device on startup
   useEffect(() => {
     (async () => {
+      setScanning(true);
       try {
-        const r = await listReminders();
-        setReminders(r.reminders.filter((rm: any) => !rm.completed).slice(0, 5));
+        await fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" });
+        setMessages((p) => [...p, { role: "assistant", content: "Device scanned. I know your files, calendar, and system. Ask me anything." }]);
       } catch {}
+      setScanning(false);
     })();
   }, []);
 
@@ -54,23 +54,24 @@ export default function Home() {
       const res = await fetch(`${BASE}/api/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice: "en-US-JennyNeural" }),
+        body: JSON.stringify({ text, voice: "en-US-AriaNeural" }),
       });
       if (!res.ok) throw new Error("TTS failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.onended = () => URL.revokeObjectURL(url);
+      // Pre-load then play immediately
+      audio.load();
       await audio.play();
     } catch {
-      // fallback to browser TTS
       const synth = synthRef.current;
       if (!synth) return;
       synth.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0; utterance.pitch = 0.9;
       const voices = synth.getVoices();
-      const preferred = voices.find((v) => v.name.includes("Jenny") || v.name.includes("Zira") || v.name.includes("David"));
+      const preferred = voices.find((v) => v.name.includes("Aria") || v.name.includes("Jenny") || v.name.includes("Zira"));
       if (preferred) utterance.voice = preferred;
       synth.speak(utterance);
     }
@@ -120,15 +121,6 @@ export default function Home() {
         _handleTaskResponse(res.task);
       } else {
         setMessages((p) => [...p, { role: "assistant", content: reply }]);
-      }
-
-      // Auto-create reminders
-      if (res.reminder) {
-        await createReminder(res.reminder.title, res.reminder.description || text, res.reminder.due_date || "");
-        const r = await listReminders();
-        setReminders(r.reminders.filter((rm: any) => !rm.completed).slice(0, 5));
-        setShowReminders(true);
-        setTimeout(() => setShowReminders(false), 5000);
       }
     } catch {
       setMessages((p) => [...p, { role: "assistant", content: "(backend unreachable)" }]);
@@ -296,19 +288,11 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Reminder toast */}
-      <div className={`absolute top-32 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 ${showReminders ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
-        <div className="glass rounded-xl px-5 py-3 flex items-center gap-3 glow-purple">
-          <span className="text-lg">⏰</span>
-          <div>
-            <p className="text-xs text-purple-300 font-mono">Reminder created</p>
-            <p className="text-sm text-gray-200">{reminders[0]?.title}</p>
-          </div>
-        </div>
-      </div>
+      {/* Reminder toast — removed; AI learns from device data now */}
 
       {/* Top-right */}
       <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+        {scanning && <span className="text-[10px] font-mono text-purple-500 animate-pulse">scanning device...</span>}
         <button onClick={() => setSidebarOpen((o) => !o)} className="text-gray-600 hover:text-gray-300 transition-colors p-2" title="Transcript">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
@@ -375,14 +359,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Reminder chips */}
-      {reminders.length > 0 && !taskQuestion && !taskResult && (
-        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-10 flex gap-2 max-w-md flex-wrap justify-center">
-          {reminders.map((r) => (
-            <div key={r.id} className="glass rounded-full px-3 py-1 text-xs text-gray-400 font-mono truncate max-w-[160px]">⏰ {r.title}</div>
-          ))}
-        </div>
-      )}
+      {/* Reminder chips — removed; AI has full device context now */}
 
       {/* Text input (fallback) */}
       {!taskQuestion && (
