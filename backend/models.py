@@ -21,3 +21,17 @@ class LicenseActivate(BaseModel):
 class LiveKitTokenRequest(BaseModel):
     identity: str = "second-brain-user"
     room_name: str = "second-brain"
+
+
+class ReminderCreate(BaseModel):
+    user_id: str = "local"
+    title: str
+    description: str = ""
+    due_date: str = ""
+
+
+class ReminderUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    due_date: str | None = None
+    completed: bool | None = None

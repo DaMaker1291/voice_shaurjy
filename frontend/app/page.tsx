@@ -3,8 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import Orb from "@/components/Orb";
 import Sidebar from "@/components/Sidebar";
-import { textChat, getHealth, getLiveKitToken } from "@/lib/api";
-import { connectToLiveKit, type TranscriptMessage, type OrbState } from "@/lib/livekit";
+import { textChat } from "@/lib/api";
 
 interface Message {
   role: string;
@@ -14,106 +13,114 @@ interface Message {
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [orbState, setOrbState] = useState<OrbState>("idle");
-  const [liveKitReady, setLiveKitReady] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [showInput, setShowInput] = useState(false);
-  const roomRef = useRef<Awaited<ReturnType<typeof connectToLiveKit>> | null>(null);
+  const [listening, setListening] = useState(false);
+  const [thinking, setThinking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const synthRef = useRef(window.speechSynthesis);
 
-  // ── On mount: check backend health & LiveKit availability ──
-  useEffect(() => {
-    (async () => {
-      try {
-        const h = await getHealth();
-        setLiveKitReady(h.livekit);
-      } catch {
-        setLiveKitReady(false);
-      }
-    })();
-  }, []);
-
-  // ── LiveKit connection ─────────────────────────────────────
-  const connectVoice = useCallback(async () => {
-    try {
-      const tk = await getLiveKitToken();
-      if (!tk) throw new Error("no livekit token");
-
-      setOrbState("listening");
-      const room = await connectToLiveKit(tk.url, tk.token, {
-        onTranscript: (msg: TranscriptMessage) => {
-          setMessages((p) => [...p, { role: msg.role, content: msg.text }]);
-          setSidebarOpen(true);
-        },
-        onState: (state: OrbState) => setOrbState(state),
-        onConnected: () => setOrbState("idle"),
-        onDisconnected: () => {
-          setOrbState("idle");
-          roomRef.current = null;
-        },
-      });
-      roomRef.current = room;
-    } catch {
-      setOrbState("idle");
+  // ── Web Speech API: Speech-to-Text ─────────────────────────
+  const startListening = useCallback(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
       setShowInput(true);
       setTimeout(() => inputRef.current?.focus(), 100);
+      return;
     }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+
+    recognition.onresult = (event: any) => {
+      const text = event.results[0][0].transcript;
+      setListening(false);
+      handleQuery(text);
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
   }, []);
 
-  // ── Disconnect ─────────────────────────────────────────────
-  const disconnectVoice = useCallback(async () => {
-    roomRef.current?.disconnect();
-    roomRef.current = null;
-    setOrbState("idle");
+  const stopListening = useCallback(() => {
+    recognitionRef.current?.stop();
+    setListening(false);
   }, []);
 
-  // ── Text chat fallback ─────────────────────────────────────
+  // ── Web Speech API: Text-to-Speech ─────────────────────────
+  const speak = useCallback((text: string) => {
+    synthRef.current.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 0.9;
+    const voices = synthRef.current.getVoices();
+    const deep = voices.find((v) => v.name.includes("Female") || v.name.includes("Google UK"));
+    if (deep) utterance.voice = deep;
+    synthRef.current.speak(utterance);
+  }, []);
+
+  // ── Send query ─────────────────────────────────────────────
+  const handleQuery = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    setMessages((p) => [...p, { role: "user", content: text }]);
+    setSidebarOpen(true);
+    setThinking(true);
+    try {
+      const res = await textChat(text);
+      const reply = res.text;
+      setMessages((p) => [...p, { role: "assistant", content: reply }]);
+      speak(reply);
+    } catch {
+      setMessages((p) => [...p, { role: "assistant", content: "(backend unreachable — ensure uvicorn is running)" }]);
+    }
+    setThinking(false);
+  }, [speak]);
+
+  // ── Text input send ────────────────────────────────────────
   const sendText = useCallback(async () => {
     const txt = textInput.trim();
     if (!txt) return;
     setTextInput("");
-    setMessages((p) => [...p, { role: "user", content: txt }]);
-    setSidebarOpen(true);
-    try {
-      const res = await textChat(txt);
-      setMessages((p) => [...p, { role: "assistant", content: res.text }]);
-    } catch {
-      setMessages((p) => [...p, { role: "assistant", content: "(backend unreachable — ensure uvicorn is running)" }]);
-    }
-  }, [textInput]);
+    setShowInput(false);
+    handleQuery(txt);
+  }, [textInput, handleQuery]);
 
   // ── Orb click ──────────────────────────────────────────────
   const handleOrbClick = useCallback(() => {
-    if (roomRef.current) {
-      disconnectVoice();
-    } else if (liveKitReady) {
-      connectVoice();
+    if (listening) {
+      stopListening();
     } else {
-      setShowInput((o) => !o);
-      if (!showInput) setTimeout(() => inputRef.current?.focus(), 100);
+      startListening();
     }
-  }, [liveKitReady, connectVoice, disconnectVoice, showInput]);
+  }, [listening, startListening, stopListening]);
 
   // ── Keyboard shortcut ──────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "/" && !showInput) {
+      if (e.key === "/" && !showInput && !listening) {
+        e.preventDefault();
         setShowInput(true);
         setTimeout(() => inputRef.current?.focus(), 100);
+      }
+      if (e.key === "Escape") {
+        setShowInput(false);
+        stopListening();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [showInput]);
+  }, [showInput, listening, stopListening]);
 
-  const connected = orbState !== "idle" || !!roomRef.current;
   const statusText =
-    orbState === "listening" ? "orb is listening..." :
-    orbState === "speaking" ? "jason is responding..." :
-    roomRef.current ? "connected — tap orb to disconnect" :
-    liveKitReady ? "tap the orb" :
-    showInput ? "type a message (press Enter)" :
-    "tap the orb or press / to type";
+    listening ? "listening — tap orb to stop" :
+    thinking ? "jason is thinking..." :
+    showInput ? "type and press Enter" :
+    "tap the orb or press / to talk";
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-gray-950">
@@ -122,33 +129,27 @@ export default function Home() {
         <div className="stars" /><div className="stars2" /><div className="stars3" />
       </div>
 
-      {/* Top bar */}
-      <header className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-6">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-          <span className="text-sm font-mono text-gray-500 tracking-wide">second_brain v1</span>
-        </div>
-        <button
-          onClick={() => setSidebarOpen((o) => !o)}
-          className="text-gray-600 hover:text-gray-300 transition-colors"
-          title="Toggle transcript"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
-          </svg>
-        </button>
-      </header>
+      {/* Sidebar toggle */}
+      <button
+        onClick={() => setSidebarOpen((o) => !o)}
+        className="absolute top-4 right-4 z-10 text-gray-600 hover:text-gray-300 transition-colors"
+        title="Toggle transcript"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+        </svg>
+      </button>
 
       {/* Center orb */}
       <div className="absolute inset-0 flex items-center justify-center" style={{ marginTop: showInput ? -30 : 0 }}>
         <Orb
-          listening={orbState === "listening"}
-          speaking={orbState === "speaking"}
+          listening={listening}
+          speaking={thinking}
           onClick={handleOrbClick}
         />
       </div>
 
-      {/* Text input (slide-in from bottom) */}
+      {/* Text input (slide-in) */}
       <div
         className={`absolute bottom-20 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${
           showInput
@@ -183,7 +184,7 @@ export default function Home() {
       {/* Bottom status */}
       <footer className="absolute bottom-0 left-0 right-0 z-10 p-6">
         <div className="flex items-center justify-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full transition-colors ${connected ? "bg-green-500" : "bg-gray-700"}`} />
+          <div className={`w-1.5 h-1.5 rounded-full transition-colors ${listening || thinking ? "bg-green-500" : "bg-gray-700"}`} />
           <span className="text-xs font-mono text-gray-600">{statusText}</span>
         </div>
       </footer>

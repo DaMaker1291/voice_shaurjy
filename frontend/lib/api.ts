@@ -38,3 +38,36 @@ export async function uploadDocument(
   });
   return res.json();
 }
+
+export async function getDocuments(userId = "local") {
+  const res = await fetch(`${BASE}/api/documents/has?user_id=${userId}`);
+  return res.json();
+}
+
+export async function createReminder(title: string, description = "", dueDate = "", userId = "local") {
+  const res = await fetch(`${BASE}/api/reminders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, title, description, due_date: dueDate }),
+  });
+  return res.json();
+}
+
+export async function listReminders(userId = "local") {
+  const res = await fetch(`${BASE}/api/reminders?user_id=${userId}`);
+  return res.json();
+}
+
+export async function updateReminder(id: string, updates: Record<string, unknown>) {
+  const res = await fetch(`${BASE}/api/reminders/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  return res.json();
+}
+
+export async function deleteReminder(id: string) {
+  const res = await fetch(`${BASE}/api/reminders/${id}`, { method: "DELETE" });
+  return res.json();
+}

@@ -9,11 +9,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from models import TextQuery, DocumentUpload, LicenseActivate, LiveKitTokenRequest
+from models import TextQuery, DocumentUpload, LicenseActivate, LiveKitTokenRequest, ReminderCreate, ReminderUpdate
 from document_processor import process_upload
 from rag_engine import index_document, has_documents, count_chunks
 from billing import get_tier, activate_license, is_premium
 from ai_agent import generate_response
+from reminders import create_reminder, list_reminders, update_reminder, delete_reminder
 
 load_dotenv()
 
@@ -38,7 +39,7 @@ async def health():
         "livekit": bool(livekit_url),
         "livekit_url": livekit_url,
         "models": {
-            "llm": "SmolLM2-360M-Instruct (4-bit)",
+            "llm": "Qwen2.5-0.5B-Instruct (float32)",
             "stt": "faster-whisper tiny.en",
             "tts": "Piper lessac-medium",
             "embed": "bge-small-en-v1.5",
@@ -82,6 +83,34 @@ async def license_activate(req: LicenseActivate):
 @app.get("/api/license/status")
 async def license_status():
     return {"tier": get_tier(), "is_premium": is_premium()}
+
+
+# ── Reminders ─────────────────────────────────────────────────
+
+@app.post("/api/reminders")
+async def reminder_create(req: ReminderCreate):
+    r = create_reminder(req.user_id, req.title, req.description, req.due_date)
+    return {"reminder": r}
+
+
+@app.get("/api/reminders")
+async def reminder_list(user_id: str = "local"):
+    return {"reminders": list_reminders(user_id)}
+
+
+@app.patch("/api/reminders/{reminder_id}")
+async def reminder_update(reminder_id: str, req: ReminderUpdate):
+    r = update_reminder(reminder_id, req.model_dump(exclude_none=True))
+    if not r:
+        raise HTTPException(404, "Reminder not found")
+    return {"reminder": r}
+
+
+@app.delete("/api/reminders/{reminder_id}")
+async def reminder_delete(reminder_id: str):
+    if not delete_reminder(reminder_id):
+        raise HTTPException(404, "Reminder not found")
+    return {"status": "ok"}
 
 
 # ── LiveKit token endpoint ────────────────────────────────────
