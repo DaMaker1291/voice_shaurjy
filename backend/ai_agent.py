@@ -52,6 +52,7 @@ def _build_prompt(user_text: str, context: str) -> str:
 
 
 import re
+from datetime import datetime, timedelta
 
 _FAST_REPLIES = {
     r"^(hey|hello|hi|yo|sup|howdy|good morning|good evening)([^a-z]|$)": "Oh great, another human who expects me to read their mind. What is it?",
@@ -65,15 +66,46 @@ _FAST_REPLIES = {
 }
 
 
-def generate_response(user_id: str, user_text: str, tier: str = "free") -> str:
+_REMINDER_PATTERNS = [
+    (r"remind me to (.+?)(?: (tomorrow|next week|next month|on \w+ \d+))?$", 1),
+    (r"remind me that (.+?)(?: (tomorrow|next week|next month))?$", 1),
+    (r"don.*t forget to (.+?)(?: (tomorrow|next week))?$", 1),
+    (r"(?:i need to|i have to|i must) (.+?)(?: (tomorrow|next week|next month|on \w+ \d+))?$", 1),
+    (r"remember that (.+?)$", 1),
+    (r"set.*reminder.*for (.+?)(?: (tomorrow|next week|next month|on \w+ \d+))?$", 1),
+]
+
+_DATE_MAP = {
+    "tomorrow": (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"),
+    "next week": (datetime.now() + timedelta(weeks=1)).strftime("%Y-%m-%d"),
+    "next month": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
+}
+
+
+def _detect_reminder(text: str) -> dict | None:
+    lower = text.lower().strip()
+    for pat, group in _REMINDER_PATTERNS:
+        m = re.search(pat, lower)
+        if m:
+            title = m.group(1).strip().rstrip(".,!?").capitalize()
+            date_str = m.group(2).strip() if m.lastindex and m.group(2) else ""
+            due = _DATE_MAP.get(date_str, "")
+            return {"title": title, "due_date": due, "description": text}
+    return None
+
+
+def generate_response(user_id: str, user_text: str, tier: str = "free") -> dict:
     from backend.rag_engine import query_context, has_documents
 
     text = user_text.strip().lower()
 
+    # Detect reminder intent
+    reminder = _detect_reminder(user_text)
+
     # Fast path: pattern-matched replies
     for pattern, reply in _FAST_REPLIES.items():
         if re.search(pattern, text):
-            return reply
+            return {"text": reply, "reminder": reminder}
 
     # Slow path: LLM for complex queries
     context = ""
@@ -97,4 +129,4 @@ def generate_response(user_id: str, user_text: str, tier: str = "free") -> str:
         )
     reply = _TOKENIZER.decode(out[0][inputs.input_ids.shape[1]:], skip_special_tokens=True).strip()
     reply = reply.split("\n")[0].strip()
-    return reply or "Got nothing."
+    return {"text": reply or "Got nothing.", "reminder": reminder}

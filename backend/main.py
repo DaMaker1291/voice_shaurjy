@@ -56,9 +56,23 @@ async def health():
 
 @app.post("/api/text/chat")
 async def text_chat(query: TextQuery):
+    from reminders import create_reminder
+
     tier = get_tier() if not query.tier else query.tier
-    reply = generate_response(query.user_id, query.text, tier)
-    return {"text": reply}
+    result = generate_response(query.user_id, query.text, tier)
+
+    # Auto-create reminder if detected
+    reminder_data = result.get("reminder")
+    if reminder_data:
+        r = create_reminder(
+            query.user_id,
+            reminder_data["title"],
+            reminder_data.get("description", ""),
+            reminder_data.get("due_date", ""),
+        )
+        result["reminder"] = {"id": r["id"], "title": r["title"], "due_date": r["due_date"]}
+
+    return result
 
 
 @app.post("/api/documents/upload")
