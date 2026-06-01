@@ -6,18 +6,11 @@ import BotSwarm from "@/components/BotSwarm";
 import Sidebar from "@/components/Sidebar";
 import { entityProcess } from "@/lib/api";
 
-interface Message {
-  role: string;
-  content: string;
-}
+interface Message { role: string; content: string }
 
 interface Strategy {
-  name: string;
-  description: string;
-  pros: string[];
-  cons: string[];
-  complexity: number;
-  key_steps: string[];
+  name: string; description: string; pros: string[]; cons: string[];
+  complexity: number; key_steps: string[];
 }
 
 interface EntityState {
@@ -27,28 +20,19 @@ interface EntityState {
   interaction_count: number;
 }
 
-interface BotEvent {
-  type: string;
-  label: string;
-  timestamp: number;
-}
+interface BotEvent { type: string; label: string; timestamp: number }
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const SUGGESTIONS = [
-  "play some music",
-  "what's the time",
-  "scan my network",
-  "volume to 50",
-  "lock my PC",
-  "take a screenshot",
-  "open Spotify",
-  "battery status",
+  "play some music", "what's the time", "scan my network",
+  "volume to 50", "lock my PC", "take a screenshot",
+  "open Spotify", "battery status",
 ];
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [showInput, setShowInput] = useState(false);
   const [listening, setListening] = useState(false);
@@ -267,7 +251,7 @@ export default function Home() {
   const handleFollowUp = useCallback(async (q: string) => {
     // Wrap follow-up so it's not treated as a new command (avoids accidental action triggers like "play", "search")
     setMessages((p) => [...p, { role: "user", content: q }]);
-    setSidebarOpen(true);
+    if (messages.length === 0) setSidebarOpen(true);
     setThinking(true);
     setShowSuggestions(false);
     setStrategies(null);
@@ -470,39 +454,64 @@ export default function Home() {
 
       {/* ── Main content ── */}
       <div className="relative z-10 flex-[3] min-w-0 flex flex-col px-4">
-        {/* Action notification — animated bot event toast */}
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 ${actionFeedback ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-6 pointer-events-none"}`}>
+        {/* Action notification */}
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 ${actionFeedback ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-8 pointer-events-none"}`}>
           <div className="bot-toast flex items-center gap-3 px-5 py-2.5">
-            <span className={`bot-toast-dot ${actionType === "workflow" ? "bg-blue-500" : actionType === "error" ? "bg-red-500" : "bg-cyan-500"}`} />
+            <span className={`bot-toast-dot ${actionType === "workflow" ? "bg-blue-400" : actionType === "error" ? "bg-red-400" : "bg-cyan-400"}`} />
             <div>
-              <p className="text-[9px] font-mono text-cyan-400/70 tracking-widest uppercase">{actionType}</p>
+              <p className="text-[9px] font-mono tracking-[0.25em] uppercase" style={{ color: actionType === "workflow" ? "rgba(96,165,250,0.7)" : actionType === "error" ? "rgba(248,113,113,0.7)" : "rgba(34,211,238,0.7)" }}>{actionType}</p>
               <p className="text-xs text-gray-200 font-mono">{actionFeedback}</p>
             </div>
           </div>
         </div>
 
         {/* Top bar */}
-        <div className="top-bar flex items-center justify-between px-6 py-3">
+        <div className="top-bar flex items-center justify-between px-5 py-3">
           <div className="flex items-center gap-3">
-            <div className={`status-dot ${listening ? "listening" : thinking ? "thinking" : speaking ? "speaking" : "idle"}`} />
-            <span className="status-text">{scanning ? "scanning device..." : statusText}</span>
-            {confidence > 0 && <span className="text-[10px] font-mono text-gray-700">{confidence}%</span>}
+            <div className="relative flex items-center justify-center w-8 h-8">
+              <div className={`status-dot ${listening ? "listening" : thinking ? "thinking" : speaking ? "speaking" : "idle"}`} />
+              {listening && <div className="absolute inset-0 rounded-full status-ring-listening" />}
+              {thinking && <div className="absolute inset-0 rounded-full status-ring-thinking" />}
+              {speaking && <div className="absolute inset-0 rounded-full status-ring-speaking" />}
+            </div>
+            <div className="flex flex-col">
+              <span className="status-text">{scanning ? "scanning device..." : statusText}</span>
+              {entityState && (
+                <span className="text-[8px] font-mono text-purple-500/40 tracking-[0.15em] mt-0.5">
+                  {entityState.active_goals?.length || 0} goals &middot; {entityState.interaction_count} interactions
+                </span>
+              )}
+            </div>
+            {confidence > 0 && (
+              <div className="ml-2 flex items-center gap-1.5">
+                <div className="w-12 h-1 rounded-full bg-gray-800/50 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-300" style={{ width: `${confidence}%` }} />
+                </div>
+                <span className="text-[9px] font-mono text-gray-600">{confidence}%</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            {/* Voice selector */}
+            {profileInterests.length > 0 && (
+              <div className="hidden md:flex items-center gap-1.5 mr-2">
+                {profileInterests.slice(0, 3).map((t, i) => (
+                  <span key={i} className="interest-tag">{t}</span>
+                ))}
+              </div>
+            )}
             <div className="relative">
               <button
                 onClick={() => setShowVoicePicker((o) => !o)}
-                className="text-[9px] font-mono text-gray-600 hover:text-gray-400 transition-colors px-2 py-1 rounded-lg hover:bg-gray-800/30 flex items-center gap-1.5"
+                className="control-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
                 title="TTS Voice"
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                 </svg>
-                {voice.replace("en-US-", "").replace("Neural", "").replace("en-GB-", "UK-").replace("en-AU-", "AU-")}
+                <span className="text-[9px] font-mono tracking-wider">{voice.replace("en-US-", "").replace("Neural", "").replace("en-GB-", "UK-").replace("en-AU-", "AU-")}</span>
               </button>
               {showVoicePicker && (
-                <div className="absolute right-0 top-8 z-50 w-44 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-1.5 shadow-2xl">
+                <div className="absolute right-0 top-9 z-50 w-44 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-1.5 shadow-2xl animate-fade-in">
                   {[
                     { id: "en-US-AriaNeural", label: "Aria (US Female)" },
                     { id: "en-US-JennyNeural", label: "Jenny (US Friendly)" },
@@ -525,14 +534,7 @@ export default function Home() {
                 </div>
               )}
             </div>
-            {profileInterests.length > 0 && (
-              <div className="hidden md:flex items-center gap-1.5">
-                {profileInterests.slice(0, 3).map((t, i) => (
-                  <span key={i} className="interest-tag">{t}</span>
-                ))}
-              </div>
-            )}
-            <button onClick={() => setSidebarOpen((o) => !o)} className="text-gray-600 hover:text-gray-300 transition-colors p-1.5 rounded-lg hover:bg-gray-800/30">
+            <button onClick={() => setSidebarOpen((o) => !o)} className="control-btn p-1.5 rounded-lg">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
               </svg>
@@ -542,31 +544,38 @@ export default function Home() {
 
         {/* Task progress */}
         {taskTotal > 0 && taskStep > 0 && (
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-10 w-64">
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-10 w-72 animate-fade-in">
             <div className="task-progress-bar">
               <div className="task-progress-fill" style={{ width: `${(taskStep / taskTotal) * 100}%` }} />
             </div>
-            <p className="text-[9px] font-mono text-gray-700/50 text-center mt-1">step {taskStep}/{taskTotal}</p>
+            <p className="text-[9px] font-mono text-gray-600/60 text-center mt-1 tracking-wider">step {taskStep} / {taskTotal}</p>
           </div>
         )}
 
         {/* Center content */}
-        <div className="flex-1 flex flex-col items-center justify-center">
+        <div className="flex-1 flex flex-col items-center justify-center relative">
+          {/* Ambient glow behind neuron */}
+          {(listening || thinking || speaking) && (
+            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full pointer-events-none transition-all duration-1000 ${
+              listening ? "ambient-glow-listening" : thinking ? "ambient-glow-thinking" : "ambient-glow-speaking"
+            }`} />
+          )}
+
           {/* Holographic neuron */}
-          <div className="flex-shrink-0" style={{ marginTop: taskQuestion ? -80 : -40 }}>
+          <div className="flex-shrink-0 relative" style={{ marginTop: taskQuestion ? -80 : -40 }}>
             <HolographicNeuron listening={listening} speaking={thinking || speaking} onClick={handleOrbClick} />
           </div>
 
           {/* Suggestions */}
           {showSuggestions && messages.length <= 1 && !listening && !thinking && (
-            <div className="mt-6 max-w-lg w-full px-6">
-              <p className="suggestions-header">try saying</p>
+            <div className="mt-8 max-w-lg w-full px-6 animate-fade-in">
               <div className="flex flex-wrap justify-center gap-2">
-                {SUGGESTIONS.map((s) => (
+                {SUGGESTIONS.map((s, i) => (
                   <button
                     key={s}
                     onClick={() => pickSuggestion(s)}
                     className="suggestion-btn"
+                    style={{ animationDelay: `${i * 50}ms` }}
                   >
                     {s}
                   </button>
@@ -577,21 +586,21 @@ export default function Home() {
 
           {/* Strategies */}
           {strategies && strategies.length > 0 && (
-            <div className="mt-4 max-w-lg w-full px-6">
-              <p className="strategies-header">strategies</p>
-              <div className="space-y-2">
+            <div className="mt-6 max-w-lg w-full px-4 animate-fade-in">
+              <div className="space-y-2.5">
                 {strategies.map((s, i) => (
                   <button
                     key={i}
                     onClick={() => pickStrategy(i)}
-                    className={`strategy-card ${selectedStrategy === i ? "selected" : ""}`}
+                    className={`strategy-card w-full text-left p-4 ${selectedStrategy === i ? "selected" : ""}`}
+                    style={{ animationDelay: `${i * 80}ms` }}
                   >
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1.5">
                       <span className="strategy-name">{s.name}</span>
-                      <span className="strategy-complexity">complexity {s.complexity}/10</span>
+                      <span className="strategy-complexity">CX {s.complexity}/10</span>
                     </div>
-                    <p className="strategy-desc">{s.description}</p>
-                    <div className="flex flex-wrap gap-1">
+                    <p className="strategy-desc mb-2">{s.description}</p>
+                    <div className="flex flex-wrap gap-1.5">
                       {s.pros.slice(0, 2).map((p, pi) => (
                         <span key={pi} className="strategy-pro">+ {p}</span>
                       ))}
@@ -604,14 +613,14 @@ export default function Home() {
 
           {/* Follow-up questions */}
           {followUpQuestions.length > 0 && !strategies && (
-            <div className="mt-4 max-w-lg w-full px-6">
-              <p className="followup-header">follow up</p>
+            <div className="mt-6 max-w-lg w-full px-4 animate-fade-in">
               <div className="flex flex-wrap justify-center gap-2">
                 {followUpQuestions.map((q, i) => (
                   <button
                     key={i}
                     onClick={() => handleFollowUp(q)}
                     className="followup-btn"
+                    style={{ animationDelay: `${i * 60}ms` }}
                   >
                     {q.length > 50 ? q.slice(0, 50) + "..." : q}
                   </button>
@@ -622,14 +631,14 @@ export default function Home() {
 
           {/* Proactive suggestions */}
           {proactiveSuggestions.length > 0 && !strategies && (
-            <div className="mt-3 max-w-lg w-full px-6">
-              <p className="proactive-header">proactive</p>
+            <div className="mt-4 max-w-lg w-full px-4 animate-fade-in">
               <div className="flex flex-wrap justify-center gap-2">
                 {proactiveSuggestions.map((s, i) => (
                   <button
                     key={i}
                     onClick={() => handleProactive(s)}
                     className="proactive-btn"
+                    style={{ animationDelay: `${i * 60}ms` }}
                   >
                     {s.length > 45 ? s.slice(0, 45) + "..." : s}
                   </button>
@@ -639,24 +648,13 @@ export default function Home() {
           )}
         </div>
 
-        {/* Entity Memory Chip */}
-        {entityState && entityMemory && (
-          <div className="absolute bottom-40 left-8 z-20">
-            <div className="entity-chip">
-              <span className="text-[10px] font-mono text-purple-400/60">
-                🧠 {entityState.active_goals?.length || 0} goals · {entityState.interaction_count} ints
-              </span>
-            </div>
-          </div>
-        )}
-
         {/* Task follow-up */}
         {taskQuestion && (
-          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
-            <div className="glass-card px-6 py-4">
-              <p className="text-[10px] font-mono text-purple-400 tracking-wider mb-1">Jason needs to know</p>
-              <p className="text-sm text-gray-200 mb-3">{taskQuestion}</p>
-              <div className="flex gap-2">
+          <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 animate-fade-in">
+            <div className="glass-card px-6 py-5">
+              <p className="text-[10px] font-mono text-purple-400/80 tracking-[0.25em] uppercase mb-2">Jason needs to know</p>
+              <p className="text-sm text-gray-200 mb-4 leading-relaxed">{taskQuestion}</p>
+              <div className="flex gap-2.5">
                 <input
                   ref={taskInputRef}
                   type="text"
@@ -675,26 +673,30 @@ export default function Home() {
 
         {/* Task result */}
         {taskResult && (
-          <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
-            <div className="glass-card px-6 py-4">
-              <p className="text-[10px] font-mono text-green-400 tracking-wider mb-1">✓ Task complete</p>
-              <p className="text-sm text-gray-300 whitespace-pre-wrap">{taskResult}</p>
+          <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 animate-fade-in">
+            <div className="glass-card px-6 py-5">
+              <p className="text-[10px] font-mono text-green-400/80 tracking-[0.25em] uppercase mb-2">
+                <span className="inline-block mr-1.5">&#10003;</span> Task complete
+              </p>
+              <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{taskResult}</p>
               {Object.keys(collectedInfo).length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-800/50">
+                <div className="mt-4 pt-4 border-t border-gray-800/30 space-y-1.5">
                   {Object.entries(collectedInfo).map(([k, v]) => (
-                    <p key={k} className="text-xs text-gray-500"><span className="text-purple-400">{k}:</span> {v}</p>
+                    <p key={k} className="text-xs text-gray-500"><span className="text-purple-400/70">{k}:</span> <span className="text-gray-400">{v}</span></p>
                   ))}
                 </div>
               )}
-              <button onClick={() => setTaskResult(null)} className="mt-3 text-[9px] text-gray-700/50 hover:text-gray-400 font-mono tracking-wider">dismiss</button>
+              <button onClick={() => setTaskResult(null)} className="mt-3 text-[9px] text-gray-700/50 hover:text-gray-400 font-mono tracking-[0.15em] uppercase transition-colors">dismiss</button>
             </div>
           </div>
         )}
 
         {/* Text input */}
         {!taskQuestion && (
-          <div className={`absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 transition-all duration-300 ${showInput ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}>
-            <div className="input-bar glow-input flex items-center gap-2">
+          <div className={`absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 transition-all duration-400 ${
+            showInput ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6 pointer-events-none"
+          }`}>
+            <div className="input-bar flex items-center gap-2 px-5 py-2.5">
               <input
                 ref={inputRef}
                 type="text"
@@ -702,9 +704,9 @@ export default function Home() {
                 onChange={(e) => setTextInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
                 placeholder="Ask Jason anything..."
-                className="bg-transparent text-sm text-gray-200 placeholder-gray-700 outline-none flex-1"
+                className="bg-transparent text-sm text-gray-200 placeholder-gray-700/50 outline-none flex-1 font-mono"
               />
-              <button onClick={sendText} className="text-purple-500 hover:text-purple-400 transition-colors">
+              <button onClick={sendText} className="send-btn p-1.5 rounded-full transition-all duration-200">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" /></svg>
               </button>
             </div>
@@ -713,12 +715,17 @@ export default function Home() {
 
         {/* Live transcript */}
         {listening && interim && (
-          <div className="fixed bottom-6 left-6 right-6 z-20 pointer-events-none">
-            <div className="max-w-lg mx-auto">
-              <div className="glass-card px-4 py-2.5 text-center">
-                <p className="text-sm text-cyan-300/80 font-mono cursor-blink">{interim}</p>
-                {confidence > 0 && <div className="mt-1.5 confidence-bar" style={{ width: `${confidence}%` }} />}
-              </div>
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 animate-fade-in pointer-events-none">
+            <div className="glass-card px-5 py-3 text-center">
+              <p className="text-sm text-cyan-300/80 font-mono cursor-blink">{interim}</p>
+              {confidence > 0 && (
+                <div className="mt-2 flex items-center gap-2 justify-center">
+                  <div className="w-24 h-1 rounded-full bg-gray-800/50 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-300" style={{ width: `${confidence}%` }} />
+                  </div>
+                  <span className="text-[9px] font-mono text-gray-500">{confidence}%</span>
+                </div>
+              )}
             </div>
           </div>
         )}

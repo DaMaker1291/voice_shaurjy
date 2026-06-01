@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import NavBar from "@/components/NavBar";
 
 export const metadata: Metadata = {
   title: "Second Brain - Sassy Voice Assistant",
@@ -14,10 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen flex flex-col bg-gray-950">
-        <NavBar />
-        <main className="flex-1 pt-14">{children}</main>
-      </body>
+      <body className="bg-gray-950">{children}</body>
     </html>
   );
 }
