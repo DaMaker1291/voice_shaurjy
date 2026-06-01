@@ -11,8 +11,8 @@ if not GROQ_API_KEY:
     print("WARNING: GROQ_API_KEY not set! Set it before starting:")
     print("  $env:GROQ_API_KEY='gsk_YOUR_KEY'  (PowerShell)")
     print("  or create a .env file with GROQ_API_KEY=...")
-MODEL = "llama3-70b-8192"
-FALLBACK_MODEL = "llama3-8b-8192"
+MODEL = "llama-3.3-70b-versatile"
+FALLBACK_MODEL = "llama-3.1-8b-instant"
 
 # Response cache: LRU with 128 entries
 _CACHE = OrderedDict()
