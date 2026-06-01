@@ -138,7 +138,7 @@ Format:
   ]
 }}"""
 
-    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON", task_id="__workflow_designer__")
+    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON", max_tokens=400)
     m = re.search(r'\{.*\}', raw, re.DOTALL)
     if not m:
         raise ValueError("AI failed to generate a valid workflow")
@@ -280,7 +280,7 @@ class WorkflowEngine:
             elif action == "groq_generate":
                 prompt_template = resolved_params.get("prompt_template", "Generate: {query}")
                 prompt = prompt_template.format(**state)
-                result = groq_generate(prompt, task_id="__workflow__")
+                result = groq_generate(prompt, max_tokens=300)
             elif action == "open_url":
                 from actions import _ps
                 url = resolved_params.get("url", "https://google.com")

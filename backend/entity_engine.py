@@ -184,7 +184,7 @@ Format:
   "follow_up_questions": ["question1", "question2"]
 }}"""
 
-    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON", task_id="__strategist__")
+    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON", max_tokens=300)
     m = re.search(r'\{.*\}', raw, re.DOTALL)
     if m:
         try:
@@ -228,7 +228,7 @@ Memory: {memory}
 
 Output ONLY a JSON array of strings. Example: ["question1?", "question2?"]"""
 
-    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON_ARRAY", task_id="__followup__")
+    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON_ARRAY", max_tokens=200)
     m = re.search(r'\[.*\]', raw, re.DOTALL)
     if m:
         try:
@@ -273,7 +273,7 @@ Context:
 Output ONLY a JSON array of strings, each being a specific suggestion.
 Example: ["I can automate your daily reporting", "Want me to scan your network for new devices?"]"""
 
-    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON_ARRAY", task_id="__proactive__")
+    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON_ARRAY", max_tokens=200)
     m = re.search(r'\[.*\]', raw, re.DOTALL)
     if m:
         try:
