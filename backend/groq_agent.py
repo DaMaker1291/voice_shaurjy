@@ -7,7 +7,11 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-MODEL = "llama3-70b-8192"  # Fastest 70B on Groq
+if not GROQ_API_KEY:
+    print("WARNING: GROQ_API_KEY not set! Set it before starting:")
+    print("  $env:GROQ_API_KEY='gsk_YOUR_KEY'  (PowerShell)")
+    print("  or create a .env file with GROQ_API_KEY=...")
+MODEL = "llama3-70b-8192"
 FALLBACK_MODEL = "llama3-8b-8192"
 
 # Response cache: LRU with 128 entries
@@ -143,6 +147,10 @@ def generate(user_text: str, user_id: str = "local", max_tokens: int = 60, tempe
     if cached:
         return cached
 
+    # Check API key early
+    if not GROQ_API_KEY:
+        return "GROQ_API_KEY not set. Run: `$env:GROQ_API_KEY='gsk_YOUR_KEY'` then restart."
+
     # Check rate limit
     if not _check_rate_limit():
         return "Whoa, slow down! You're burning through your API limits. Give me a sec."
@@ -159,25 +167,27 @@ def generate(user_text: str, user_id: str = "local", max_tokens: int = 60, tempe
         messages.append({"role": "user", "content": user_text})
 
         # Try primary model, fallback to smaller
-        for model in [MODEL, FALLBACK_MODEL]:
-            try:
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                )
-                reply = response.choices[0].message.content.strip()
-                break
-            except Exception as e:
-                if "rate_limit" in str(e).lower():
-                    time.sleep(2)
+            for model in [MODEL, FALLBACK_MODEL]:
+                try:
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                    )
+                    reply = response.choices[0].message.content.strip()
+                    break
+                except Exception as e:
+                    err_str = str(e)
+                    if "rate_limit" in err_str.lower():
+                        time.sleep(2)
+                        continue
+                    if model == FALLBACK_MODEL:
+                        reply = f"Groq API error: {err_str[:200]}"
+                        break
                     continue
-                if model == FALLBACK_MODEL:
-                    reply = f"Ugh, even my backup brain is failing. Error: {str(e)[:100]}"
-                continue
-        else:
-            reply = "My brain is on fire. Try again later."
+            else:
+                reply = "Groq API unavailable — check your API key and quota."
 
         # Store in history
         add_to_history(user_id, {"role": "user", "content": user_text})

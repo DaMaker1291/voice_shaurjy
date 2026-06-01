@@ -160,17 +160,37 @@ class TTSRequest(BaseModel):
 
 @app.post("/api/tts")
 async def text_to_speech(req: TTSRequest):
-    import edge_tts
-    from fastapi.responses import StreamingResponse
+    from fastapi.responses import StreamingResponse, Response
+    import io, asyncio
 
-    communicate = edge_tts.Communicate(req.text, req.voice)
+    # Try edge_tts first (cloud, higher quality), fall back to pyttsx3 (local)
+    try:
+        import edge_tts
+        communicate = edge_tts.Communicate(req.text, req.voice)
 
-    async def stream():
-      async for chunk in communicate.stream():
-          if chunk["type"] == "audio":
-              yield chunk["data"]
+        async def stream():
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    yield chunk["data"]
 
-    return StreamingResponse(stream(), media_type="audio/mpeg")
+        return StreamingResponse(stream(), media_type="audio/mpeg")
+    except Exception:
+        pass
+
+    # Local fallback via pyttsx3
+    try:
+        import pyttsx3, tempfile, os
+        engine = pyttsx3.init()
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            tmp_path = f.name
+        engine.save_to_file(req.text, tmp_path)
+        engine.runAndWait()
+        with open(tmp_path, "rb") as f:
+            data = f.read()
+        os.unlink(tmp_path)
+        return Response(content=data, media_type="audio/wav")
+    except Exception as e:
+        return Response(content=f"TTS error: {e}".encode(), status_code=500, media_type="text/plain")
 
 
 # ── Device scanner ───────────────────────────────────────────
