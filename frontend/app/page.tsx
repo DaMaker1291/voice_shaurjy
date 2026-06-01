@@ -264,8 +264,37 @@ export default function Home() {
     }
   }, [strategies, addBotEvent]);
 
-  const handleFollowUp = useCallback((q: string) => { handleQuery(q); }, [handleQuery]);
-  const handleProactive = useCallback((s: string) => { handleQuery(s); }, [handleQuery]);
+  const handleFollowUp = useCallback(async (q: string) => {
+    // Wrap follow-up so it's not treated as a new command (avoids accidental action triggers like "play", "search")
+    setMessages((p) => [...p, { role: "user", content: q }]);
+    setSidebarOpen(true);
+    setThinking(true);
+    setShowSuggestions(false);
+    setStrategies(null);
+    setFollowUpQuestions([]);
+    setProactiveSuggestions([]);
+    addBotEvent("thinking", "following up");
+    try {
+      const res = await entityProcess(`(follow-up) ${q}`);
+      const reply = res.text || "";
+      if (res.entity_state) { setEntityState(res.entity_state); setEntityMemory(res.entity_state.memory_summary || ""); }
+      if (reply) { speak(reply); setMessages((p) => [...p, { role: "assistant", content: reply }]); }
+    } catch { setMessages((p) => [...p, { role: "assistant", content: "(follow-up failed)" }]); }
+    setThinking(false);
+  }, [speak, addBotEvent]);
+
+  const handleProactive = useCallback(async (s: string) => {
+    setMessages((p) => [...p, { role: "user", content: s }]);
+    setThinking(true);
+    addBotEvent("thinking", "proactive action");
+    try {
+      const res = await entityProcess(`(proactive) ${s}`);
+      const reply = res.text || "";
+      if (res.entity_state) { setEntityState(res.entity_state); setEntityMemory(res.entity_state.memory_summary || ""); }
+      if (reply) { setMessages((p) => [...p, { role: "assistant", content: reply }]); }
+    } catch { setMessages((p) => [...p, { role: "assistant", content: "(action failed)" }]); }
+    setThinking(false);
+  }, [addBotEvent]);
 
   const _handleTaskResponse = useCallback((data: any) => {
     if (data.type === "ask") {
@@ -430,7 +459,7 @@ export default function Home() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-gray-950 flex flex-row">
-      {/* ── Bot Swarm Background ── */}
+        {/* ── Bot Swarm Background ── */}
       <BotSwarm
         listening={listening}
         thinking={thinking}
@@ -440,7 +469,7 @@ export default function Home() {
       />
 
       {/* ── Main content ── */}
-      <div className="relative z-10 flex-[3] min-w-0 flex flex-col">
+      <div className="relative z-10 flex-[3] min-w-0 flex flex-col px-4">
         {/* Action notification — animated bot event toast */}
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 ${actionFeedback ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-6 pointer-events-none"}`}>
           <div className="bot-toast flex items-center gap-3 px-5 py-2.5">
@@ -612,7 +641,7 @@ export default function Home() {
 
         {/* Entity Memory Chip */}
         {entityState && entityMemory && (
-          <div className="absolute bottom-36 left-4 z-20">
+          <div className="absolute bottom-40 left-8 z-20">
             <div className="entity-chip">
               <span className="text-[10px] font-mono text-purple-400/60">
                 🧠 {entityState.active_goals?.length || 0} goals · {entityState.interaction_count} ints
@@ -623,7 +652,7 @@ export default function Home() {
 
         {/* Task follow-up */}
         {taskQuestion && (
-          <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
             <div className="glass-card px-6 py-4">
               <p className="text-[10px] font-mono text-purple-400 tracking-wider mb-1">Jason needs to know</p>
               <p className="text-sm text-gray-200 mb-3">{taskQuestion}</p>
@@ -664,7 +693,7 @@ export default function Home() {
 
         {/* Text input */}
         {!taskQuestion && (
-          <div className={`absolute bottom-16 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${showInput ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}>
+          <div className={`absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 transition-all duration-300 ${showInput ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}>
             <div className="input-bar glow-input flex items-center gap-2">
               <input
                 ref={inputRef}
@@ -684,7 +713,7 @@ export default function Home() {
 
         {/* Live transcript */}
         {listening && interim && (
-          <div className="fixed bottom-0 left-0 right-0 z-20 p-4 pointer-events-none">
+          <div className="fixed bottom-6 left-6 right-6 z-20 pointer-events-none">
             <div className="max-w-lg mx-auto">
               <div className="glass-card px-4 py-2.5 text-center">
                 <p className="text-sm text-cyan-300/80 font-mono cursor-blink">{interim}</p>

@@ -1,0 +1,233 @@
+{
+  "facts": [],
+  "preferences": {
+    "likes": {
+      "value": "a pun",
+      "updated": "2026-06-01T22:36:44.899301"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "what's the time",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T12:33:42.502457"
+    },
+    {
+      "query": "what's the time",
+      "response": "\ud83d\udd50 Time and date\nMonday, June 01, 2026 \u2014 12:33 PM",
+      "action": "time",
+      "timestamp": "2026-06-01T12:33:42.829952"
+    },
+    {
+      "query": "make a business",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T12:34:02.565783"
+    },
+    {
+      "query": "battery status",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T13:04:25.218925"
+    },
+    {
+      "query": "open Spotify",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T20:35:24.846251"
+    },
+    {
+      "query": "volume to 50",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T20:49:11.844417"
+    },
+    {
+      "query": "volume to 50",
+      "response": "\ud83d\udd0a Setting volume\nVolume set to 50%.",
+      "action": "vol_set",
+      "timestamp": "2026-06-01T20:53:24.431775"
+    },
+    {
+      "query": "volume to 50",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T21:02:42.684940"
+    },
+    {
+      "query": "volume to 50",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T21:10:10.864083"
+    },
+    {
+      "query": "volume to 50",
+      "response": "\ud83d\udd0a Setting volume\nCould not access audio.",
+      "action": "vol_set",
+      "timestamp": "2026-06-01T21:10:12.116663"
+    },
+    {
+      "query": "volume to 50",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T21:15:28.217689"
+    },
+    {
+      "query": "volume to 50",
+      "response": "\ud83d\udd0a Setting volume\nVolume set to 50%.",
+      "action": "vol_set",
+      "timestamp": "2026-06-01T21:15:28.705651"
+    },
+    {
+      "query": "volume to 82",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T21:15:42.494153"
+    },
+    {
+      "query": "volume to 82",
+      "response": "\ud83d\udd0a Setting volume\nVolume set to 82%.",
+      "action": "vol_set",
+      "timestamp": "2026-06-01T21:15:42.605412"
+    },
+    {
+      "query": "who are you",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T21:16:05.585744"
+    },
+    {
+      "query": "who are you",
+      "response": "My brain is on fire. Try again later.",
+      "action": "",
+      "timestamp": "2026-06-01T21:16:08.721283"
+    },
+    {
+      "query": "Want me to check on your active goals?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T21:16:23.432277"
+    },
+    {
+      "query": "Want me to check on your active goals?",
+      "response": "My brain is on fire. Try again later.",
+      "action": "",
+      "timestamp": "2026-06-01T21:16:23.562642"
+    },
+    {
+      "query": "battery status",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T21:40:01.902768"
+    },
+    {
+      "query": "battery status",
+      "response": "\ud83d\udd0b Battery status\nBattery: At line:1 char:108\n+ ... ng)% ($($b.BatteryStatus -replace 1,'Charging' -replace 2,'On AC'))'  ...\n+                                          ~~~~~~~~~~~~~~~~~~~~~~~~\nUnexpec",
+      "action": "battery_status",
+      "timestamp": "2026-06-01T21:40:04.091015"
+    },
+    {
+      "query": "battery status",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T21:42:49.374087"
+    },
+    {
+      "query": "battery status",
+      "response": "\ud83d\udd0b Battery status\nBattery: 72% (Charging)\nUptime: 77.8h",
+      "action": "battery_status",
+      "timestamp": "2026-06-01T21:42:49.387395"
+    },
+    {
+      "query": "make me a joke",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T21:43:06.890146"
+    },
+    {
+      "query": "make me a joke",
+      "response": "Groq API error: Error code: 400 - {'error': {'message': 'The model `llama3-8b-8192` has been decommissioned and is no longer supported. Please refer to https://console.groq.com/docs/deprecations for a",
+      "action": "complex_response",
+      "timestamp": "2026-06-01T21:43:08.969452"
+    },
+    {
+      "query": "volume to 50",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T22:20:29.921263"
+    },
+    {
+      "query": "volume to 50",
+      "response": "\ud83d\udd0a Setting volume\nVolume set to 50%.",
+      "action": "vol_set",
+      "timestamp": "2026-06-01T22:20:31.088419"
+    },
+    {
+      "query": "make me a joke",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T22:35:09.801607"
+    },
+    {
+      "query": "make me a joke",
+      "response": "Oh joy, another joke request. I'll try to come up with something that won't make you groan too much. Here's one: Why don't scientists trust atoms? Because they make up everything. I hope that one bond",
+      "action": "complex_response",
+      "timestamp": "2026-06-01T22:35:13.658691"
+    },
+    {
+      "query": "Would you like a pun or a play on words?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T22:36:44.897069"
+    },
+    {
+      "query": "Would you like a pun or a play on words?",
+      "response": "\u25b6 Playing\nPlaying.",
+      "action": "media_play",
+      "timestamp": "2026-06-01T22:36:46.171063"
+    },
+    {
+      "query": "make me a business",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T22:37:03.149801"
+    },
+    {
+      "query": "make me a business",
+      "response": "Oh great, you want to be the next big thing, huh? Well, let's get down to business. Since you like a good pun, I'll 'capitalize' on that. I'll come up with some business ideas that might just 'pay off",
+      "action": "complex_response",
+      "timestamp": "2026-06-01T22:37:04.681710"
+    },
+    {
+      "query": "Execute strategy: E-commerce Store. market research, product sourcing, website development",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T22:37:36.062753"
+    },
+    {
+      "query": "Execute strategy: E-commerce Store. market research, product sourcing, website development",
+      "response": "\u25b6 Run...\nRunning: cmd...",
+      "action": "run_dialog",
+      "timestamp": "2026-06-01T22:37:36.657676"
+    },
+    {
+      "query": "Do you have any existing skills or expertise that could be leveraged in a business venture?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-01T22:37:47.495352"
+    },
+    {
+      "query": "Do you have any existing skills or expertise that could be leveraged in a business venture?",
+      "response": "\u26d4 Killing process...\nWhich process?",
+      "action": "process_kill",
+      "timestamp": "2026-06-01T22:37:47.504132"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-06-01T22:37:47.504169"
+}

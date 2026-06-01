@@ -210,8 +210,11 @@ class Entity:
         result = {"text": "", "action": None, "task": None, "strategies": None,
                   "follow_up": None, "proactive": None, "related_goals": related_goals}
 
+        # Skip action routing for meta-context prefixes (follow-ups, proactive, etc.)
+        skip_actions = user_input.startswith("(follow-up)") or user_input.startswith("(proactive)")
+
         # First try action routing (fast path for simple commands)
-        action_result = self._route_action(user_input)
+        action_result = None if skip_actions else self._route_action(user_input)
         if action_result and action_result.get("action"):
             result["action"] = action_result["action"]
             result["text"] = action_result.get("text", "")
