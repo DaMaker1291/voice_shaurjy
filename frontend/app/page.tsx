@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import HolographicNeuron from "@/components/HolographicNeuron";
 import Sidebar from "@/components/Sidebar";
 import SimulationPanel from "@/components/SimulationPanel";
-import { textChat, entityProcess, getEntityState, generateStrategies, startWorkflow, advanceWorkflow, getWorkflowTemplates } from "@/lib/api";
+import { textChat, entityProcess, getEntityState, generateStrategies, startWorkflow, advanceWorkflow } from "@/lib/api";
 
 interface Message {
   role: string;

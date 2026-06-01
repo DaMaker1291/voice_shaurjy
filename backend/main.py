@@ -290,20 +290,16 @@ async def entity_memory(user_id: str = "local"):
 
 # ── Workflow Engine Endpoints ──────────────────────────────────────
 
-@app.get("/api/workflow/templates")
-async def list_templates():
-    from workflow_engine import WORKFLOW_TEMPLATES
-    return {"templates": {k: v.to_dict() for k, v in WORKFLOW_TEMPLATES.items()}}
-
-
 @app.post("/api/workflow/start")
-async def start_workflow(template_id: str, user_id: str = "local", task: str = ""):
+async def start_workflow(task: str, user_id: str = "local"):
     from workflow_engine import get_engine
     from entity_engine import get_entity
     entity = get_entity(user_id)
     engine = get_engine()
-    execution = engine.create_from_template(template_id, {
-        "query": task or "User request",
+    execution = engine.create_workflow(task, {
+        "active_goals": entity.memory.get_active_goals(),
+        "memory_summary": entity.memory.get_summary(),
+        "query": task,
         "user_id": user_id,
     })
     result = engine.advance(execution.execution_id, action_executor=_exec_action)

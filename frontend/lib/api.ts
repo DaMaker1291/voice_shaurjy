@@ -104,13 +104,8 @@ export async function generateStrategies(text: string, userId = "local") {
 
 // ── Workflow API ──────────────────────────────────────────────────
 
-export async function getWorkflowTemplates() {
-  const res = await fetch(`${BASE}/api/workflow/templates`);
-  return res.json();
-}
-
-export async function startWorkflow(templateId: string, task = "", userId = "local") {
-  const res = await fetch(`${BASE}/api/workflow/start?template_id=${templateId}&task=${encodeURIComponent(task)}&user_id=${userId}`, { method: "POST" });
+export async function startWorkflow(task: string, userId = "local") {
+  const res = await fetch(`${BASE}/api/workflow/start?task=${encodeURIComponent(task)}&user_id=${userId}`, { method: "POST" });
   return res.json();
 }
 

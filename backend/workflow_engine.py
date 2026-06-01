@@ -1,4 +1,4 @@
-"""Workflow Engine — DAG-based workflow execution with branching, parallel steps, retry, and state persistence."""
+"""Workflow Engine — AI generates workflows on the fly. No templates. Every workflow is unique to your request."""
 
 import json
 import os
@@ -12,7 +12,11 @@ from groq_agent import generate as groq_generate
 _WORKFLOW_DIR = os.path.join(os.path.dirname(__file__), ".workflow_data")
 os.makedirs(_WORKFLOW_DIR, exist_ok=True)
 
-WORKFLOW_TEMPLATES = {}
+AVAILABLE_ACTIONS = [
+    "ask", "present", "groq_generate", "open_url", "search_google",
+    "type_keys", "run", "onenote_write", "word_write", "excel_write",
+    "wait", "screenshot", "send_keys", "click", "scroll",
+]
 
 
 # ── Workflow Definition ────────────────────────────────────────────
@@ -38,15 +42,11 @@ class WorkflowStep:
 
 class Workflow:
     def __init__(self, workflow_id: str, name: str, steps: list[WorkflowStep],
-                 description: str = "", input_schema: dict = None,
-                 output_schema: dict = None, tags: list = None):
+                 description: str = ""):
         self.workflow_id = workflow_id
         self.name = name
         self.description = description
         self.steps = steps
-        self.input_schema = input_schema or {}
-        self.output_schema = output_schema or {}
-        self.tags = tags or []
 
     def to_dict(self):
         return {
@@ -63,8 +63,114 @@ class Workflow:
                 }
                 for s in self.steps
             ],
-            "tags": self.tags,
         }
+
+
+# ── AI Workflow Generation ─────────────────────────────────────────
+
+def generate_workflow(user_input: str, context: dict = None) -> Workflow:
+    """Use AI to dynamically generate a workflow for ANY user request."""
+    context_str = ""
+    if context:
+        goals = context.get("active_goals", [])
+        memory = context.get("memory_summary", "")
+        if goals:
+            context_str += "Active goals: " + "; ".join(g["goal"] for g in goals[:3]) + "\n"
+        if memory:
+            context_str += memory[:300] + "\n"
+
+    prompt = f"""You are a workflow designer AI. Given a user request, design a multi-step workflow to accomplish it on Windows.
+
+Available actions:
+- ask: Ask user for information (params: question, field)
+- present: Show final results to user
+- groq_generate: Generate content using AI (params: prompt_template)
+- open_url: Open a URL in browser (params: url)
+- search_google: Search Google (params: query)
+- type_keys: Type text into active window (params: text)
+- run: Launch an app or run a command (params: params)
+- onenote_write: Write content to OneNote (params: text)
+- word_write: Open Word and write content (params: text)
+- excel_write: Write data to Excel (params: data - 2D array)
+- wait: Pause execution (params: seconds)
+- screenshot: Take a screenshot (no params)
+- send_keys: Send keyboard shortcut (params: keys)
+- click: Click mouse (params: button)
+- scroll: Scroll page (params: amount)
+
+User request: {user_input}
+
+{context_str}
+
+Design a 3-8 step workflow. Each step should have:
+1. A unique step id (no spaces, use underscores)
+2. An action from the list above
+3. Parameters for that action (use {"{collected.field}"} to reference values from previous steps)
+4. depends_on: list of step ids this step depends on (empty for first steps)
+5. A short label describing the step
+6. retry_count (default 2)
+7. Optionally a fallback_action if the main action might fail
+
+IMPORTANT RULES:
+- First step should ask the user for key info if needed
+- Break the task into concrete, executable steps
+- Use groq_generate with detailed prompts for AI-powered steps
+- Use open_url/search_google for web research
+- Use onenote_write/word_write/excel_write for document tasks
+- End with a present step to show results
+- Steps that don't depend on each other can run in parallel (share the same depends_on)
+
+Output ONLY valid JSON. No other text.
+
+Format:
+{{
+  "workflow_name": "Short name",
+  "description": "Brief description",
+  "steps": [
+    {{
+      "id": "step_name",
+      "action": "ask",
+      "params": {{"question": "What info do you need?", "field": "info_field"}},
+      "depends_on": [],
+      "label": "Get Info",
+      "retry_count": 2
+    }}
+  ]
+}}"""
+
+    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON", task_id="__workflow_designer__")
+    m = re.search(r'\{.*\}', raw, re.DOTALL)
+    if not m:
+        raise ValueError("AI failed to generate a valid workflow")
+
+    try:
+        data = json.loads(m.group())
+    except json.JSONDecodeError:
+        raise ValueError("AI generated invalid JSON for workflow")
+
+    steps = []
+    for s in data.get("steps", []):
+        step = WorkflowStep(
+            step_id=s.get("id", f"step_{len(steps)}"),
+            action=s.get("action", "groq_generate"),
+            params=s.get("params", {}),
+            depends_on=s.get("depends_on", []),
+            condition=s.get("condition"),
+            retry_count=s.get("retry_count", 2),
+            fallback_action=s.get("fallback_action"),
+            fallback_params=s.get("fallback_params"),
+            label=s.get("label", s.get("id", "")),
+            parallel_group=s.get("parallel_group"),
+        )
+        steps.append(step)
+
+    wf_id = f"wf_{int(time.time())}_{os.urandom(4).hex()}"
+    return Workflow(
+        workflow_id=wf_id,
+        name=data.get("workflow_name", "AI Workflow"),
+        description=data.get("description", user_input),
+        steps=steps,
+    )
 
 
 # ── Workflow Execution ─────────────────────────────────────────────
@@ -93,8 +199,8 @@ class WorkflowExecution:
     def to_dict(self):
         return {
             "execution_id": self.execution_id,
-            "workflow_id": self.workflow.workflow_id,
             "workflow_name": self.workflow.name,
+            "workflow_description": self.workflow.description,
             "status": self.status,
             "current_step": self.current_step,
             "progress": self.progress,
@@ -110,117 +216,24 @@ class WorkflowExecution:
                 }
                 for sid, r in self.step_results.items()
             },
+            "steps_planned": [
+                {"id": s.step_id, "label": s.label, "action": s.action}
+                for s in self.workflow.steps
+            ],
         }
 
 
 class WorkflowEngine:
-    """Executes DAG-based workflows with conditional branching, parallel steps, and retry."""
+    """Executes AI-generated workflows with DAG-based planning, parallel steps, and retry."""
 
     def __init__(self):
         self._executions: dict[str, WorkflowExecution] = {}
         self._lock = threading.Lock()
-        self._register_default_templates()
 
-    def _register_default_templates(self):
-        """Register built-in workflow templates."""
-        WORKFLOW_TEMPLATES["business_setup"] = Workflow(
-            "business_setup", "Start a Business",
-            description="Full business setup workflow: registration, banking, website, tools",
-            steps=[
-                WorkflowStep("research", "groq_generate", {"prompt_template": "Research business ideas for: {query}"}),
-                WorkflowStep("register", "open_url", {"url": "https://register.com"}, depends_on=["research"]),
-                WorkflowStep("banking", "open_url", {"url": "https://bank.com"}, depends_on=["research"]),
-                WorkflowStep("website", "groq_generate", {"prompt_template": "Create a business plan for: {query}"}, depends_on=["research"]),
-                WorkflowStep("tools", "groq_generate", {"prompt_template": "List essential tools and software for: {query}"}, depends_on=["website"]),
-                WorkflowStep("present", "present", {}, depends_on=["tools", "banking"]),
-            ],
-            tags=["business", "setup"]
-        )
-
-        WORKFLOW_TEMPLATES["trading_bot"] = Workflow(
-            "trading_bot", "Automate Trading",
-            description="Set up automated trading: platform, strategy, data feeds, execution",
-            steps=[
-                WorkflowStep("platform", "ask", {"question": "Which trading platform do you use? (MT4/MT5/TradingView/Binance/Other)"}, label="Choose Platform"),
-                WorkflowStep("strategy", "groq_generate", {"prompt_template": "Create a trading strategy for: {platform}. User wants: {query}"}, depends_on=["platform"]),
-                WorkflowStep("data", "open_url", {"url": "https://tradingview.com"}, depends_on=["strategy"]),
-                WorkflowStep("automation", "type_keys", {}, depends_on=["strategy"],
-                             condition="platform in ['MT4','MT5']"),
-                WorkflowStep("paper_trade", "ask", {"question": "Start with paper trading first?"}, depends_on=["automation", "data"]),
-                WorkflowStep("monitor", "groq_generate", {"prompt_template": "Create a monitoring dashboard plan for trading strategy"}, depends_on=["paper_trade"]),
-            ],
-            tags=["trading", "automation", "finance"]
-        )
-
-        WORKFLOW_TEMPLATES["onenote_homework"] = Workflow(
-            "onenote_homework", "Do Homework in OneNote",
-            description="Complete homework assignments directly in OneNote",
-            steps=[
-                WorkflowStep("subject", "ask", {"question": "What subject/homework is this for?"}, label="Subject"),
-                WorkflowStep("content", "groq_generate", {"prompt_template": "Generate detailed homework content for: {query}. Subject: {subject}"},
-                             depends_on=["subject"], label="Generate Content"),
-                WorkflowStep("onenote_open", "run", {"params": "onenote"}, label="Open OneNote"),
-                WorkflowStep("write", "onenote_write", {},
-                             depends_on=["content", "onenote_open"], label="Write to OneNote"),
-                WorkflowStep("verify", "ask", {"question": "Check the content in OneNote. Does it look correct?"},
-                             depends_on=["write"], label="Verify"),
-            ],
-            tags=["education", "onenote", "homework"]
-        )
-
-        WORKFLOW_TEMPLATES["team_page_fix"] = Workflow(
-            "team_page_fix", "Fix Team Page",
-            description="Fix issues on a team/company page",
-            steps=[
-                WorkflowStep("url", "ask", {"question": "What's the URL of the team page?"}, label="Get URL"),
-                WorkflowStep("issue", "ask", {"question": "What needs to be fixed?"}, label="Describe Issue"),
-                WorkflowStep("open_page", "open_url", {"url": "{url}"}, depends_on=["url"]),
-                WorkflowStep("plan_fix", "groq_generate",
-                             {"prompt_template": "Plan the fix for: {issue} on page {url}"},
-                             depends_on=["issue", "open_page"], label="Plan Fix"),
-                WorkflowStep("implement", "groq_generate",
-                             {"prompt_template": "Generate the code/content needed to fix: {issue}"},
-                             depends_on=["plan_fix"], label="Generate Fix"),
-                WorkflowStep("present", "present", {}, depends_on=["implement"], label="Show Results"),
-            ],
-            tags=["web", "development", "fix"]
-        )
-
-        WORKFLOW_TEMPLATES["research_project"] = Workflow(
-            "research_project", "Research & Analyze",
-            description="Deep research on any topic with analysis and report generation",
-            steps=[
-                WorkflowStep("topic", "ask", {"question": "What topic should I research?"}),
-                WorkflowStep("depth", "ask", {"question": "How deep? Quick summary (5 min) or comprehensive (30 min)?"}),
-                WorkflowStep("search", "search_google", {"query": "{topic} research 2026"},
-                             depends_on=["topic"]),
-                WorkflowStep("analyze", "groq_generate",
-                             {"prompt_template": "Analyze and summarize key findings about: {topic}. Depth: {depth}"},
-                             depends_on=["search"]),
-                WorkflowStep("report", "groq_generate",
-                             {"prompt_template": "Create a structured report on: {topic} with key findings, analysis, and recommendations"},
-                             depends_on=["analyze"], label="Generate Report"),
-                WorkflowStep("save", "type_keys", {},
-                             depends_on=["report"],
-                             condition="depth contains 'comprehensive'"),
-                WorkflowStep("present", "present", {}, depends_on=["report", "save"]),
-            ],
-            tags=["research", "analysis", "report"]
-        )
-
-    def create_from_template(self, template_id: str, inputs: dict = None) -> WorkflowExecution:
-        """Create a workflow execution from a named template."""
-        template = WORKFLOW_TEMPLATES.get(template_id)
-        if not template:
-            raise ValueError(f"Unknown workflow template: {template_id}")
-        execution = WorkflowExecution(template, inputs)
-        with self._lock:
-            self._executions[execution.execution_id] = execution
-        return execution
-
-    def create_custom(self, workflow: Workflow, inputs: dict = None) -> WorkflowExecution:
-        """Create a workflow execution from a custom workflow definition."""
-        execution = WorkflowExecution(workflow, inputs)
+    def create_workflow(self, user_input: str, context: dict = None) -> WorkflowExecution:
+        """AI-generates a workflow from a user request and creates an execution."""
+        workflow = generate_workflow(user_input, context)
+        execution = WorkflowExecution(workflow, context or {})
         with self._lock:
             self._executions[execution.execution_id] = execution
         return execution
@@ -235,9 +248,7 @@ class WorkflowEngine:
 
     def execute_step(self, step: WorkflowStep, state: dict,
                      action_executor: callable = None) -> dict:
-        """Execute a single workflow step and return the result."""
         try:
-            # Check condition
             if step.condition:
                 try:
                     if not eval(step.condition, {"__builtins__": {}}, state):
@@ -245,7 +256,6 @@ class WorkflowEngine:
                 except:
                     pass
 
-            # Resolve template variables in params
             resolved_params = {}
             for k, v in step.params.items():
                 if isinstance(v, str):
@@ -256,7 +266,6 @@ class WorkflowEngine:
                 else:
                     resolved_params[k] = v
 
-            # Execute based on action type
             result = None
             action = step.action
 
@@ -310,15 +319,36 @@ class WorkflowEngine:
                 excel_new_workbook()
                 excel_set_cells(1, data)
                 result = "Data written."
+            elif action == "wait":
+                seconds = int(resolved_params.get("seconds", 1))
+                time.sleep(seconds)
+                result = f"Waited {seconds}s."
+            elif action == "screenshot":
+                from app_automation import screenshot_with_ocr
+                result = screenshot_with_ocr()
+            elif action == "send_keys":
+                from actions import _ps
+                keys = resolved_params.get("keys", "{ENTER}")
+                _ps(f'$k = New-Object -ComObject WScript.Shell; $k.SendKeys("{keys}")')
+                result = f"Sent keys: {keys}"
+            elif action == "click":
+                from actions import _ps
+                button = resolved_params.get("button", "left")
+                b = "Left" if button == "left" else "Right"
+                _ps(f'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Mouse]::Click([System.Windows.Forms.MouseButtons]::{b})')
+                result = f"Clicked {button}"
+            elif action == "scroll":
+                from actions import _ps
+                amount = int(resolved_params.get("amount", 1))
+                _ps(f'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Mouse]::Wheel({amount})')
+                result = f"Scrolled {amount}"
             else:
-                # Try action system
                 if action_executor:
                     try:
                         result = action_executor(action, str(resolved_params))
                     except:
                         result = f"Step {step.step_id}: {action}"
 
-            # Handle ask results specially
             if isinstance(result, dict) and result.get("type") == "ask":
                 return {"status": "waiting_input", "result": result}
 
@@ -329,7 +359,6 @@ class WorkflowEngine:
 
     def advance(self, execution_id: str, user_input: str = None,
                 action_executor: callable = None) -> dict:
-        """Advance a workflow execution to the next step(s)."""
         execution = self.get_execution(execution_id)
         if not execution:
             return {"error": "Execution not found"}
@@ -339,26 +368,17 @@ class WorkflowEngine:
             state = execution._state
 
             if user_input and execution.status == "waiting_input":
-                # Store the input
                 last_step = execution.current_step
                 state["collected"][last_step] = user_input
                 state[last_step] = user_input
                 execution.status = "running"
 
-            # Build adjacency: step -> list of dependants
-            dependants = defaultdict(list)
-            for s in wf.steps:
-                for dep in s.depends_on:
-                    dependants[dep].append(s.step_id)
-
-            # Find which steps are ready to execute
             completed = set(execution.step_results.keys())
             ready = []
             for s in wf.steps:
                 if s.step_id in completed:
                     continue
                 if all(dep in completed for dep in s.depends_on):
-                    # Check condition
                     if s.condition:
                         try:
                             if not eval(s.condition, {"__builtins__": {}}, {**state, **state.get("collected", {})}):
@@ -374,23 +394,18 @@ class WorkflowEngine:
                 execution.progress = 100.0
                 return {"type": "complete", "text": "Workflow complete!", "execution_id": execution_id}
 
-            # Execute ready steps (parallel steps can run together)
             results = []
             for step in ready:
                 execution.current_step = step.step_id
                 execution.status = "running"
 
-                # Try with retry
-                last_error = None
                 for attempt in range(step.retry_count + 1):
                     result = self.execute_step(step, {**state, **state.get("collected", {})}, action_executor)
                     if result["status"] != "error":
                         break
-                    last_error = result["result"]
                     time.sleep(1)
 
                 if result["status"] == "error" and step.fallback_action:
-                    # Try fallback
                     fallback_step = WorkflowStep(
                         f"{step.step_id}_fallback", step.fallback_action,
                         step.fallback_params or step.params
@@ -424,17 +439,12 @@ class WorkflowEngine:
                         "execution_id": execution_id,
                     })
 
-            # Update progress
             total = len(wf.steps)
             done = len([s for s in wf.steps if s.step_id in execution.step_results])
             execution.progress = (done / total) * 100 if total else 100
 
             if execution.status != "waiting_input":
-                # Check if fully done
-                all_done = all(
-                    s.step_id in execution.step_results
-                    for s in wf.steps
-                )
+                all_done = all(s.step_id in execution.step_results for s in wf.steps)
                 if all_done:
                     execution.status = "completed"
                     execution.completed_at = datetime.now().isoformat()

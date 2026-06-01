@@ -13,8 +13,6 @@ def start_task(session_id: str, user_input: str) -> dict:
     all_actions = get_all_actions()
     actions_list = "\n".join(f"  - {k}: {v['tip']}" for k, v in sorted(all_actions.items()) if v['tip'])
 
-    wf_list = ["business_setup", "trading_bot", "onenote_homework", "team_page_fix", "research_project"]
-
     instructions = f"""You are a task planning AI. Break down the user's request into steps.
 
 Available actions you can use:
@@ -22,7 +20,7 @@ Available actions you can use:
 
 For each step, output an action from: ask (for user info), open (URL), search (web search), present (show results),
 groq (generate content with LLM), type (type text), run (run command/app), wait (pause),
-workflow (run a named workflow template: {', '.join(wf_list)})
+workflow (AI generates a multi-step workflow for ANY complex sub-task)
 
 Output ONLY valid JSON. No other text.
 
@@ -31,7 +29,7 @@ User: book a holiday to Paris
 {{"task":"book a holiday to Paris","steps":[{{"id":1,"action":"ask","question":"What dates?","field":"dates"}},{{"id":2,"action":"ask","question":"Budget?","field":"budget"}},{{"id":3,"action":"open","url":"https://google.com/travel","note":"Search flights"}},{{"id":4,"action":"present","note":"Here is your plan"}}],"follow_up_question":"What dates?"}}
 
 User: do my homework in onenote
-{{"task":"Homework in OneNote","steps":[{{"id":1,"action":"workflow","workflow_id":"onenote_homework","note":"Using OneNote homework template"}}],"follow_up_question":"Starting OneNote homework workflow..."}}"""
+{{"task":"Homework in OneNote","steps":[{{"id":1,"action":"workflow","note":"AI will generate steps for this"}}],"follow_up_question":"Starting workflow..."}}"""
 
     reply = groq_generate(f"{instructions}\n\nUser: {user_input}", task_id="__orchestrator__")
     plan = _extract_json(reply)
@@ -140,13 +138,21 @@ def _process_current_step(session_id: str) -> dict:
 
     elif action == "workflow":
         from workflow_engine import get_engine
-        wf_id = step.get("workflow_id", "")
+        from entity_engine import get_entity
         engine = get_engine()
-        execution = engine.create_from_template(wf_id, {**collected, "query": session["task"]})
+        wf_input = step.get("note", session["task"])
+        entity = get_entity(session_id)
+        context = {
+            "active_goals": entity.memory.get_active_goals(),
+            "memory_summary": entity.memory.get_summary(),
+            **collected,
+            "query": session["task"],
+        }
+        execution = engine.create_workflow(wf_input, context)
         session["workflow_execution_id"] = execution.execution_id
         result = engine.advance(execution.execution_id, action_executor=_exec_action)
         return {
-            "type": "workflow", "text": f"Started workflow: {wf_id}",
+            "type": "workflow", "text": f"AI generated workflow: {execution.workflow.name} ({len(execution.workflow.steps)} steps)",
             "execution_id": execution.execution_id,
             "step": idx + 1, "total": len(steps), "task": session["task"],
             "workflow_result": result,
