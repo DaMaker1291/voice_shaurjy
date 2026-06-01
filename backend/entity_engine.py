@@ -287,29 +287,43 @@ Example: ["I can automate your daily reporting", "Want me to scan your network f
 # ── Entity Orchestrator ────────────────────────────────────────────
 
 class Entity:
-    """The autonomous AI entity. Maintains memory, generates strategies, follows up proactively."""
+    """The autonomous AI entity. Maintains memory, generates strategies, follows up proactively.
+    Self-contained — imports actions, orchestrator, and Groq directly."""
 
     def __init__(self, user_id: str = "local"):
         self.user_id = user_id
         self.memory = EntityMemory(user_id)
-        self._proactive_interval = 300  # 5 minutes
+        self._proactive_interval = 300
         self._last_proactive = 0
         self._lock = threading.Lock()
 
-    def process(self, user_input: str, route_action: callable = None, route_task: callable = None, route_groq: callable = None) -> dict:
-        """Process user input through the entity pipeline."""
+    def _route_action(self, text: str) -> dict | None:
+        from actions import detect_action, execute_action, _ACTION_LABELS
+        action = detect_action(text)
+        if action:
+            result = execute_action(action, text)
+            label = _ACTION_LABELS.get(action, "")
+            return {"text": f"{label}\n{result}", "action": action}
+        return None
+
+    def _route_task(self, text: str) -> dict | None:
+        from orchestrator import start_task
+        return start_task(self.user_id, text)
+
+    def _route_groq(self, text: str) -> str:
+        from groq_agent import generate
+        history = self.memory._data.get("interactions", [])
+        context = "\n".join(f"User: {h['query']}\nJason: {h['response'][:100]}" for h in history[-5:])
+        enhanced = f"[Memory: {context[:500]}]\nUser: {text}" if context else text
+        return generate(enhanced, self.user_id)
+
+    def process(self, user_input: str) -> dict:
         now = time.time()
 
-        # 1. Log interaction
         self.memory.log_interaction(user_input, "")
-
-        # 2. Extract and store any facts/preferences from input
         self._extract_knowledge(user_input)
-
-        # 3. Check if this relates to active goals
         related_goals = self._find_related_goals(user_input)
 
-        # 4. Generate strategy if it's a complex request
         is_complex = len(user_input.split()) >= 4 and any(
             t in user_input.lower() for t in
             ["book", "plan", "organize", "arrange", "create", "make", "set up",
@@ -327,38 +341,31 @@ class Entity:
             })
             result["strategies"] = strategies
             result["follow_up"] = strategies.get("follow_up_questions", [])
+            task_result = self._route_task(user_input)
+            result["task"] = task_result
+            if task_result and task_result.get("text"):
+                result["text"] = task_result["text"]
+            if task_result and task_result.get("type") in ("ask", "notify", "complete", "workflow"):
+                result["task_type"] = task_result["type"]
+            return result
 
-            # If routed, try the task system
-            if route_task:
-                task_result = route_task(user_input)
-                result["task"] = task_result
-                if "text" in task_result:
-                    result["text"] = task_result["text"]
-                return result
+        action_result = self._route_action(user_input)
+        if action_result and action_result.get("action"):
+            result["action"] = action_result["action"]
+            result["text"] = action_result.get("text", "")
+            self.memory.log_interaction(user_input, result["text"], action_result["action"])
+            return result
 
-        # 5. Try action routing
-        if route_action:
-            action_result = route_action(user_input)
-            if action_result and action_result.get("action"):
-                result["action"] = action_result["action"]
-                result["text"] = action_result.get("text", "")
-                self.memory.log_interaction(user_input, result["text"], action_result["action"])
-                return result
+        groq_result = self._route_groq(user_input)
+        result["text"] = groq_result
 
-        # 6. Fallback to Groq with entity context
-        if route_groq:
-            groq_result = route_groq(user_input)
-            result["text"] = groq_result
-
-        # 7. Generate follow-up questions
-        if result["text"] and not result.get("strategies"):
+        if result["text"]:
             follow_ups = generate_follow_up(user_input, result["text"], {
                 "memory_summary": self.memory.get_summary(),
                 "active_goals": self.memory.get_active_goals(),
             })
             result["follow_up"] = follow_ups[:2]
 
-        # 8. Check if we should be proactive
         if now - self._last_proactive > self._proactive_interval:
             self._last_proactive = now
             proactive = generate_proactive_suggestions(self.memory)

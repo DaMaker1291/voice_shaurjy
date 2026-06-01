@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import HolographicNeuron from "@/components/HolographicNeuron";
 import Sidebar from "@/components/Sidebar";
 import SimulationPanel from "@/components/SimulationPanel";
-import { textChat, entityProcess, getEntityState, generateStrategies, startWorkflow, advanceWorkflow } from "@/lib/api";
+import { entityProcess } from "@/lib/api";
 
 interface Message {
   role: string;
@@ -75,7 +75,6 @@ export default function Home() {
   const [proactiveSuggestions, setProactiveSuggestions] = useState<string[]>([]);
   const [entityState, setEntityState] = useState<EntityState | null>(null);
   const [showEntityPanel, setShowEntityPanel] = useState(false);
-  const [workflowExecutions, setWorkflowExecutions] = useState<Record<string, any>>({});
   const [selectedStrategy, setSelectedStrategy] = useState<number | null>(null);
   const [entityMemory, setEntityMemory] = useState("");
 
@@ -209,16 +208,9 @@ export default function Home() {
         if (simTask) setSimTask(null);
         setMessages((p) => [...p, { role: "assistant", content: reply }]);
       }
-      // Handle tasks
+      // Handle tasks (includes workflow, ask, notify, complete)
       else if (res.task) {
         _handleTaskResponse(res.task);
-      }
-      // Handle workflow
-      else if (res.task?.type === "workflow") {
-        setMessages((p) => [...p, { role: "assistant", content: `🔄 ${res.task.text || "Starting workflow..."}` }]);
-        if (res.task.execution_id) {
-          setWorkflowExecutions(prev => ({ ...prev, [res.task.execution_id]: { status: "running" } }));
-        }
       }
       // Regular response
       else if (reply) {
