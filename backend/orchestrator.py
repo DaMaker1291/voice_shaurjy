@@ -1,66 +1,49 @@
-"""AI Task Orchestrator — plans and executes ANY multi-step task via LLM."""
+"""AI Task Orchestrator - plans and executes ANY multi-step task via LLM with strategies, follow-ups, and workflows."""
 
 import json
 import re
-import urllib.parse
-import subprocess
-
+import time
+from groq_agent import generate as groq_generate
 
 _SESSIONS: dict[str, dict] = {}
 
 
-def _llm_generate(user_input: str, max_tokens: int = 256) -> str:
-    """Generate a task plan using Groq."""
-    from groq_agent import generate_plan
-    return generate_plan(user_input, "")
-
-
-def _extract_json(text: str) -> dict | None:
-    # Try to find JSON block in the output
-    m = re.search(r"\{.*\}", text, re.DOTALL)
-    if m:
-        try:
-            return json.loads(m.group())
-        except json.JSONDecodeError:
-            pass
-    return None
-
-
 def start_task(session_id: str, user_input: str) -> dict:
-    # Load available actions so the LLM knows what it can do
     from actions import get_all_actions
     all_actions = get_all_actions()
     actions_list = "\n".join(f"  - {k}: {v['tip']}" for k, v in sorted(all_actions.items()) if v['tip'])
+
+    wf_list = ["business_setup", "trading_bot", "onenote_homework", "team_page_fix", "research_project"]
 
     instructions = f"""You are a task planning AI. Break down the user's request into steps.
 
 Available actions you can use:
 {actions_list}
 
-For each step, output an action from the list above, or use: ask (for user info), open (URL), search (web search), present (show results).
+For each step, output an action from: ask (for user info), open (URL), search (web search), present (show results),
+groq (generate content with LLM), type (type text), run (run command/app), wait (pause),
+workflow (run a named workflow template: {', '.join(wf_list)})
 
 Output ONLY valid JSON. No other text.
 
 Examples:
 User: book a holiday to Paris
-{{"task":"book a holiday to Paris","steps":[{{"id":1,"action":"ask","question":"What dates?","field":"dates"}},{{"id":2,"action":"ask","question":"Budget?","field":"budget"}},{{"id":3,"action":"open","url":"https://google.com/travel","note":"Flights"}},{{"id":4,"action":"present","note":"Plan"}}],"follow_up_question":"What dates?"}}"""
-    reply = _llm_generate(f"{instructions}\n\nUser: {user_input}", max_tokens=300)
+{{"task":"book a holiday to Paris","steps":[{{"id":1,"action":"ask","question":"What dates?","field":"dates"}},{{"id":2,"action":"ask","question":"Budget?","field":"budget"}},{{"id":3,"action":"open","url":"https://google.com/travel","note":"Search flights"}},{{"id":4,"action":"present","note":"Here is your plan"}}],"follow_up_question":"What dates?"}}
+
+User: do my homework in onenote
+{{"task":"Homework in OneNote","steps":[{{"id":1,"action":"workflow","workflow_id":"onenote_homework","note":"Using OneNote homework template"}}],"follow_up_question":"Starting OneNote homework workflow..."}}"""
+
+    reply = groq_generate(f"{instructions}\n\nUser: {user_input}", task_id="__orchestrator__")
     plan = _extract_json(reply)
 
     if not plan or "steps" not in plan:
-        return {
-            "type": "error",
-            "text": "I couldn't plan that task. Try being more specific.",
-        }
+        return {"type": "error", "text": "I couldn't plan that task. Try being more specific."}
 
-    # Store session
     _SESSIONS[session_id] = {
-        "plan": plan,
-        "step_index": 0,
-        "collected": {},
+        "plan": plan, "step_index": 0, "collected": {},
         "task": plan.get("task", user_input),
+        "workflow_execution_id": None,
     }
-
     return _process_current_step(session_id)
 
 
@@ -72,14 +55,12 @@ def continue_task(session_id: str, user_response: str) -> dict:
     steps = session["plan"]["steps"]
     idx = session["step_index"]
 
-    # Store the response for the previous step
     if idx > 0:
         prev = steps[idx - 1]
         field = prev.get("field")
         if field:
             session["collected"][field] = user_response
 
-    # Move to next step
     session["step_index"] = idx + 1
     return _process_current_step(session_id)
 
@@ -97,17 +78,13 @@ def _process_current_step(session_id: str) -> dict:
     collected = session["collected"]
 
     if action == "ask":
-        # Fill in template variables from collected data
         question = step.get("question", "")
         for k, v in collected.items():
             question = question.replace("{" + k + "}", v)
         return {
-            "type": "ask",
-            "question": question,
-            "field": step.get("field"),
-            "step": idx + 1,
-            "total": len(steps),
-            "task": session["task"],
+            "type": "ask", "question": question, "field": step.get("field"),
+            "step": idx + 1, "total": len(steps), "task": session["task"],
+            "session_id": session_id,
         }
 
     elif action == "open":
@@ -117,67 +94,122 @@ def _process_current_step(session_id: str) -> dict:
         note = step.get("note", "")
         _open_url(url)
         return {
-            "type": "notify",
-            "text": f"Opened: {note}",
-            "step": idx + 1,
-            "total": len(steps),
-            "task": session["task"],
-            "next_action": _process_current_step(session_id)["type"] == "ask",
+            "type": "notify", "text": f"Opened: {note}",
+            "step": idx + 1, "total": len(steps), "task": session["task"],
         }
 
     elif action == "search":
-        query = step.get("query", "")
+        query = step.get("query", step.get("note", ""))
         for k, v in collected.items():
             query = query.replace("{" + k + "}", v)
         _open_search(query)
         return {
-            "type": "notify",
-            "text": f"Searched: {query}",
-            "step": idx + 1,
-            "total": len(steps),
-            "task": session["task"],
+            "type": "notify", "text": f"Searched: {query}",
+            "step": idx + 1, "total": len(steps), "task": session["task"],
+        }
+
+    elif action == "groq":
+        prompt_template = step.get("prompt", step.get("note", ""))
+        for k, v in collected.items():
+            prompt_template = prompt_template.replace("{" + k + "}", v)
+        result = groq_generate(prompt_template, task_id="__step__")
+        return {
+            "type": "notify", "text": result,
+            "step": idx + 1, "total": len(steps), "task": session["task"],
+        }
+
+    elif action == "type":
+        text = step.get("text", step.get("note", ""))
+        for k, v in collected.items():
+            text = text.replace("{" + k + "}", v)
+        _type_text(text)
+        return {
+            "type": "notify", "text": f"Typed: {text[:50]}...",
+            "step": idx + 1, "total": len(steps), "task": session["task"],
+        }
+
+    elif action == "run":
+        cmd = step.get("command", step.get("note", ""))
+        for k, v in collected.items():
+            cmd = cmd.replace("{" + k + "}", v)
+        _run_command(cmd)
+        return {
+            "type": "notify", "text": f"Ran: {cmd}",
+            "step": idx + 1, "total": len(steps), "task": session["task"],
+        }
+
+    elif action == "workflow":
+        from workflow_engine import get_engine
+        wf_id = step.get("workflow_id", "")
+        engine = get_engine()
+        execution = engine.create_from_template(wf_id, {**collected, "query": session["task"]})
+        session["workflow_execution_id"] = execution.execution_id
+        result = engine.advance(execution.execution_id, action_executor=_exec_action)
+        return {
+            "type": "workflow", "text": f"Started workflow: {wf_id}",
+            "execution_id": execution.execution_id,
+            "step": idx + 1, "total": len(steps), "task": session["task"],
+            "workflow_result": result,
         }
 
     elif action == "present":
         return _finalize_task(session_id)
 
     else:
-        # Try executing as a system action
-        try:
-            from actions import execute_action, detect_action
-            detected = detect_action(action) or action
-            result = execute_action(detected, action)
-            return {
-                "type": "notify",
-                "text": result,
-                "step": idx + 1,
-                "total": len(steps),
-                "task": session["task"],
-            }
-        except Exception:
-            return {"type": "notify", "text": f"Executing step {idx + 1}...", "step": idx + 1, "total": len(steps), "task": session["task"]}
+        result = _exec_action(action, str(step))
+        return {
+            "type": "notify", "text": str(result)[:200],
+            "step": idx + 1, "total": len(steps), "task": session["task"],
+        }
 
 
-def _open_urls(urls: list[str]):
-    """Open all URLs in a single Edge window (multi-tab)."""
-    import subprocess
-    if not urls:
-        return
+def _exec_action(action: str, params: str = "") -> str:
     try:
-        arglist = ", ".join(f'"{u}"' for u in urls)
-        cmd = f"Start-Process msedge -ArgumentList {arglist}"
-        subprocess.Popen(["powershell", "-Command", cmd], shell=True)
-    except:
-        pass
+        from actions import execute_action, detect_action
+        detected = detect_action(action) or action
+        return execute_action(detected, params)
+    except Exception as e:
+        return f"Error: {e}"
 
 
 def _open_url(url: str):
-    _open_urls([url])
+    import subprocess
+    try:
+        subprocess.Popen(["powershell", "-Command", f'Start-Process "{url}"'], shell=True)
+    except:
+        pass
 
 
 def _open_search(query: str):
     import urllib.parse
     _open_url(f"https://google.com/search?q={urllib.parse.quote(query)}")
+
+
+def _type_text(text: str):
+    try:
+        from actions import _ps
+        escaped = text[:200].replace('"', '"')
+        _ps(f'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("{escaped}")')
+    except:
+        pass
+
+
+def _run_command(cmd: str):
+    try:
+        from actions import _ps
+        _ps(f'Start-Process "{cmd}"')
+    except:
+        pass
+
+
+def _extract_json(text: str) -> dict | None:
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group())
+        except:
+            pass
+    return None
 
 
 def _finalize_task(session_id: str) -> dict:
@@ -186,23 +218,15 @@ def _finalize_task(session_id: str) -> dict:
         return {"type": "error", "text": "No active task."}
 
     collected = session["collected"]
-    plan = session["plan"]
     task = session["task"]
-
-    # Build summary
-    details = "\n".join(f"  • {k}: {v}" for k, v in collected.items())
+    details = "\n".join(f"  - {k}: {v}" for k, v in collected.items())
     summary = f"Task: {task}\n\nCollected Info:\n{details}\n\nAll steps completed."
 
-    # Auto-present - open a summary page
-    _open_url(f"https://google.com/search?q={__import__('urllib').parse.quote(task + ' ' + ' '.join(collected.values()))}")
-
-    del _SESSIONS[session_id]
+    session["step_index"] = len(session["plan"]["steps"])
 
     return {
-        "type": "complete",
-        "text": summary,
-        "collected": collected,
-        "task": task,
+        "type": "complete", "text": summary,
+        "collected": collected, "task": task,
     }
 
 
@@ -212,3 +236,9 @@ def get_session(session_id: str) -> dict | None:
 
 def cancel_task(session_id: str) -> bool:
     return _SESSIONS.pop(session_id, None) is not None
+
+def continue_workflow(session_id: str, execution_id: str, user_input: str = None) -> dict:
+    from workflow_engine import get_engine
+    engine = get_engine()
+    result = engine.advance(execution_id, user_input, action_executor=_exec_action)
+    return result

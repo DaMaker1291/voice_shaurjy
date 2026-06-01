@@ -71,3 +71,59 @@ export async function deleteReminder(id: string) {
   const res = await fetch(`${BASE}/api/reminders/${id}`, { method: "DELETE" });
   return res.json();
 }
+
+// ── Entity API ────────────────────────────────────────────────────
+
+export async function entityProcess(text: string, userId = "local") {
+  const res = await fetch(`${BASE}/api/entity/process`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_input: text, user_id: userId }),
+  });
+  return res.json();
+}
+
+export async function getEntityState(userId = "local") {
+  const res = await fetch(`${BASE}/api/entity/state?user_id=${userId}`);
+  return res.json();
+}
+
+export async function getEntityGoals(userId = "local") {
+  const res = await fetch(`${BASE}/api/entity/goals?user_id=${userId}`);
+  return res.json();
+}
+
+export async function generateStrategies(text: string, userId = "local") {
+  const res = await fetch(`${BASE}/api/entity/strategies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_input: text, user_id: userId }),
+  });
+  return res.json();
+}
+
+// ── Workflow API ──────────────────────────────────────────────────
+
+export async function getWorkflowTemplates() {
+  const res = await fetch(`${BASE}/api/workflow/templates`);
+  return res.json();
+}
+
+export async function startWorkflow(templateId: string, task = "", userId = "local") {
+  const res = await fetch(`${BASE}/api/workflow/start?template_id=${templateId}&task=${encodeURIComponent(task)}&user_id=${userId}`, { method: "POST" });
+  return res.json();
+}
+
+export async function advanceWorkflow(executionId: string, userInput = "") {
+  const res = await fetch(`${BASE}/api/workflow/advance`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ execution_id: executionId, user_input: userInput }),
+  });
+  return res.json();
+}
+
+export async function getWorkflowStatus(executionId: string) {
+  const res = await fetch(`${BASE}/api/workflow/status?execution_id=${executionId}`);
+  return res.json();
+}

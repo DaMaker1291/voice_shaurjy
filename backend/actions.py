@@ -2247,6 +2247,181 @@ def _switch_desktop(_):
     return "Switching desktop..."
 
 
+# ── Desktop Control (advanced window/mouse/keyboard) ──────────────
+
+@register("focus_window")
+def _focus_window(text):
+    from desktop_control import focus_window
+    title = extract_param(text, r"(?:focus|switch\s+to|show)\s+(?:window\s+)?(.+?)$")
+    if not title: return "Which window?"
+    ok = focus_window(title)
+    return f"Focused '{title}'." if ok else f"Window '{title}' not found."
+
+@register("close_window")
+def _close_window(text):
+    from desktop_control import close_window
+    title = extract_param(text, r"(?:close|kill)\s+(?:window\s+)?(.+?)$")
+    if not title: return "Which window?"
+    ok = close_window(title)
+    return f"Closed '{title}'." if ok else f"Window '{title}' not found."
+
+@register("list_windows")
+def _list_windows(_):
+    from desktop_control import list_windows
+    wins = list_windows()
+    if not wins: return "No visible windows."
+    result = "Open windows:\n"
+    for w in wins[:15]:
+        result += f"  • {w['title'][:40]} ({w['w']}x{w['h']})\n"
+    return result
+
+@register("mouse_move")
+def _mouse_move(text):
+    m = re.search(r"(\d+)\s*[, ]\s*(\d+)", text)
+    if not m: return "Position? (e.g., move mouse to 500 300)"
+    x, y = int(m.group(1)), int(m.group(2))
+    from desktop_control import mouse_move
+    mouse_move(x, y)
+    return f"Mouse moved to ({x}, {y})."
+
+@register("mouse_click")
+def _mouse_click(text):
+    m = re.search(r"(\d+)\s*[, ]\s*(\d+)", text)
+    from desktop_control import mouse_click
+    if m:
+        mouse_click(int(m.group(1)), int(m.group(2)))
+        return f"Clicked at ({m.group(1)}, {m.group(2)})."
+    mouse_click()
+    return "Clicked."
+
+
+# ── Microsoft Word Automation ─────────────────────────────────────
+
+@register("word_new")
+def _word_new(_):
+    from app_automation import word_open, word_new_document
+    word_open(); import time; time.sleep(1)
+    return word_new_document()
+
+@register("word_write")
+def _word_write(text):
+    from app_automation import word_type_text
+    content = extract_param(text, r"(?:type|write|add)\s+(?:text|content|paragraph)?\s*(.+?)$")
+    if not content: content = text
+    # Check for formatting hints
+    style = "Normal"; fs = 11; bold = False
+    if "heading" in text.lower() or "# " in text:
+        style = "Heading 1"; fs = 16; bold = True
+    if "subheading" in text.lower() or "## " in text:
+        style = "Heading 2"; fs = 14; bold = True
+    word_type_text(content, style=style, font_size=fs, bold=bold)
+    return f"Written to Word."
+
+@register("word_heading")
+def _word_heading(text):
+    from app_automation import word_insert_heading
+    h = extract_param(text, r"(?:heading|title)\s+(.+?)$")
+    if not h: h = text.replace("heading", "").strip()
+    level = 2 if "sub" in text.lower() else 1
+    word_insert_heading(h, level)
+    return f"Heading '{h}' inserted."
+
+@register("word_save")
+def _word_save(text):
+    from app_automation import word_save
+    path = extract_param(text, r"(?:save|to)\s+(.+?\.docx)")
+    return word_save(path)
+
+@register("word_table")
+def _word_table(text):
+    from app_automation import word_insert_table
+    m = re.search(r"(\d+)\s*x\s*(\d+)", text)
+    if not m: return "Specify rows x cols (e.g., table 3x4)"
+    word_insert_table(int(m.group(1)), int(m.group(2)))
+    return f"Table {m.group(1)}x{m.group(2)} inserted."
+
+
+# ── OneNote Automation ────────────────────────────────────────────
+
+@register("onenote_open")
+def _onenote_open(_):
+    from app_automation import onenote_open
+    return onenote_open()
+
+@register("onenote_write")
+def _onenote_write(text):
+    from app_automation import onenote_write_content
+    content = extract_param(text, r"(?:write|type|add)\s+(?:to\s+)?(?:onenote\s+)?(.+?)$")
+    if not content: content = text
+    # Extract page title if specified
+    page = extract_param(text, r"(?:page|in)\s+(?:titled\s+|called\s+)?['\"]?(.+?)['\"]?$")
+    return onenote_write_content(content, page or "")
+
+
+# ── Excel Automation ──────────────────────────────────────────────
+
+@register("excel_open")
+def _excel_open(_):
+    from app_automation import excel_open
+    return excel_open()
+
+@register("excel_set")
+def _excel_set(text):
+    from app_automation import excel_set_cell
+    m = re.search(r"(?:cell\s+)?([A-Z]+)(\d+)\s*[=:]\s*(.+)", text, re.IGNORECASE)
+    if not m: return "Format: set cell A1 = value"
+    col = sum((ord(c) - 64) * (26 ** i) for i, c in enumerate(reversed(m.group(1).upper())))
+    row = int(m.group(2))
+    val = m.group(3).strip().strip('"')
+    excel_set_cell(1, row, col, val)
+    return f"Set {m.group(1).upper()}{row} = {val}."
+
+@register("excel_save")
+def _excel_save(_):
+    from app_automation import excel_save
+    return excel_save()
+
+
+# ── Chrome / Browser ──────────────────────────────────────────────
+
+@register("chrome_open")
+def _chrome_open(text):
+    from app_automation import chrome_open
+    url = extract_param(text, r"(?:open|go\s+to|navigate)\s+(.+?)$")
+    if not url: url = "https://google.com"
+    if not url.startswith("http"): url = "https://" + url
+    return chrome_open(url)
+
+@register("chrome_tab")
+def _chrome_tab(_):
+    from app_automation import send_keys
+    send_keys("^t")
+    return "New tab opened."
+
+
+# ── App Launcher (universal) ──────────────────────────────────────
+
+@register("launch_app")
+def _launch_app(text):
+    """Launch ANY app by searching installed apps, or start as executable."""
+    name = extract_param(text, r"(?:launch|start|open|run)\s+(?:app\s+|application\s+|program\s+)?(.+?)$")
+    if not name: return "Which app?"
+
+    # Map of common apps to their executable names
+    common = {
+        "word": "winword", "excel": "excel", "powerpoint": "powerpnt",
+        "outlook": "outlook", "onenote": "onenote", "notepad": "notepad",
+        "chrome": "chrome", "firefox": "firefox", "edge": "msedge",
+        "calculator": "calc", "paint": "mspaint", "vs code": "code",
+        "terminal": "wt", "cmd": "cmd", "powershell": "powershell",
+        "spotify": "spotify", "discord": "discord", "slack": "slack",
+        "zoom": "zoom", "teams": "teams", "vlc": "vlc",
+    }
+    exe = common.get(name.lower(), name)
+    _ps(f'Start-Process "{exe}" 2>$null; if(-not$?){{Start-Process "{exe}.exe" 2>$null; if(-not$?){{Start-Process "{name}.exe" 2>$null}}}}')
+    return f"Launching {name}..."
+
+
 # ── Settings Panels ────────────────────────────────────────────────
 
 @register("network_settings")

@@ -215,23 +215,150 @@ async def reset_profile(user_id: str = "local"):
 from fastapi.responses import StreamingResponse
 import json
 
+from pydantic import BaseModel
+
+
+class StrategyRequest(BaseModel):
+    user_input: str
+    user_id: str = "local"
+
+
+class WorkflowAdvanceRequest(BaseModel):
+    execution_id: str
+    user_input: str = None
+    user_id: str = "local"
+
+
+# ── Entity Engine Endpoints ────────────────────────────────────────
+
+@app.post("/api/entity/process")
+async def entity_process(req: StrategyRequest):
+    from entity_engine import get_entity
+    entity = get_entity(req.user_id)
+    result = entity.process(req.user_input)
+    return result
+
+
+@app.get("/api/entity/state")
+async def entity_state(user_id: str = "local"):
+    from entity_engine import get_entity
+    entity = get_entity(user_id)
+    return entity.get_state()
+
+
+@app.get("/api/entity/goals")
+async def entity_goals(user_id: str = "local"):
+    from entity_engine import get_entity
+    entity = get_entity(user_id)
+    return {"goals": entity.memory.get_active_goals()}
+
+
+@app.post("/api/entity/goals")
+async def entity_add_goal(goal: str, priority: int = 5, user_id: str = "local"):
+    from entity_engine import get_entity
+    entity = get_entity(user_id)
+    entity.memory.add_goal(goal, priority)
+    return {"status": "ok", "goal": goal}
+
+
+@app.post("/api/entity/goals/complete")
+async def entity_complete_goal(goal: str, user_id: str = "local"):
+    from entity_engine import get_entity
+    entity = get_entity(user_id)
+    entity.memory.complete_goal(goal)
+    return {"status": "ok", "goal": goal}
+
+
+@app.post("/api/entity/strategies")
+async def generate_strategies_endpoint(req: StrategyRequest):
+    from entity_engine import generate_strategies
+    from entity_engine import get_entity
+    entity = get_entity(req.user_id)
+    strategies = generate_strategies(req.user_input, {
+        "memory_summary": entity.memory.get_summary(),
+        "active_goals": entity.memory.get_active_goals(),
+    })
+    return strategies
+
+
+@app.get("/api/entity/memory")
+async def entity_memory(user_id: str = "local"):
+    from entity_engine import get_entity
+    entity = get_entity(user_id)
+    return {"memory_summary": entity.memory.get_summary()}
+
+
+# ── Workflow Engine Endpoints ──────────────────────────────────────
+
+@app.get("/api/workflow/templates")
+async def list_templates():
+    from workflow_engine import WORKFLOW_TEMPLATES
+    return {"templates": {k: v.to_dict() for k, v in WORKFLOW_TEMPLATES.items()}}
+
+
+@app.post("/api/workflow/start")
+async def start_workflow(template_id: str, user_id: str = "local", task: str = ""):
+    from workflow_engine import get_engine
+    from entity_engine import get_entity
+    entity = get_entity(user_id)
+    engine = get_engine()
+    execution = engine.create_from_template(template_id, {
+        "query": task or "User request",
+        "user_id": user_id,
+    })
+    result = engine.advance(execution.execution_id, action_executor=_exec_action)
+    return {
+        "execution_id": execution.execution_id,
+        "workflow": execution.workflow.to_dict(),
+        "result": result,
+    }
+
+
+@app.post("/api/workflow/advance")
+async def advance_workflow(req: WorkflowAdvanceRequest):
+    from workflow_engine import get_engine
+    engine = get_engine()
+    result = engine.advance(req.execution_id, req.user_input, action_executor=_exec_action)
+    return result
+
+
+@app.get("/api/workflow/status")
+async def workflow_status(execution_id: str):
+    from workflow_engine import get_engine
+    engine = get_engine()
+    execution = engine.get_execution(execution_id)
+    if not execution:
+        return {"error": "Execution not found"}
+    return execution.to_dict()
+
+
+@app.get("/api/workflow/list")
+async def list_executions():
+    from workflow_engine import get_engine
+    engine = get_engine()
+    return {"executions": engine.list_executions()}
+
 
 @app.post("/api/task/execute")
-async def execute_task(task: str, user_id: str = "local"):
-    """Execute a complex task, streaming real-time progress + visual simulation data via SSE."""
-
+async def execute_task_stream(task: str, user_id: str = "local"):
     async def event_stream():
         from task_agent import execute_task as run_task
-
         for event in run_task(task):
             yield f"data: {json.dumps(event)}\n\n"
-
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+def _exec_action(action: str, params: str = "") -> str:
+    try:
+        from actions import execute_action, detect_action
+        detected = detect_action(action) or action
+        return execute_action(detected, params)
+    except Exception as e:
+        return f"Error: {e}"
 
 
 @app.get("/api/task/scenes")
 async def list_scenes():
-    """Return list of all visual simulation scene types."""
     return {
         "scenes": [
             {"id": "travel", "name": "Travel / Globe", "description": "Rotating globe with flight paths, destination markers, and animated routes"},
