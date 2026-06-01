@@ -167,27 +167,27 @@ def generate(user_text: str, user_id: str = "local", max_tokens: int = 60, tempe
         messages.append({"role": "user", "content": user_text})
 
         # Try primary model, fallback to smaller
-            for model in [MODEL, FALLBACK_MODEL]:
-                try:
-                    response = client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                    )
-                    reply = response.choices[0].message.content.strip()
-                    break
-                except Exception as e:
-                    err_str = str(e)
-                    if "rate_limit" in err_str.lower():
-                        time.sleep(2)
-                        continue
-                    if model == FALLBACK_MODEL:
-                        reply = f"Groq API error: {err_str[:200]}"
-                        break
+        for model in [MODEL, FALLBACK_MODEL]:
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+                reply = response.choices[0].message.content.strip()
+                break
+            except Exception as e:
+                err_str = str(e)
+                if "rate_limit" in err_str.lower():
+                    time.sleep(2)
                     continue
-            else:
-                reply = "Groq API unavailable — check your API key and quota."
+                if model == FALLBACK_MODEL:
+                    reply = f"Groq API error: {err_str[:200]}"
+                    break
+                continue
+        else:
+            reply = "Groq API unavailable — check your API key and quota."
 
         # Store in history
         add_to_history(user_id, {"role": "user", "content": user_text})

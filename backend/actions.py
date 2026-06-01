@@ -900,9 +900,14 @@ def _os_info(_):
 
 @register("battery_status")
 def _battery_status(_):
-    b = _ps("$b=Get-CimInstance Win32_Battery; if($b){ '$($b.EstimatedChargeRemaining)% ($($b.BatteryStatus -replace 1,'Charging' -replace 2,'On AC'))' }else{ 'Desktop (no battery)' }")
-    u = _ps("[math]::Round(((Get-Date)-(Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalHours,1)")
-    return f"Battery: {b}\nUptime: {u}h"
+    import psutil
+    bat = psutil.sensors_battery()
+    uptime_h = round((__import__("time").time() - psutil.boot_time()) / 3600, 1)
+    if bat:
+        pct = int(bat.percent)
+        status = "Charging" if bat.power_plugged else "On battery"
+        return f"Battery: {pct}% ({status})\nUptime: {uptime_h}h"
+    return f"Battery: Desktop (no battery)\nUptime: {uptime_h}h"
 
 @register("battery_saver")
 def _battery_saver(_):
