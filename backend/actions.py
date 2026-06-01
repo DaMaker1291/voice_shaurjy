@@ -1611,30 +1611,68 @@ def _taskmgr(_): _ps('Start-Process "taskmgr.exe"'); return "Task Manager opened
 
 # ── Windows / Settings Panels ──────────────────────────────────────
 
-@register("settings")
-def _settings(_): _ps('Start-Process "ms-settings:"'); return "Settings opened."
-@register("control_panel")
-def _control_panel(_): _ps('Start-Process "control"'); return "Control Panel opened."
-@register("device_manager")
-def _device_manager(_): _ps('Start-Process "devmgmt.msc"'); return "Device Manager opened."
-@register("reg_edit")
-def _reg_edit(_): _ps('Start-Process "regedit.exe"'); return "Registry Editor opened."
-
-@register("browser")
-def _browser(_): _ps('Start-Process "https://google.com"'); return "Browser opened."
-
-APP_MAP = {
+# ── Web App Launcher (PWA-first approach) ─────────────────────
+WEB_APPS = {
+    "spotify": "https://open.spotify.com",
+    "music": "https://open.spotify.com",
+    "word": "https://word.office.com",
+    "excel": "https://excel.office.com",
+    "powerpoint": "https://powerpoint.office.com",
+    "onenote": "https://onenote.com",
+    "outlook": "https://outlook.live.com",
     "email": "https://mail.google.com", "gmail": "https://mail.google.com",
-    "mail": "https://mail.google.com", "outlook": "https://outlook.live.com",
+    "mail": "https://mail.google.com",
     "calendar": "https://calendar.google.com",
     "drive": "https://drive.google.com", "google drive": "https://drive.google.com",
     "cloud": "https://drive.google.com",
+    "docs": "https://docs.google.com",
+    "sheets": "https://sheets.google.com",
+    "slides": "https://slides.google.com",
     "youtube": "https://youtube.com", "yt": "https://youtube.com",
     "github": "https://github.com", "repos": "https://github.com",
     "code": "https://github.com",
-    "discord": "discord://", "chat": "discord://",
-    "slack": "slack://", "teams": "https://teams.microsoft.com",
-    "vscode": "code://",
+    "discord": "https://discord.com/app", "chat": "https://discord.com/app",
+    "slack": "https://slack.com",
+    "teams": "https://teams.microsoft.com",
+    "vscode": "https://vscode.dev",
+    "browser": "https://google.com",
+    "chrome": "https://google.com",
+    "whatsapp": "https://web.whatsapp.com",
+    "telegram": "https://web.telegram.org",
+    "chatgpt": "https://chatgpt.com",
+    "claude": "https://claude.ai",
+    "perplexity": "https://perplexity.ai",
+    "notion": "https://notion.so",
+    "trello": "https://trello.com",
+    "figma": "https://figma.com",
+    "canva": "https://canva.com",
+    "copilot": "https://copilot.microsoft.com",
+    "gemini": "https://gemini.google.com",
+    "maps": "https://maps.google.com",
+    "news": "https://news.google.com",
+    "translate": "https://translate.google.com",
+    "meet": "https://meet.google.com",
+    "zoom": "https://zoom.us",
+    "netflix": "https://netflix.com",
+    "youtube music": "https://music.youtube.com",
+}
+
+def _launch_web_app(name: str) -> str:
+    """Launch any app as a PWA — tries native protocol, Chrome app mode, then browser."""
+    url = WEB_APPS.get(name.lower())
+    if url:
+        _ps(f'Start-Process "chrome.exe" -ArgumentList "--app={url}" 2>$null; if(-not$?){{Start-Process "microsoft-edge:{url}" 2>$null; if(-not$?){{Start-Process "{url}"}}}}')
+        return f"Opening {name} web app..."
+    # Try native
+    native_cmd = APP_MAP_LEGACY.get(name.lower(), "")
+    qname = name.replace(" ", "+")
+    if native_cmd:
+        _ps(f'Start-Process "{native_cmd}" 2>$null; if(-not$?){{Start-Process "https://google.com/search?q={qname}+web"}}')
+        return f"Opening {name}..."
+    _ps(f'Start-Process "https://google.com/search?q={qname}"')
+    return f"Searching for {name}..."
+
+APP_MAP_LEGACY = {
     "terminal": "powershell.exe", "cmd": "cmd.exe", "powershell": "powershell.exe",
     "console": "powershell.exe",
     "calc": "calc.exe", "calculator": "calc.exe",
@@ -1648,22 +1686,34 @@ APP_MAP = {
     "registry editor": "regedit.exe", "regedit": "regedit.exe",
 }
 
+@register("settings")
+def _settings(_): _ps('Start-Process "ms-settings:"'); return "Settings opened."
+@register("control_panel")
+def _control_panel(_): _ps('Start-Process "control"'); return "Control Panel opened."
+@register("device_manager")
+def _device_manager(_): _ps('Start-Process "devmgmt.msc"'); return "Device Manager opened."
+@register("reg_edit")
+def _reg_edit(_): _ps('Start-Process "regedit.exe"'); return "Registry Editor opened."
+
+@register("browser")
+def _browser(_): _launch_web_app("browser"); return "Browser opened."
+
 @register("email")
-def _email(_): _ps('Start-Process "https://mail.google.com"'); return "Opening email..."
+def _email(_): _launch_web_app("email"); return "Opening email..."
 @register("calendar")
-def _calendar(_): _ps('Start-Process "https://calendar.google.com"'); return "Opening calendar..."
+def _calendar(_): _launch_web_app("calendar"); return "Opening calendar..."
 @register("drive")
-def _drive(_): _ps('Start-Process "https://drive.google.com"'); return "Opening Drive..."
+def _drive(_): _launch_web_app("drive"); return "Opening Drive..."
 @register("youtube")
-def _youtube(_): _ps('Start-Process "https://youtube.com"'); return "Opening YouTube..."
+def _youtube(_): _launch_web_app("youtube"); return "Opening YouTube..."
 @register("github")
-def _github(_): _ps('Start-Process "https://github.com"'); return "Opening GitHub..."
+def _github(_): _launch_web_app("github"); return "Opening GitHub..."
 @register("discord")
-def _discord(_): _ps('Start-Process "discord://" 2>$null; if(-not$?){Start-Process "https://discord.com/app"}'); return "Opening Discord..."
+def _discord(_): _launch_web_app("discord"); return "Opening Discord..."
 @register("slack")
-def _slack(_): _ps('Start-Process "slack://" 2>$null; if(-not$?){Start-Process "https://slack.com"}'); return "Opening Slack..."
+def _slack(_): _launch_web_app("slack"); return "Opening Slack..."
 @register("vscode")
-def _vscode(_): _ps('Start-Process "code://" 2>$null; if(-not$?){Start-Process "C:\\Program Files\\Microsoft VS Code\\Code.exe" -ErrorAction SilentlyContinue; if(-not$?){Start-Process "https://code.visualstudio.com"}}'); return "Opening VS Code..."
+def _vscode(_): _launch_web_app("vscode"); return "Opening VS Code..."
 @register("terminal")
 def _terminal(_): _ps('Start-Process "powershell.exe"'); return "Terminal opened."
 @register("calc")
@@ -1679,17 +1729,21 @@ def _snipping_tool(_): _ps('Start-Process "SnippingTool.exe" 2>$null; if(-not$?)
 def _open_app(text):
     name = extract_param(text, r"open\s+(?:app\s+|the\s+)?(.+?)$")
     if not name: return "Which app?"
-    # Check known apps first
-    if name.lower() in APP_MAP:
-        _ps(f'Start-Process "{APP_MAP[name.lower()]}"')
+    # PWA-first: try web version
+    if name.lower() in WEB_APPS:
+        return _launch_web_app(name.lower())
+    # Check known native apps
+    if name.lower() in APP_MAP_LEGACY:
+        _ps(f'Start-Process "{APP_MAP_LEGACY[name.lower()]}"')
         return f"Opening {name}..."
     # Search installed apps by name (fuzzy match)
     found = _ps(f'$n="{name}"; $r=Get-ChildItem "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths" -ErrorAction SilentlyContinue | Where-Object {{$_.PSChildName -like "*$n*"}} | Select-Object -First 1; if($r){{(Get-ItemProperty $r.PSPath)."(default)"}}; if(-not$r){{$r=Get-ChildItem "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths" -ErrorAction SilentlyContinue | Where-Object {{$_.PSChildName -like "*$n*"}} | Select-Object -First 1; if($r){{(Get-ItemProperty $r.PSPath)."(default)"}}}}')
     if found and found != "Not found":
         _ps(f'Start-Process "{found}"')
         return f"Opening {name}..."
-    # Try as executable
-    _ps(f'Start-Process "{name}" 2>$null; if(-not$?){{Start-Process "{name}.exe" 2>$null; if(-not$?){{return "Not found: {name}"}}}}')
+    # Try as executable with web fallback
+    qname2 = name.replace(" ", "+")
+    _ps(f'Start-Process "{name}" 2>$null; if(-not$?){{Start-Process "{name}.exe" 2>$null; if(-not$?){{Start-Process "https://google.com/search?q={qname2}+web"}}}}')
     return f"Opening {name}..."
 
 @register("app_list")
