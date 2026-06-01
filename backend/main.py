@@ -161,12 +161,23 @@ class TTSRequest(BaseModel):
 @app.post("/api/tts")
 async def text_to_speech(req: TTSRequest):
     from fastapi.responses import StreamingResponse, Response
-    import io, asyncio
+    import io, asyncio, re
 
-    # Try edge_tts first (cloud, higher quality), fall back to pyttsx3 (local)
+    text = req.text
+    voice = req.voice or "en-US-AriaNeural"
+
+    # Build SSML with expressive style for more human-like speech
+    cheer_words = ["great", "nice", "awesome", "love", "amazing", "cool", "yes"]
+    sad_words = ["sorry", "sad", "unfortunate", "ugh", "oh no", "argh"]
+    style = "cheerful" if any(w in text.lower() for w in cheer_words) else "empathetic" if any(w in text.lower() for w in sad_words) else "chat"
+
+    text_escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&apos;")
+    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts"><voice name="{voice}"><mstts:express-as style="{style}" styledegree="1.5">{text_escaped}</mstts:express-as></voice></speak>'
+
+    # Try edge_tts with SSML (expressive, much more human-like)
     try:
         import edge_tts
-        communicate = edge_tts.Communicate(req.text, req.voice)
+        communicate = edge_tts.Communicate(ssml, voice)
 
         async def stream():
             async for chunk in communicate.stream():
@@ -177,13 +188,29 @@ async def text_to_speech(req: TTSRequest):
     except Exception:
         pass
 
+    # Fallback: plain text edge_tts
+    try:
+        import edge_tts
+        communicate = edge_tts.Communicate(text, voice)
+
+        async def stream2():
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    yield chunk["data"]
+
+        return StreamingResponse(stream2(), media_type="audio/mpeg")
+    except Exception:
+        pass
+
     # Local fallback via pyttsx3
     try:
         import pyttsx3, tempfile, os
         engine = pyttsx3.init()
+        engine.setProperty("rate", 180)
+        engine.setProperty("volume", 1.0)
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             tmp_path = f.name
-        engine.save_to_file(req.text, tmp_path)
+        engine.save_to_file(text, tmp_path)
         engine.runAndWait()
         with open(tmp_path, "rb") as f:
             data = f.read()

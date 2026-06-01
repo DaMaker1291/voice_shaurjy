@@ -82,6 +82,12 @@ export default function Home() {
   const [selectedStrategy, setSelectedStrategy] = useState<number | null>(null);
   const [entityMemory, setEntityMemory] = useState("");
   const [activityIntensity, setActivityIntensity] = useState(0);
+  const [voice, setVoice] = useState<string>(() => {
+    if (typeof window === "undefined") return "en-US-AriaNeural";
+    return localStorage.getItem("tts_voice") || "en-US-AriaNeural";
+  });
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
+  const capturedTextRef = useRef("");
 
   const addBotEvent = useCallback((type: string, label: string) => {
     setBotEvents(prev => [...prev.slice(-8), { type, label, timestamp: Date.now() }]);
@@ -123,11 +129,12 @@ export default function Home() {
   const speak = useCallback(async (text: string) => {
     setSpeaking(true);
     addBotEvent("action", "speaking response");
+    const voiceName = voice || "en-US-AriaNeural";
     try {
       const res = await fetch(`${BASE}/api/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice: "en-US-AriaNeural" }),
+        body: JSON.stringify({ text, voice: voiceName }),
       });
       if (!res.ok) throw new Error("TTS failed");
       const blob = await res.blob();
@@ -141,14 +148,14 @@ export default function Home() {
       if (!synth) { setSpeaking(false); return; }
       synth.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0; utterance.pitch = 0.9;
+      utterance.rate = 1.05; utterance.pitch = 1.0;
       utterance.onend = () => setSpeaking(false);
       const voices = synth.getVoices();
-      const preferred = voices.find((v) => v.name.includes("Aria") || v.name.includes("Jenny") || v.name.includes("Zira"));
+      const preferred = voices.find((v) => v.name.includes(voiceName.split("-")[1] || "Aria") || v.name.includes("Aria") || v.name.includes("Jenny"));
       if (preferred) utterance.voice = preferred;
       synth.speak(utterance);
     }
-  }, [addBotEvent]);
+  }, [addBotEvent, voice]);
 
   const sendTaskResponse = useCallback(async (response: string) => {
     if (!taskSession || !response.trim()) return;
@@ -336,7 +343,9 @@ export default function Home() {
           bestConfidence = Math.max(bestConfidence, result[0].confidence);
         }
       }
-      setInterim(bestInterim || final);
+      const displayText = bestInterim || final;
+      setInterim(displayText);
+      capturedTextRef.current = displayText;
       setConfidence(Math.round(bestConfidence * 100));
       if (final) {
         clearTimeout((r as any)._silenceTimer);
@@ -373,8 +382,14 @@ export default function Home() {
     clearTimeout((recognitionRef.current as any)?._silenceTimer);
     recognitionRef.current?.stop();
     setListening(false);
+    const t = capturedTextRef.current.trim();
     setInterim("");
-  }, []);
+    if (t) {
+      setShowSuggestions(false);
+      if (taskQuestion) sendTaskResponse(t);
+      else handleQuery(t);
+    }
+  }, [taskQuestion, handleQuery, sendTaskResponse]);
 
   const sendText = useCallback(() => {
     const txt = textInput.trim();
@@ -398,7 +413,7 @@ export default function Home() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === "/" && !showInput && !listening) { e.preventDefault(); setShowInput(true); setTimeout(() => inputRef.current?.focus(), 100); }
-      if (e.key === "Escape") { setShowInput(false); stopListening(); }
+      if (e.key === "Escape") { setShowInput(false); if (listening) { stopListening(); } }
       if (e.key === "Enter" && taskQuestion && !showInput) { sendTaskResponse(textInput); }
     };
     window.addEventListener("keydown", h);
@@ -444,7 +459,43 @@ export default function Home() {
             <span className="status-text">{scanning ? "scanning device..." : statusText}</span>
             {confidence > 0 && <span className="text-[10px] font-mono text-gray-700">{confidence}%</span>}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Voice selector */}
+            <div className="relative">
+              <button
+                onClick={() => setShowVoicePicker((o) => !o)}
+                className="text-[9px] font-mono text-gray-600 hover:text-gray-400 transition-colors px-2 py-1 rounded-lg hover:bg-gray-800/30 flex items-center gap-1.5"
+                title="TTS Voice"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+                {voice.replace("en-US-", "").replace("Neural", "").replace("en-GB-", "UK-").replace("en-AU-", "AU-")}
+              </button>
+              {showVoicePicker && (
+                <div className="absolute right-0 top-8 z-50 w-44 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-1.5 shadow-2xl">
+                  {[
+                    { id: "en-US-AriaNeural", label: "Aria (US Female)" },
+                    { id: "en-US-JennyNeural", label: "Jenny (US Friendly)" },
+                    { id: "en-US-GuyNeural", label: "Guy (US Male)" },
+                    { id: "en-US-DavisNeural", label: "Davis (US Calm)" },
+                    { id: "en-GB-SoniaNeural", label: "Sonia (UK Female)" },
+                    { id: "en-GB-RyanNeural", label: "Ryan (UK Male)" },
+                    { id: "en-AU-NatashaNeural", label: "Natasha (AU Fem.)" },
+                  ].map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => { setVoice(v.id); setShowVoicePicker(false); localStorage.setItem("tts_voice", v.id); }}
+                      className={`w-full text-left text-[10px] font-mono px-2.5 py-1.5 rounded-lg transition-colors ${
+                        voice === v.id ? "bg-purple-900/20 text-purple-400" : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/30"
+                      }`}
+                    >
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {profileInterests.length > 0 && (
               <div className="hidden md:flex items-center gap-1.5">
                 {profileInterests.slice(0, 3).map((t, i) => (
