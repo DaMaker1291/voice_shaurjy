@@ -279,9 +279,6 @@ export default function Home() {
       speak("Task complete!");
     } else if (data.type === "workflow") {
       setMessages((p) => [...p, { role: "assistant", content: `🔄 ${data.text}` }]);
-      if (data.execution_id) {
-        setWorkflowExecutions(prev => ({ ...prev, [data.execution_id]: { status: "running" } }));
-      }
     } else if (data?.workflow_result?.results) {
       for (const r of data.workflow_result.results) {
         if (r.type === "ask") {
