@@ -189,7 +189,17 @@ class Entity:
         pref_str = "Preferences: " + "; ".join(f"{k}={v['value']}" for k, v in list(self.memory._data.get("preferences", {}).items())[:5]) if self.memory._data.get("preferences") else ""
 
         enhanced = f"[Context]\n{context[:800]}\n\n{goal_str}\n{pref_str}\n\nUser: {text}"
-        return generate(enhanced, self.user_id, max_tokens=max_tokens)
+        result = []
+
+        def _run():
+            result.append(generate(enhanced, self.user_id, max_tokens=max_tokens))
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=25)
+        if result:
+            return result[0]
+        return "Still thinking... give me a sec."
 
     def process(self, user_input: str) -> dict:
         now = time.time()
@@ -279,7 +289,15 @@ IMPORTANT:
 
 Output ONLY the JSON object, nothing else."""
 
-        raw = groq_generate(prompt, self.user_id, max_tokens=800)
+        raw = ""
+        def _gen():
+            nonlocal raw
+            raw = groq_generate(prompt, self.user_id, max_tokens=800)
+        t = threading.Thread(target=_gen, daemon=True)
+        t.start()
+        t.join(timeout=25)
+        if not raw:
+            raw = "Still thinking... give me a sec."
         m = re.search(r'\{.*\}', raw, re.DOTALL)
         if m:
             try:
