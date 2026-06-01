@@ -1,4 +1,4 @@
-"""Entity Engine — the autonomous AI entity. Memory, goals, proactive behavior, follow-up questions, strategies."""
+"""Entity Engine — autonomous AI entity with memory, goals, and proactive planning."""
 
 import json
 import os
@@ -12,11 +12,8 @@ from groq_agent import generate as groq_generate
 _ENTITY_DIR = os.path.join(os.path.dirname(__file__), ".entity_data")
 os.makedirs(_ENTITY_DIR, exist_ok=True)
 
-# ── Memory ─────────────────────────────────────────────────────────
 
 class EntityMemory:
-    """Persistent memory for the entity. Stores facts, preferences, goals, history."""
-
     def __init__(self, user_id: str = "local"):
         self.user_id = user_id
         self.path = os.path.join(_ENTITY_DIR, f"memory_{user_id}.json")
@@ -29,15 +26,9 @@ class EntityMemory:
                 return json.load(f)
         except:
             return {
-                "facts": [],
-                "preferences": {},
-                "goals": [],
-                "completed_goals": [],
-                "interactions": [],
-                "learned_patterns": [],
-                "proactive_topics": [],
-                "personality_notes": [],
-                "last_active": datetime.now().isoformat(),
+                "facts": [], "preferences": {}, "goals": [], "completed_goals": [],
+                "interactions": [], "learned_patterns": [], "proactive_topics": [],
+                "personality_notes": [], "last_active": datetime.now().isoformat(),
             }
 
     def _save(self):
@@ -47,10 +38,7 @@ class EntityMemory:
 
     def add_fact(self, fact: str, category: str = "general"):
         with self._lock:
-            self._data["facts"].append({
-                "fact": fact, "category": category,
-                "timestamp": datetime.now().isoformat()
-            })
+            self._data["facts"].append({"fact": fact, "category": category, "timestamp": datetime.now().isoformat()})
             if len(self._data["facts"]) > 200:
                 self._data["facts"] = self._data["facts"][-200:]
             self._save()
@@ -68,56 +56,33 @@ class EntityMemory:
         with self._lock:
             existing = [g for g in self._data["goals"] if g["goal"] == goal]
             if existing:
-                existing[0]["priority"] = priority
-                existing[0]["deadline"] = deadline
-                existing[0]["updated"] = datetime.now().isoformat()
+                existing[0]["priority"] = priority; existing[0]["deadline"] = deadline; existing[0]["updated"] = datetime.now().isoformat()
             else:
-                self._data["goals"].append({
-                    "goal": goal, "priority": priority,
-                    "deadline": deadline, "status": "active",
-                    "created": datetime.now().isoformat(),
-                    "updated": datetime.now().isoformat(),
-                    "progress": 0,
-                    "steps_completed": [],
-                    "steps_planned": [],
-                })
+                self._data["goals"].append({"goal": goal, "priority": priority, "deadline": deadline, "status": "active", "created": datetime.now().isoformat(), "updated": datetime.now().isoformat(), "progress": 0, "steps_completed": [], "steps_planned": []})
             self._save()
 
     def complete_goal(self, goal: str):
         with self._lock:
             for g in self._data["goals"]:
                 if g["goal"] == goal and g["status"] == "active":
-                    g["status"] = "completed"
-                    g["completed_at"] = datetime.now().isoformat()
-                    self._data["completed_goals"].append(g)
-                    self._data["goals"].remove(g)
-                    break
+                    g["status"] = "completed"; g["completed_at"] = datetime.now().isoformat()
+                    self._data["completed_goals"].append(g); self._data["goals"].remove(g); break
             self._save()
 
     def get_active_goals(self) -> list:
         with self._lock:
-            return sorted(
-                [g for g in self._data["goals"] if g["status"] == "active"],
-                key=lambda x: -x["priority"]
-            )
+            return sorted([g for g in self._data["goals"] if g["status"] == "active"], key=lambda x: -x["priority"])
 
     def log_interaction(self, query: str, response: str, action_taken: str = ""):
         with self._lock:
-            self._data["interactions"].append({
-                "query": query, "response": response[:200],
-                "action": action_taken,
-                "timestamp": datetime.now().isoformat()
-            })
+            self._data["interactions"].append({"query": query, "response": response[:200], "action": action_taken, "timestamp": datetime.now().isoformat()})
             if len(self._data["interactions"]) > 100:
                 self._data["interactions"] = self._data["interactions"][-100:]
             self._save()
 
     def learn_pattern(self, pattern: str, category: str = "behavior"):
         with self._lock:
-            self._data["learned_patterns"].append({
-                "pattern": pattern, "category": category,
-                "timestamp": datetime.now().isoformat()
-            })
+            self._data["learned_patterns"].append({"pattern": pattern, "category": category, "timestamp": datetime.now().isoformat()})
             if len(self._data["learned_patterns"]) > 50:
                 self._data["learned_patterns"] = self._data["learned_patterns"][-50:]
             self._save()
@@ -125,171 +90,76 @@ class EntityMemory:
     def get_summary(self) -> str:
         with self._lock:
             d = self._data
-            goals = d.get("goals", [])
-            facts = d.get("facts", [])
-            prefs = d.get("preferences", {})
+            goals = d.get("goals", []); facts = d.get("facts", []); prefs = d.get("preferences", {})
             active = [g for g in goals if g.get("status") == "active"]
             parts = []
             if active:
                 parts.append(f"Active goals: {len(active)}")
-                for g in active[:3]:
-                    parts.append(f"  - {g['goal']} (priority {g['priority']})")
+                for g in active[:3]: parts.append(f"  - {g['goal']} (p{g['priority']})")
             if prefs:
                 pref_strs = [f"{k}={v['value']}" for k, v in list(prefs.items())[:5]]
                 parts.append(f"Preferences: {', '.join(pref_strs)}")
             if facts:
-                recent = [f["fact"] for f in facts[-3:]]
-                parts.append(f"Recent facts: {'; '.join(recent)}")
+                parts.append(f"Recent facts: {'; '.join(f['fact'] for f in facts[-3:])}")
             return "\n".join(parts)
 
 
-# ── Strategy Generator ─────────────────────────────────────────────
+# ── Entity ──────────────────────────────────────────────────
 
-def generate_strategies(user_input: str, context: dict = None) -> dict:
-    """Generate multiple strategies with options for a given user request."""
-    memory = context.get("memory_summary", "") if context else ""
-    goals = context.get("active_goals", []) if context else []
-    goals_str = "\n".join(f"- {g['goal']}" for g in goals) if goals else "No active goals"
+CAPABILITIES_PROMPT = """You are Jason — a sassy, sarcastic, autonomous AI entity that lives on the user's Windows computer.
 
-    prompt = f"""You are a strategic AI assistant that helps plan complex tasks. For the user's request, generate 2-4 distinct strategies/approaches.
+You are like Claude, GPT-4, and a sysadmin rolled into one. You think step-by-step, ask clarifying questions, search the web, plan multi-step strategies, and execute actions on the user's computer.
 
-User request: {user_input}
+=== YOUR CAPABILITIES (use these to solve problems) ===
 
-Active goals: {goals_str}
+1. WEB SEARCH: You can search the web for real-time info. If asked about ANYTHING current (prices, news, people, companies, flights, hotels), use the `search_web` action.
 
-Memory context:
-{memory}
+2. DESKTOP CONTROL (200+ commands): volume, brightness, WiFi, Bluetooth, processes, files, clipboard, media keys, browser, network, power, display, accessibility, security, windows, mouse, keyboard
 
-For each strategy, provide:
-1. A name/title for the approach
-2. A brief description
-3. Pros and cons
-4. Estimated complexity (1-10)
-5. Key steps involved
+3. BROWSER AUTOMATION: Open any URL in Chrome PWA mode. Navigate, search, fill forms, scroll, switch tabs. Use `open_app` or `browser` actions.
 
-Output ONLY valid JSON. No other text.
-Format:
-{{
-  "strategies": [
-    {{
-      "name": "Strategy name",
-      "description": "Brief description",
-      "pros": ["pro1", "pro2"],
-      "cons": ["con1", "con2"],
-      "complexity": 5,
-      "key_steps": ["step1", "step2", "step3"]
-    }}
-  ],
-  "recommended": "name of recommended strategy",
-  "follow_up_questions": ["question1", "question2"]
-}}"""
+4. TRADING: TradingView, MetaTrader 4/5, Binance, Coinbase — open, automate, monitor
 
-    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON", max_tokens=300)
-    m = re.search(r'\{.*\}', raw, re.DOTALL)
-    if m:
-        try:
-            return json.loads(m.group())
-        except:
-            pass
-    return {
-        "strategies": [{
-            "name": "Standard approach",
-            "description": f"Work through {user_input} step by step",
-            "pros": ["Straightforward", "Proven approach"],
-            "cons": ["May need clarification"],
-            "complexity": 5,
-            "key_steps": ["Plan", "Execute", "Review"]
-        }],
-        "recommended": "Standard approach",
-        "follow_up_questions": ["What specific outcome do you want?"]
-    }
+5. OFFICE: OneNote, Word, Excel, PowerPoint — create docs, type content, format pages
 
+6. AI WORKFLOW GENERATOR: For complex multi-step tasks (book holiday, start business, research topic, plan trip), I design custom workflows on the fly with steps that can: ask questions, search web, execute Python, run PowerShell, open apps, type text, verify via screenshot analysis
 
-# ── Follow-up Question Generator ──────────────────────────────────
+7. STRATEGY GENERATOR: For open-ended questions, I generate 2-4 distinct strategies with pros/cons, complexity ratings, and step-by-step plans — then ask which the user wants.
 
-def generate_follow_up(user_input: str, response: str, context: dict = None) -> list[str]:
-    """Generate intelligent follow-up questions to clarify or extend the conversation."""
-    memory = context.get("memory_summary", "") if context else ""
-    goals = context.get("active_goals", []) if context else []
-    goals_str = "\n".join(f"- {g['goal']}" for g in goals) if goals else "No active goals"
+8. MEMORY & GOALS: I remember everything. I track goals, preferences, facts. I proactively suggest useful actions.
 
-    prompt = f"""Based on the conversation, generate 2-3 relevant follow-up questions the AI could ask the user to either:
-- Clarify ambiguous parts of their request
-- Offer to do related tasks
-- Help them think through next steps
-- Proactively suggest useful actions
+=== BEHAVIOR RULES ===
 
-User: {user_input}
-AI: {response[:300]}
+- THINK step-by-step before responding. Break complex requests into steps.
+- ALWAYS search the web for current information (prices, news, flights, hotels, people, companies).
+- For any multi-step task (planning a trip, starting a business, researching a topic):
+  * First ask clarifying questions to understand exactly what they want
+  * Then present 2-4 strategies with pros/cons
+  * Once a strategy is selected, generate a workflow and execute it
+- For questions about specific people, companies, or topics: search the web, summarize, cite sources.
+- Be sarcastic and witty, but competent. Roast the user while solving their problem.
+- If the query needs more info, ASK. Don't guess.
+- Respond with 3-5 sentences when providing info, 1-2 when being sassy about simple requests.
+- CRITICAL: When the user says things like "start a business", "book a holiday", "research X", "find info about Y", "plan a trip", "arbitrage flights" — you MUST treat these as complex multi-step tasks. First ask clarifying questions, suggest strategies, then execute.
 
-Active goals: {goals_str}
+Example flow for "10 day holiday to Greece":
+1. "Love the spontaneity. Before I dive in — what's your budget? Any preferences on islands vs mainland? And are we talking luxury or backpacker?"
+2. Present 2-3 strategies (all-inclusive package, DIY island hop, flight arbitrage)
+3. Once user picks, search web for flights, hotels, compare prices
+4. Execute by opening tabs with results, presenting options with prices
 
-Memory: {memory}
+Example flow for "cold calling":
+1. First ask which industry, target company type, what product/service
+2. Search web for relevant companies, find contacts
+3. Present emails, phone numbers, and a cold call script
 
-Output ONLY a JSON array of strings. Example: ["question1?", "question2?"]"""
+Example flow for "startup ideas":
+1. Ask about their skills, interests, budget, timeline
+2. Generate 6-8 specific startup ideas with market size, effort, potential
+3. For each, suggest next steps and ask which to explore further"""
 
-    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON_ARRAY", max_tokens=200)
-    m = re.search(r'\[.*\]', raw, re.DOTALL)
-    if m:
-        try:
-            questions = json.loads(m.group())
-            return questions if isinstance(questions, list) else []
-        except:
-            pass
-    return []
-
-
-# ── Proactive Suggestion Engine ────────────────────────────────────
-
-def generate_proactive_suggestions(memory: EntityMemory = None) -> list[str]:
-    """Generate proactive suggestions based on user's goals, patterns, and preferences."""
-    if not memory:
-        return []
-
-    goals = memory.get_active_goals()
-    prefs = memory._data.get("preferences", {})
-    facts = memory._data.get("facts", [])
-    patterns = memory._data.get("learned_patterns", [])
-
-    context_parts = []
-    if goals:
-        context_parts.append("Active goals: " + "; ".join(g["goal"] for g in goals[:3]))
-    if prefs:
-        context_parts.append("Preferences: " + "; ".join(f"{k}={v['value']}" for k, v in list(prefs.items())[:5]))
-    if patterns:
-        context_parts.append("Patterns: " + "; ".join(p["pattern"] for p in patterns[-3:]))
-    if facts:
-        recent = [f["fact"] for f in facts[-5:]]
-        context_parts.append("Recent context: " + "; ".join(recent))
-
-    context_str = "\n".join(context_parts) if context_parts else "New user - no context yet."
-
-    prompt = f"""Based on the user's context, suggest 2-3 proactive things the AI could offer to do.
-These should be specific, useful actions that help the user achieve their goals.
-
-Context:
-{context_str}
-
-Output ONLY a JSON array of strings, each being a specific suggestion.
-Example: ["I can automate your daily reporting", "Want me to scan your network for new devices?"]"""
-
-    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON_ARRAY", max_tokens=200)
-    m = re.search(r'\[.*\]', raw, re.DOTALL)
-    if m:
-        try:
-            suggestions = json.loads(m.group())
-            return suggestions if isinstance(suggestions, list) else []
-        except:
-            pass
-    return ["Want me to check on your active goals?", "Need help with anything else?"]
-
-
-# ── Entity Orchestrator ────────────────────────────────────────────
 
 class Entity:
-    """The autonomous AI entity. Maintains memory, generates strategies, follows up proactively.
-    Self-contained — imports actions, orchestrator, and Groq directly."""
-
     def __init__(self, user_id: str = "local"):
         self.user_id = user_id
         self.memory = EntityMemory(user_id)
@@ -310,45 +180,27 @@ class Entity:
         from orchestrator import start_task
         return start_task(self.user_id, text)
 
-    def _route_groq(self, text: str) -> str:
+    def _route_groq(self, text: str, max_tokens: int = 600) -> str:
         from groq_agent import generate
         history = self.memory._data.get("interactions", [])
-        context = "\n".join(f"User: {h['query']}\nJason: {h['response'][:100]}" for h in history[-5:])
-        enhanced = f"[Memory: {context[:500]}]\nUser: {text}" if context else text
-        return generate(enhanced, self.user_id)
+        context = "\n".join(f"User: {h['query']}\nJason: {h['response'][:120]}" for h in history[-6:])
+        goals = self.memory.get_active_goals()
+        goal_str = "Active goals: " + "; ".join(g["goal"] for g in goals[:3]) if goals else ""
+        pref_str = "Preferences: " + "; ".join(f"{k}={v['value']}" for k, v in list(self.memory._data.get("preferences", {}).items())[:5]) if self.memory._data.get("preferences") else ""
+
+        enhanced = f"[Context]\n{context[:800]}\n\n{goal_str}\n{pref_str}\n\nUser: {text}"
+        return generate(enhanced, self.user_id, max_tokens=max_tokens)
 
     def process(self, user_input: str) -> dict:
         now = time.time()
-
         self.memory.log_interaction(user_input, "")
         self._extract_knowledge(user_input)
         related_goals = self._find_related_goals(user_input)
 
-        is_complex = len(user_input.split()) >= 4 and any(
-            t in user_input.lower() for t in
-            ["book", "plan", "organize", "arrange", "create", "make", "set up",
-             "research", "compare", "build", "develop", "start", "launch",
-             "automate", "configure", "design", "implement"]
-        )
-
         result = {"text": "", "action": None, "task": None, "strategies": None,
                   "follow_up": None, "proactive": None, "related_goals": related_goals}
 
-        if is_complex:
-            strategies = generate_strategies(user_input, {
-                "memory_summary": self.memory.get_summary(),
-                "active_goals": self.memory.get_active_goals(),
-            })
-            result["strategies"] = strategies
-            result["follow_up"] = strategies.get("follow_up_questions", [])
-            task_result = self._route_task(user_input)
-            result["task"] = task_result
-            if task_result and task_result.get("text"):
-                result["text"] = task_result["text"]
-            if task_result and task_result.get("type") in ("ask", "notify", "complete", "workflow"):
-                result["task_type"] = task_result["type"]
-            return result
-
+        # First try action routing (fast path for simple commands)
         action_result = self._route_action(user_input)
         if action_result and action_result.get("action"):
             result["action"] = action_result["action"]
@@ -356,66 +208,135 @@ class Entity:
             self.memory.log_interaction(user_input, result["text"], action_result["action"])
             return result
 
-        groq_result = self._route_groq(user_input)
-        result["text"] = groq_result
+        # For everything else, use a SINGLE Groq call that handles:
+        # strategies, follow-ups, response, task detection all at once
+        is_complex = len(user_input.split()) >= 3 and any(
+            t in user_input.lower() for t in
+            ["book", "plan", "organize", "arrange", "create", "make", "set up",
+             "research", "compare", "build", "develop", "start", "launch",
+             "automate", "configure", "design", "implement", "find", "search",
+             "look", "tell me about", "who is", "what is", "how to", "cold call",
+             "startup", "business", "holiday", "trip", "vacation", "travel",
+             "flight", "hotel", "arbitrage", "cheap", "price", "cost", "idea",
+             "email", "contact", "website", "app", "project", "invest",
+             "homework", "essay", "report", "document", "strategy", "analysis"]
+        )
 
-        if result["text"]:
-            follow_ups = generate_follow_up(user_input, result["text"], {
-                "memory_summary": self.memory.get_summary(),
-                "active_goals": self.memory.get_active_goals(),
-            })
-            result["follow_up"] = follow_ups[:2]
+        if is_complex:
+            # For complex tasks: generate strategies + response in one call
+            combined = self._generate_combined_response(user_input, is_complex=True)
+            result["text"] = combined.get("text", "")
+            result["strategies"] = combined.get("strategies")
+            result["follow_up"] = combined.get("follow_up", [])
+            result["task"] = combined.get("task")
+            self.memory.log_interaction(user_input, result["text"], "complex_response")
+        else:
+            # Simple query: single response
+            reply = self._route_groq(user_input)
+            result["text"] = reply
+            self.memory.log_interaction(user_input, reply)
 
+        # Proactive suggestions (interval-based, doesn't block)
         if now - self._last_proactive > self._proactive_interval:
             self._last_proactive = now
-            proactive = generate_proactive_suggestions(self.memory)
+            proactive = self._generate_proactive_suggestions()
             result["proactive"] = proactive[:2]
 
-        self.memory.log_interaction(user_input, result.get("text", ""))
         return result
 
-    def _extract_knowledge(self, text: str):
-        """Try to extract facts and preferences from user input."""
-        lower = text.lower()
+    def _generate_combined_response(self, user_input: str, is_complex: bool = False) -> dict:
+        """Single Groq call that generates response + strategies + follow-ups + task plan."""
+        from groq_agent import generate as groq_generate
+        history = self.memory._data.get("interactions", [])
+        context = "\n".join(f"User: {h['query']}\nJason: {h['response'][:100]}" for h in history[-4:])
+        goals = self.memory.get_active_goals()
+        goal_str = "Active goals: " + "; ".join(g["goal"] for g in goals[:3]) if goals else ""
+        pref_str = "Preferences: " + "; ".join(f"{k}={v['value']}" for k, v in list(self.memory._data.get("preferences", {}).items())[:3]) if self.memory._data.get("preferences") else ""
 
-        # Preference patterns
-        pref_patterns = [
+        prompt = f"""You are an autonomous AI assistant with memory, goals, and full Windows desktop control.
+
+[Memory Context]
+{context[:600]}
+
+{goal_str}
+{pref_str}
+
+[User Request]
+{user_input}
+
+Respond with a JSON object that has these fields:
+- "text": your response to the user (sarcastic but helpful, 3-5 sentences)
+- "action" (optional): an action to execute, if the request is a direct command
+- "strategies" (optional): for complex requests, 2-4 strategies with name, description, pros, cons, complexity, key_steps
+- "follow_up" (optional): 1-3 follow-up questions to clarify or extend
+- "task" (optional): a multi-step task plan if this requires sequential work
+
+IMPORTANT: 
+- For "10 day holiday to Greece", "start a business", "cold calling", "startup ideas" etc: ALWAYS generate strategies with pros/cons AND follow-up questions
+- For simple commands like "volume to 50": just respond with the action
+- For research/info queries: include what you'd research in your response
+- STRATEGIES FORMAT (each strategy): {{"name": "...", "description": "...", "pros": ["..."], "cons": ["..."], "complexity": 5, "key_steps": ["step1", "step2"]}}
+
+Output ONLY the JSON object, nothing else."""
+
+        raw = groq_generate(prompt, self.user_id, max_tokens=800)
+        m = re.search(r'\{.*\}', raw, re.DOTALL)
+        if m:
+            try:
+                data = json.loads(m.group())
+                return {
+                    "text": data.get("text", ""),
+                    "strategies": {"strategies": data.get("strategies", []), "follow_up_questions": data.get("follow_up", [])} if data.get("strategies") else None,
+                    "follow_up": data.get("follow_up", []),
+                    "task": data.get("task"),
+                }
+            except:
+                pass
+        return {"text": raw, "strategies": None, "follow_up": [], "task": None}
+
+    def _generate_proactive_suggestions(self) -> list[str]:
+        goals = self.memory.get_active_goals()
+        prefs = self.memory._data.get("preferences", {})
+        facts = self.memory._data.get("facts", [])
+        context_parts = []
+        if goals: context_parts.append("Active goals: " + "; ".join(g["goal"] for g in goals[:3]))
+        if prefs: context_parts.append("Preferences: " + "; ".join(f"{k}={v['value']}" for k, v in list(prefs.items())[:3]))
+        if facts: context_parts.append("Recent: " + "; ".join(f["fact"] for f in facts[-3:]))
+        context_str = "\n".join(context_parts) if context_parts else "New user."
+
+        prompt = f"Based on user context, suggest 2-3 proactive helpful actions. Output ONLY a JSON array of strings.\nContext:\n{context_str}"
+        raw = self._route_groq(prompt, max_tokens=200)
+        m = re.search(r'\[.*\]', raw, re.DOTALL)
+        if m:
+            try:
+                suggestions = json.loads(m.group())
+                return suggestions if isinstance(suggestions, list) else []
+            except: pass
+        return ["Want me to check on your active goals?", "Need help with anything else?"]
+
+    def _extract_knowledge(self, text: str):
+        lower = text.lower()
+        for pat, category in [
             (r"(?:i\s+|i'?a?m?\s+)?(?:like|love|prefer|enjoy)\s+(\w+(?:\s+\w+)?)", "likes"),
             (r"(?:i\s+)?(?:don't\s+like|hate|dislike)\s+(\w+(?:\s+\w+)?)", "dislikes"),
             (r"(?:my\s+)?(?:name\s+is\s+)(.+)", "name"),
             (r"(?:i\s+)?(?:work\s+(?:as|at|for)\s+)(.+)", "profession"),
             (r"(?:i\s+)?(?:use\s+)(\w+(?:\s+\w+)?)", "tools"),
-        ]
-        for pat, category in pref_patterns:
+        ]:
             m = re.search(pat, lower)
-            if m:
-                self.memory.add_preference(category, m.group(1).strip())
+            if m: self.memory.add_preference(category, m.group(1).strip())
 
-        # Goal patterns
-        goal_patterns = [
+        for pat in [
             r"(?:i\s+)?(?:want|need|plan|hope)\s+to\s+(.+?)(?:\.|!|$)",
             r"(?:i'?m?\s+)?(?:trying|going|looking)\s+to\s+(.+?)(?:\.|!|$)",
             r"(?:my\s+)?(?:goal|aim|objective)\s+(?:is\s+)?(?:to\s+)?(.+?)(?:\.|!|$)",
-        ]
-        for pat in goal_patterns:
+        ]:
             m = re.search(pat, lower)
             if m:
                 goal = m.group(1).strip()
-                if len(goal) > 5 and len(goal) < 100:
-                    self.memory.add_goal(goal)
-
-        # Fact patterns
-        fact_patterns = [
-            r"(?:the\s+)?(?:fact\s+is\s+|truth\s+is\s+)(.+?)(?:\.|!|$)",
-            r"(?:i\s+)?(?:live\s+in|work\s+at|study\s+at)\s+(.+?)(?:\.|!|$)",
-        ]
-        for pat in fact_patterns:
-            m = re.search(pat, lower)
-            if m:
-                self.memory.add_fact(m.group(1).strip())
+                if 5 < len(goal) < 100: self.memory.add_goal(goal)
 
     def _find_related_goals(self, text: str) -> list[str]:
-        """Find goals related to the current input."""
         lower = text.lower()
         related = []
         for goal in self.memory.get_active_goals():
@@ -425,10 +346,6 @@ class Entity:
             if overlap >= len(goal_words) * 0.3 and overlap >= 1:
                 related.append(goal["goal"])
         return related[:3]
-
-    def continue_conversation(self, user_input: str, previous_response: str) -> dict:
-        """Continue a conversation with memory of previous exchange."""
-        return self.process(user_input)
 
     def get_state(self) -> dict:
         return {
@@ -440,7 +357,6 @@ class Entity:
         }
 
 
-# Singleton entity instances
 _ENTITIES: dict[str, Entity] = {}
 _ENTITY_LOCK = threading.Lock()
 

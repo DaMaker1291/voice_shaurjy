@@ -929,38 +929,86 @@ def _last_boot(_):
 
 # ── Volume / Audio ─────────────────────────────────────────────────
 
+# ── CoreAudio API singleton (compiled once via PowerShell) ──
+_COREAUDIO_SCRIPT = '''
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+[Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"), ComImport]
+public class MMDeviceEnumerator { }
+[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDeviceEnumerator { void GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppDevice); }
+[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDevice { void Activate([MarshalAs(UnmanagedType.LPStruct)] Guid id, int clsCtx, IntPtr activationParams, out IAudioEndpointVolume ppInterface); }
+[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioEndpointVolume {
+    void SetMasterVolumeLevelScalar(float fLevel, IntPtr pguidEventContext);
+    float GetMasterVolumeLevelScalar();
+    void SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, IntPtr pguidEventContext);
+    void GetMute(out bool pbMute);
+}
+public class AudioCtrl {
+    static IMMDeviceEnumerator _enumerator;
+    static IMMDevice _device;
+    static IAudioEndpointVolume _volume;
+    static void Init() { if (_volume != null) return; _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator(); _enumerator.GetDefaultAudioEndpoint(0, 1, out _device); _device.Activate(new Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), 0, IntPtr.Zero, out _volume); }
+    public static float GetVolume() { Init(); return _volume.GetMasterVolumeLevelScalar() * 100f; }
+    public static void SetVolume(float level) { Init(); _volume.SetMasterVolumeLevelScalar(Math.Max(0, Math.Min(1, level / 100f)), IntPtr.Zero); }
+    public static bool GetMute() { Init(); bool m; _volume.GetMute(out m); return m; }
+    public static void SetMute(bool mute) { Init(); _volume.SetMute(mute, IntPtr.Zero); }
+}
+"@
+'''
+
+def _audio_init():
+    """Ensure the CoreAudio type is compiled. Returns True if ready."""
+    r = _ps(_COREAUDIO_SCRIPT + '; return [AudioCtrl]::GetVolume()')
+    return r is not None and "Error" not in str(r)
+
 @register("vol_up")
 def _vol_up(_):
-    _ps('$k=(New-Object -ComObject WScript.Shell); for($i=0;$i-lt3;$i++){$k.SendKeys([char]175)}')
-    return "Volume up."
+    if _audio_init():
+        vol = float(_ps('[AudioCtrl]::GetVolume()'))
+        new_vol = min(100, vol + 10)
+        _ps(f'[AudioCtrl]::SetVolume({new_vol})')
+        return f"Volume up to {int(new_vol)}%."
+    return "Could not access audio."
 
 @register("vol_down")
 def _vol_down(_):
-    _ps('$k=(New-Object -ComObject WScript.Shell); for($i=0;$i-lt3;$i++){$k.SendKeys([char]174)}')
-    return "Volume down."
+    if _audio_init():
+        vol = float(_ps('[AudioCtrl]::GetVolume()'))
+        new_vol = max(0, vol - 10)
+        _ps(f'[AudioCtrl]::SetVolume({new_vol})')
+        return f"Volume down to {int(new_vol)}%."
+    return "Could not access audio."
 
 @register("vol_mute")
 def _vol_mute(_):
-    _ps('$k=(New-Object -ComObject WScript.Shell); $k.SendKeys([char]173)')
-    return "Toggled mute."
+    if _audio_init():
+        muted = _ps('[AudioCtrl]::GetMute()').strip() == "True"
+        _ps(f'[AudioCtrl]::SetMute($({"false" if muted else "true"}))')
+        return "Muted." if not muted else "Unmuted."
+    return "Could not access audio."
 
 @register("vol_set")
 def _vol_set(text):
     m = re.search(r"(\d+)", text)
     if not m: return "Specify a number (e.g., volume to 50)."
     lvl = min(100, max(0, int(m.group(1))))
-    _ps(f'''
-        $w=(New-Object -ComObject WScript.Shell);
-        0..100|%{{$w.SendKeys([char]175)}};
-        0..[math]::Round(100-{lvl}/100*100)|%{{$w.SendKeys([char]174)}}
-    ''')
-    return f"Volume set to {lvl}%."
+    if _audio_init():
+        _ps(f'[AudioCtrl]::SetVolume({lvl})')
+        return f"Volume set to {lvl}%."
+    return "Could not access audio."
 
 @register("vol_level")
 def _vol_level(_):
-    l = _ps('Add-Type @""@; [Audio]::Volume')
-    m = _ps('Add-Type @""@; [Audio]::Mute')
-    return f"Volume: {l or 'unknown'}%{' (muted)' if m else ''}"
+    if _audio_init():
+        vol = _ps('[AudioCtrl]::GetVolume()')
+        muted = _ps('[AudioCtrl]::GetMute()')
+        is_muted = muted.strip() == "True"
+        return f"Volume: {float(vol):.0f}%{' (muted)' if is_muted else ''}"
+    return "Volume: unknown"
 
 @register("mic_toggle")
 def _mic_toggle(_):
@@ -992,13 +1040,23 @@ def _vol_mixer(_):
 
 @register("brightness_up")
 def _brightness_up(_):
-    _ps('$k=(New-Object -ComObject WScript.Shell); $k.SendKeys([char]175); Start-Sleep 0.05; $k.SendKeys([char]175)')
-    return "Brightness up."
+    r = _ps('$m=Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightness -ErrorAction SilentlyContinue; if($m){$m.CurrentBrightness+10}else{50}')
+    try:
+        lvl = min(100, int(float(r.strip())) + 10)
+        _ps(f'(Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue).WmiSetBrightness(1,{lvl})')
+        return f"Brightness up to {lvl}%."
+    except:
+        return "Could not adjust brightness."
 
 @register("brightness_down")
 def _brightness_down(_):
-    _ps('$k=(New-Object -ComObject WScript.Shell); $k.SendKeys([char]174); Start-Sleep 0.05; $k.SendKeys([char]174)')
-    return "Brightness down."
+    r = _ps('$m=Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightness -ErrorAction SilentlyContinue; if($m){$m.CurrentBrightness-10}else{50}')
+    try:
+        lvl = max(0, int(float(r.strip())) - 10)
+        _ps(f'(Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue).WmiSetBrightness(1,{lvl})')
+        return f"Brightness down to {lvl}%."
+    except:
+        return "Could not adjust brightness."
 
 @register("brightness_set")
 def _brightness_set(text):
@@ -1996,6 +2054,25 @@ def _search(text):
     q = (extract_param(text, r"(?:search|google|look\s+up)\s+(?:for\s+)?(.+?)$") or text).strip()
     _ps(f'Start-Process "https://google.com/search?q={_uq(q)}"')
     return f'Searching for "{q}"...'
+
+@register("fetch_search")
+def _fetch(text):
+    """Fetch web search results as text (doesn't open browser)."""
+    q = (extract_param(text, r"(?:fetch|get|read)\s+(?:search\s+)?(?:results\s+)?(?:for\s+)?(.+?)$") or text).strip()
+    import urllib.request
+    try:
+        url = f"https://lite.duckduckgo.com/lite/?q={_uq(q)}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        resp = urllib.request.urlopen(req, timeout=8)
+        html = resp.read().decode("utf-8", errors="replace")
+        # Extract text content
+        texts = re.findall(r'>([^<]{20,})<', html)
+        results = [t.strip() for t in texts if len(t.strip()) > 30][:8]
+        if results:
+            return f"Search results for '{q}':\n" + "\n".join(f"• {r[:300]}" for r in results)
+        return f"No text results found for '{q}'."
+    except Exception as e:
+        return f"Search error: {str(e)[:100]}"
 
 @register("search_youtube")
 def _search_youtube(text):
