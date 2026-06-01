@@ -929,86 +929,55 @@ def _last_boot(_):
 
 # ── Volume / Audio ─────────────────────────────────────────────────
 
-# ── CoreAudio API singleton (compiled once via PowerShell) ──
-_COREAUDIO_SCRIPT = '''
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-[Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"), ComImport]
-public class MMDeviceEnumerator { }
-[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IMMDeviceEnumerator { void GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppDevice); }
-[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IMMDevice { void Activate([MarshalAs(UnmanagedType.LPStruct)] Guid id, int clsCtx, IntPtr activationParams, out IAudioEndpointVolume ppInterface); }
-[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IAudioEndpointVolume {
-    void SetMasterVolumeLevelScalar(float fLevel, IntPtr pguidEventContext);
-    float GetMasterVolumeLevelScalar();
-    void SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, IntPtr pguidEventContext);
-    void GetMute(out bool pbMute);
-}
-public class AudioCtrl {
-    static IMMDeviceEnumerator _enumerator;
-    static IMMDevice _device;
-    static IAudioEndpointVolume _volume;
-    static void Init() { if (_volume != null) return; _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator(); _enumerator.GetDefaultAudioEndpoint(0, 1, out _device); _device.Activate(new Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), 0, IntPtr.Zero, out _volume); }
-    public static float GetVolume() { Init(); return _volume.GetMasterVolumeLevelScalar() * 100f; }
-    public static void SetVolume(float level) { Init(); _volume.SetMasterVolumeLevelScalar(Math.Max(0, Math.Min(1, level / 100f)), IntPtr.Zero); }
-    public static bool GetMute() { Init(); bool m; _volume.GetMute(out m); return m; }
-    public static void SetMute(bool mute) { Init(); _volume.SetMute(mute, IntPtr.Zero); }
-}
-"@
-'''
-
-def _audio_init():
-    """Ensure the CoreAudio type is compiled. Returns True if ready."""
-    r = _ps(_COREAUDIO_SCRIPT + '; return [AudioCtrl]::GetVolume()')
-    return r is not None and "Error" not in str(r)
-
+# ── Volume control via pycaw (direct CoreAudio API from Python) ──
 @register("vol_up")
 def _vol_up(_):
-    if _audio_init():
-        vol = float(_ps('[AudioCtrl]::GetVolume()'))
-        new_vol = min(100, vol + 10)
-        _ps(f'[AudioCtrl]::SetVolume({new_vol})')
-        return f"Volume up to {int(new_vol)}%."
-    return "Could not access audio."
+    try:
+        from audio_control import volume_up
+        lvl = volume_up(10)
+        return f"Volume up to {lvl}%."
+    except Exception as e:
+        return f"Could not access audio: {e}"
 
 @register("vol_down")
 def _vol_down(_):
-    if _audio_init():
-        vol = float(_ps('[AudioCtrl]::GetVolume()'))
-        new_vol = max(0, vol - 10)
-        _ps(f'[AudioCtrl]::SetVolume({new_vol})')
-        return f"Volume down to {int(new_vol)}%."
-    return "Could not access audio."
+    try:
+        from audio_control import volume_down
+        lvl = volume_down(10)
+        return f"Volume down to {lvl}%."
+    except Exception as e:
+        return f"Could not access audio: {e}"
 
 @register("vol_mute")
 def _vol_mute(_):
-    if _audio_init():
-        muted = _ps('[AudioCtrl]::GetMute()').strip() == "True"
-        _ps(f'[AudioCtrl]::SetMute($({"false" if muted else "true"}))')
-        return "Muted." if not muted else "Unmuted."
-    return "Could not access audio."
+    try:
+        from audio_control import toggle_mute, get_mute
+        muted = toggle_mute()
+        return "Muted." if muted else "Unmuted."
+    except Exception as e:
+        return f"Could not access audio: {e}"
 
 @register("vol_set")
 def _vol_set(text):
     m = re.search(r"(\d+)", text)
     if not m: return "Specify a number (e.g., volume to 50)."
     lvl = min(100, max(0, int(m.group(1))))
-    if _audio_init():
-        _ps(f'[AudioCtrl]::SetVolume({lvl})')
+    try:
+        from audio_control import set_volume
+        set_volume(lvl)
         return f"Volume set to {lvl}%."
-    return "Could not access audio."
+    except Exception as e:
+        return f"Could not access audio: {e}"
 
 @register("vol_level")
 def _vol_level(_):
-    if _audio_init():
-        vol = _ps('[AudioCtrl]::GetVolume()')
-        muted = _ps('[AudioCtrl]::GetMute()')
-        is_muted = muted.strip() == "True"
-        return f"Volume: {float(vol):.0f}%{' (muted)' if is_muted else ''}"
-    return "Volume: unknown"
+    try:
+        from audio_control import get_volume, get_mute
+        vol = get_volume()
+        muted = get_mute()
+        return f"Volume: {vol:.0f}%{' (muted)' if muted else ''}"
+    except:
+        return "Volume: unknown"
 
 @register("mic_toggle")
 def _mic_toggle(_):
