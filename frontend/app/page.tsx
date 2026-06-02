@@ -554,21 +554,26 @@ export default function Home() {
 
         {/* Center content */}
         <div className="flex-1 flex flex-col items-center justify-center relative">
-          {/* Ambient glow behind neuron */}
-          {(listening || thinking || speaking) && (
-            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full pointer-events-none transition-all duration-1000 ${
-              listening ? "ambient-glow-listening" : thinking ? "ambient-glow-thinking" : "ambient-glow-speaking"
-            }`} />
-          )}
+          {/* Ambient glow behind neuron (always visible, subtle when idle) */}
+          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full pointer-events-none transition-all duration-1000 ${
+            listening ? "ambient-glow-listening" : thinking ? "ambient-glow-thinking" : speaking ? "ambient-glow-speaking" : "ambient-glow-idle"
+          }`} />
 
           {/* Holographic neuron */}
           <div className="flex-shrink-0 relative" style={{ marginTop: taskQuestion ? -80 : -40 }}>
             <HolographicNeuron listening={listening} speaking={speaking} thinking={thinking} onClick={handleOrbClick} />
           </div>
 
+          {/* Subtle prompt below neuron when idle */}
+          {!listening && !thinking && !speaking && !taskQuestion && messages.length <= 1 && (
+            <p className="mt-3 text-[10px] font-mono text-gray-700/50 tracking-[0.15em] animate-fade-in">
+              tap the orb to speak
+            </p>
+          )}
+
           {/* Suggestions */}
-          {showSuggestions && messages.length <= 1 && !listening && !thinking && (
-            <div className="mt-8 max-w-lg w-full px-6 animate-fade-in">
+          {showSuggestions && messages.length <= 1 && !listening && !thinking && !speaking && (
+            <div className="mt-6 max-w-lg w-full px-6 animate-fade-in">
               <div className="flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((s, i) => (
                   <button
