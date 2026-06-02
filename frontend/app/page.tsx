@@ -566,9 +566,10 @@ export default function Home() {
 
           {/* Subtle prompt below neuron when idle */}
           {!listening && !thinking && !speaking && !taskQuestion && messages.length <= 1 && (
-            <p className="mt-3 text-[10px] font-mono text-gray-700/50 tracking-[0.15em] animate-fade-in">
-              tap the orb to speak
-            </p>
+            <div className="mt-4 text-center animate-fade-in">
+              <p className="text-[10px] font-mono text-gray-600/60 tracking-[0.2em]">tap the orb to speak</p>
+              <p className="text-[8px] font-mono text-gray-800/50 mt-1.5 tracking-wider">press <span className="px-1.5 py-0.5 rounded bg-gray-800/30 text-gray-600 text-[7px]">/</span> to type</p>
+            </div>
           )}
 
           {/* Suggestions */}
