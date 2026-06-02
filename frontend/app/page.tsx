@@ -563,7 +563,7 @@ export default function Home() {
 
           {/* Holographic neuron */}
           <div className="flex-shrink-0 relative" style={{ marginTop: taskQuestion ? -80 : -40 }}>
-            <HolographicNeuron listening={listening} speaking={thinking || speaking} onClick={handleOrbClick} />
+            <HolographicNeuron listening={listening} speaking={speaking} thinking={thinking} onClick={handleOrbClick} />
           </div>
 
           {/* Suggestions */}

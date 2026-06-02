@@ -6,12 +6,13 @@ import * as THREE from "three";
 interface Props {
   listening?: boolean;
   speaking?: boolean;
+  thinking?: boolean;
   onClick?: () => void;
 }
 
 const LAYERS = [6, 10, 12, 8, 4]; // neurons per layer: input -> hidden1 -> hidden2 -> hidden3 -> output
 
-export default function HolographicNeuron({ listening, speaking, onClick }: Props) {
+export default function HolographicNeuron({ listening, thinking, speaking, onClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -310,12 +311,12 @@ export default function HolographicNeuron({ listening, speaking, onClick }: Prop
 
   // ── Pulse on state change ───────────────────────────────────
   useEffect(() => {
-    if (listening || speaking) {
-      containerRef.current?.style.setProperty("--pulse", listening ? "1" : "0.5");
-    } else {
-      containerRef.current?.style.setProperty("--pulse", "0");
-    }
-  }, [listening, speaking]);
+    const pulse = listening ? "1" : thinking ? "0.7" : speaking ? "0.4" : "0";
+    containerRef.current?.style.setProperty("--pulse", pulse);
+  }, [listening, speaking, thinking]);
+
+  const label = listening ? "listening" : thinking ? "thinking" : speaking ? "speaking" : "standby";
+  const labelColor = listening ? "rgba(34,197,94,0.5)" : thinking ? "rgba(168,85,247,0.5)" : speaking ? "rgba(6,182,212,0.5)" : "rgba(168,85,247,0.3)";
 
   return (
     <div
@@ -332,8 +333,8 @@ export default function HolographicNeuron({ listening, speaking, onClick }: Prop
         }}
       />
       <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-center pointer-events-none">
-        <p className="text-[9px] font-mono text-purple-500/40 tracking-[0.3em] uppercase">
-          {listening ? "listening" : speaking ? "processing" : "idle"}
+        <p className="text-[9px] font-mono tracking-[0.3em] uppercase" style={{ color: labelColor }}>
+          {label}
         </p>
       </div>
     </div>
