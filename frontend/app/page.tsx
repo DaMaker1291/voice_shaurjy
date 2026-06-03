@@ -441,7 +441,13 @@ export default function Home() {
     "tap to speak or press /";
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-blue-950 flex flex-row">
+    <div className="relative h-screen w-full overflow-hidden flex flex-row" style={{ backgroundColor: '#05081a' }}>
+      {/* ── Background layers ── */}
+      <div className="gradient-bg" />
+      <div className="grid-overlay" />
+      <div className="stars" />
+      <div className="stars2" />
+      <div className="stars3" />
 
       {/* ── Main content ── */}
       <div className="relative z-10 flex-[3] min-w-0 flex flex-col px-4">
