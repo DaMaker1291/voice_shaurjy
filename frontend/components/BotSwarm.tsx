@@ -6,8 +6,9 @@ interface Props {
   listening?: boolean;
   thinking?: boolean;
   speaking?: boolean;
-  activity?: number; // 0-1 intensity
+  activity?: number;
   botEvents?: { type: string; label: string; timestamp: number }[];
+  centered?: boolean;
 }
 
 const BOT_COLORS = {
@@ -46,7 +47,7 @@ interface ConnectionLine {
   life: number; maxLife: number;
 }
 
-export default function BotSwarm({ listening, thinking, speaking, activity = 0.5, botEvents = [] }: Props) {
+export default function BotSwarm({ listening, thinking, speaking, activity = 0.5, botEvents = [], centered = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const botsRef = useRef<Bot[]>([]);
   const particlesRef = useRef<Particle[]>([]);
@@ -54,6 +55,7 @@ export default function BotSwarm({ listening, thinking, speaking, activity = 0.5
   const eventLogRef = useRef<{ type: string; label: string; timestamp: number }[]>([]);
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
   const timeRef = useRef(0);
+  const sizeRef = useRef({ w: 500, h: 500 });
 
   useEffect(() => {
     eventLogRef.current = botEvents;
@@ -65,8 +67,16 @@ export default function BotSwarm({ listening, thinking, speaking, activity = 0.5
     const ctx = canvas.getContext("2d")!;
 
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      if (centered) {
+        const parent = canvas.parentElement;
+        sizeRef.current = { w: parent?.clientWidth || 500, h: parent?.clientHeight || 500 };
+        canvas.width = sizeRef.current.w;
+        canvas.height = sizeRef.current.h;
+      } else {
+        sizeRef.current = { w: window.innerWidth, h: window.innerHeight };
+        canvas.width = sizeRef.current.w;
+        canvas.height = sizeRef.current.h;
+      }
     };
     resize();
     window.addEventListener("resize", resize);
@@ -393,8 +403,8 @@ export default function BotSwarm({ listening, thinking, speaking, activity = 0.5
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 z-0 pointer-events-none"
-      style={{ opacity: 0.8 }}
+      className={centered ? "w-full h-full pointer-events-none" : "fixed inset-0 z-0 pointer-events-none"}
+      style={{ opacity: centered ? 1 : 0.8 }}
     />
   );
 }

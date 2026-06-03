@@ -1,15 +1,15 @@
 {
   "user_id": "",
   "first_seen": "2026-05-31T19:36:47.009378",
-  "last_seen": "2026-06-02T23:52:05.548408",
+  "last_seen": "2026-06-03T19:20:58.861778",
   "session_count": 0,
   "total_messages": 1,
   "device": {
-    "os": "",
-    "hostname": "",
-    "ram_gb": "",
-    "cpu": "",
-    "uptime_hours": "",
+    "os": "Microsoft Windows 11 Home",
+    "hostname": "LAPTOP-QG2ATQI5",
+    "ram_gb": "7.7",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1255U",
+    "uptime_hours": "123.4",
     "installed_apps": [
       "Antigravity (User)",
       "Apple Software Update",

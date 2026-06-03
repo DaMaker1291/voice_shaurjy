@@ -224,10 +224,34 @@
       "response": "\u26d4 Killing process...\nWhich process?",
       "action": "process_kill",
       "timestamp": "2026-06-01T22:37:47.504132"
+    },
+    {
+      "query": "volume to 50",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-03T00:07:20.493676"
+    },
+    {
+      "query": "volume to 50",
+      "response": "\ud83d\udd0a Setting volume\nVolume set to 50%.",
+      "action": "vol_set",
+      "timestamp": "2026-06-03T00:07:22.565880"
+    },
+    {
+      "query": "set volumr to 50",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-03T19:23:30.861830"
+    },
+    {
+      "query": "set volumr to 50",
+      "response": "\ud83d\udd0a Ah, \"volumr\" - I see what you did there, a little typo, but I'm not \"deaf\" to your request. Setting volume to 50%. By the way, I hope you're ready for a \"sound\" business plan, pun intended. Volume s",
+      "action": "",
+      "timestamp": "2026-06-03T19:23:39.786512"
     }
   ],
   "learned_patterns": [],
   "proactive_topics": [],
   "personality_notes": [],
-  "last_active": "2026-06-01T22:37:47.504169"
+  "last_active": "2026-06-03T19:23:39.786543"
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import HolographicNeuron from "@/components/HolographicNeuron";
 import BotSwarm from "@/components/BotSwarm";
 import Sidebar from "@/components/Sidebar";
 import { entityProcess } from "@/lib/api";
@@ -439,18 +438,10 @@ export default function Home() {
     speaking ? "speaking" :
     showInput ? "type & enter" :
     entityState?.active_goals?.length ? `${entityState.active_goals.length} active goals` :
-    "tap orb or press /";
+    "tap to speak or press /";
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-gray-950 flex flex-row">
-        {/* ── Bot Swarm Background ── */}
-      <BotSwarm
-        listening={listening}
-        thinking={thinking}
-        speaking={speaking}
-        activity={activityIntensity}
-        botEvents={botEvents}
-      />
+    <div className="relative h-screen w-full overflow-hidden bg-blue-950 flex flex-row">
 
       {/* ── Main content ── */}
       <div className="relative z-10 flex-[3] min-w-0 flex flex-col px-4">
@@ -554,21 +545,23 @@ export default function Home() {
 
         {/* Center content */}
         <div className="flex-1 flex flex-col items-center justify-center relative">
-          {/* Ambient glow behind neuron (always visible, subtle when idle) */}
-          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full pointer-events-none transition-all duration-1000 ${
-            listening ? "ambient-glow-listening" : thinking ? "ambient-glow-thinking" : speaking ? "ambient-glow-speaking" : "ambient-glow-idle"
-          }`} />
-
-          {/* Holographic neuron */}
-          <div className="flex-shrink-0 relative" style={{ marginTop: taskQuestion ? -80 : -40 }}>
-            <HolographicNeuron listening={listening} speaking={speaking} thinking={thinking} onClick={handleOrbClick} />
+          {/* Centered BotSwarm agents */}
+          <div className="w-[420px] h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl shadow-blue-900/30" style={{ marginTop: taskQuestion ? -80 : -40 }}>
+            <BotSwarm
+              listening={listening}
+              thinking={thinking}
+              speaking={speaking}
+              activity={activityIntensity}
+              botEvents={botEvents}
+              centered
+            />
           </div>
 
-          {/* Subtle prompt below neuron when idle */}
+          {/* Subtle prompt below agents when idle */}
           {!listening && !thinking && !speaking && !taskQuestion && messages.length <= 1 && (
             <div className="mt-4 text-center animate-fade-in">
-              <p className="text-[10px] font-mono text-gray-600/60 tracking-[0.2em]">tap the orb to speak</p>
-              <p className="text-[8px] font-mono text-gray-800/50 mt-1.5 tracking-wider">press <span className="px-1.5 py-0.5 rounded bg-gray-800/30 text-gray-600 text-[7px]">/</span> to type</p>
+              <p className="text-[10px] font-mono text-blue-400/50 tracking-[0.2em]">tap the orb to speak</p>
+              <p className="text-[8px] font-mono text-blue-600/40 mt-1.5 tracking-wider">press <span className="px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-500/50 text-[7px]">/</span> to type</p>
             </div>
           )}
 
