@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BASE = "https://dgfhgjhj-second-brain-api.hf.space";
 
 export async function getHealth() {
   const res = await fetch(`${BASE}/health`);
