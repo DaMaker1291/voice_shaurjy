@@ -72,6 +72,9 @@ export default function Home() {
   });
   const [showVoicePicker, setShowVoicePicker] = useState(false);
   const [showSystemPanel, setShowSystemPanel] = useState(false);
+  const [entityMood, setEntityMood] = useState("curious");
+  const [entityMoodEmoji, setEntityMoodEmoji] = useState("🔍");
+  const [entityThought, setEntityThought] = useState("");
   const capturedTextRef = useRef("");
 
   const addBotEvent = useCallback((type: string, label: string) => {
@@ -79,6 +82,20 @@ export default function Home() {
   }, []);
 
   useEffect(() => { synthRef.current = window.speechSynthesis; }, []);
+
+  // Poll entity state for mood/thought
+  useEffect(() => {
+    const i = setInterval(async () => {
+      try {
+        const res = await fetch(`${BASE}/api/entity/state?user_id=local`);
+        const data = await res.json();
+        if (data.mood) setEntityMood(data.mood);
+        if (data.mood_emoji) setEntityMoodEmoji(data.mood_emoji);
+        if (data.current_thought) setEntityThought(data.current_thought);
+      } catch {}
+    }, 2000);
+    return () => clearInterval(i);
+  }, []);
 
   // Scan device on startup
   useEffect(() => {
@@ -227,6 +244,9 @@ export default function Home() {
         setEntityState(res.entity_state);
         setEntityMemory(res.entity_state.memory_summary || "");
       }
+      if (res.mood) setEntityMood(res.mood);
+      if (res.mood_emoji) setEntityMoodEmoji(res.mood_emoji);
+      if (res.thought) setEntityThought(res.thought);
 
     } catch (e) {
       addBotEvent("error", "backend unreachable");
@@ -473,13 +493,21 @@ export default function Home() {
               {thinking && <div className="absolute inset-0 rounded-full status-ring-thinking" />}
               {speaking && <div className="absolute inset-0 rounded-full status-ring-speaking" />}
             </div>
-            <div className="flex flex-col">
-              <span className="status-text">{scanning ? "scanning device..." : statusText}</span>
-              {entityState && (
-                <span className="text-[8px] font-mono text-purple-500/40 tracking-[0.15em] mt-0.5">
-                  {entityState.active_goals?.length || 0} goals &middot; {entityState.interaction_count} interactions
-                </span>
-              )}
+             <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <span className="status-text">{scanning ? "scanning device..." : statusText}</span>
+                {entityThought && !listening && !thinking && !speaking && (
+                  <span className="text-[8px] font-mono text-purple-500/30 italic tracking-normal max-w-[160px] truncate animate-fade-in">{entityThought}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[9px] font-mono">{entityMoodEmoji} <span className="text-purple-500/40 tracking-[0.15em]">{entityMood}</span></span>
+                {entityState && (
+                  <span className="text-[8px] font-mono text-purple-500/30 tracking-[0.15em]">
+                    {entityState.active_goals?.length || 0} goals &middot; {entityState.interaction_count} interactions
+                  </span>
+                )}
+              </div>
             </div>
             {confidence > 0 && (
               <div className="ml-2 flex items-center gap-1.5">
