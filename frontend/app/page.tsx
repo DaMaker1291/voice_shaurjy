@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import BotSwarm from "@/components/BotSwarm";
 import Sidebar from "@/components/Sidebar";
+import SystemPanel from "@/components/SystemPanel";
 import { entityProcess } from "@/lib/api";
 
 interface Message { role: string; content: string }
@@ -70,6 +71,7 @@ export default function Home() {
     return localStorage.getItem("tts_voice") || "en-US-AriaNeural";
   });
   const [showVoicePicker, setShowVoicePicker] = useState(false);
+  const [showSystemPanel, setShowSystemPanel] = useState(false);
   const capturedTextRef = useRef("");
 
   const addBotEvent = useCallback((type: string, label: string) => {
@@ -498,7 +500,7 @@ export default function Home() {
             )}
             <div className="relative">
               <button
-                onClick={() => setShowVoicePicker((o) => !o)}
+                onClick={() => { setShowVoicePicker((o) => !o); setShowSystemPanel(false); }}
                 className="control-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
                 title="TTS Voice"
               >
@@ -530,6 +532,12 @@ export default function Home() {
                   ))}
                 </div>
               )}
+            </div>
+            <div className="relative">
+              <button onClick={() => { setShowSystemPanel(o => !o); setShowVoicePicker(false); }} className="control-btn p-1.5 rounded-lg" title="System Control">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6V6m0 0a2 2 0 100-4 2 2 0 000 4zm0 0v4m0 0a2 2 0 100 4 2 2 0 000-4zm0 0v4m0 0a2 2 0 100 4 2 2 0 000-4z" /></svg>
+              </button>
+              {showSystemPanel && <SystemPanel onClose={() => setShowSystemPanel(false)} />}
             </div>
             <button onClick={() => setSidebarOpen((o) => !o)} className="control-btn p-1.5 rounded-lg">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

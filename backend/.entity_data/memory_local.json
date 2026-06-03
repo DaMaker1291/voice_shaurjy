@@ -248,10 +248,58 @@
       "response": "\ud83d\udd0a Ah, \"volumr\" - I see what you did there, a little typo, but I'm not \"deaf\" to your request. Setting volume to 50%. By the way, I hope you're ready for a \"sound\" business plan, pun intended. Volume s",
       "action": "",
       "timestamp": "2026-06-03T19:23:39.786512"
+    },
+    {
+      "query": "now the reaction is  complete",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-03T20:05:54.518616"
+    },
+    {
+      "query": "now the reaction is  complete",
+      "response": "Groq API error: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}",
+      "action": "",
+      "timestamp": "2026-06-03T20:05:58.351745"
+    },
+    {
+      "query": "now the reaction is complete",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-03T20:05:58.440262"
+    },
+    {
+      "query": "now the reaction is complete",
+      "response": "Groq API error: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}",
+      "action": "",
+      "timestamp": "2026-06-03T20:05:58.537251"
+    },
+    {
+      "query": "lock my PC",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-03T20:08:04.590765"
+    },
+    {
+      "query": "lock my PC",
+      "response": "\ud83d\udd12 Locking workstation...\nLocked.",
+      "action": "lock",
+      "timestamp": "2026-06-03T20:08:04.975111"
+    },
+    {
+      "query": "scan my network",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-06-03T20:08:41.673253"
+    },
+    {
+      "query": "scan my network",
+      "response": "\ud83c\udf10 Network info\nIP: \nGateway: 192.168.0.1\nDNS: 8.8.8.8\n8.8.4.4\n192.168.0.1\n192.168.44.1\nWiFi: STL9E3X7_EXT",
+      "action": "network_info",
+      "timestamp": "2026-06-03T20:08:44.172155"
     }
   ],
   "learned_patterns": [],
   "proactive_topics": [],
   "personality_notes": [],
-  "last_active": "2026-06-03T19:23:39.786543"
+  "last_active": "2026-06-03T20:08:44.172170"
 }

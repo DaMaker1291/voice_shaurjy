@@ -1,0 +1,196 @@
+"use client";
+import { useState, useEffect, useCallback } from "react";
+import { getSystemStats, getSystemProcesses, getClipboard, takeScreenshot, runAction, setVolume, setBrightness, sendNotification } from "@/lib/api";
+
+interface Stats { cpu: { percent: number; cores: number[]; count: number }; memory: { percent: number; used_gb: number; total_gb: number; free_gb: number }; battery: { percent: number | null; charging: boolean | null; present: boolean }; disk: { percent: number; free_gb: number; total_gb: number; used_gb: number }; network: { bytes_sent_mb: number; bytes_recv_mb: number }; uptime_h: number; boot_time: string }
+interface Proc { pid: number; name: string; cpu: number; mem: number; mem_mb: number }
+
+const BS = ({ p }: { p: number }) => (
+  <div className="w-full h-1.5 rounded-full bg-gray-800/60 overflow-hidden">
+    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p}%`, background: p > 80 ? "linear-gradient(90deg,#ef4444,#dc2626)" : p > 50 ? "linear-gradient(90deg,#f59e0b,#d97706)" : "linear-gradient(90deg,#22c55e,#16a34a)" }} />
+  </div>
+);
+
+export default function SystemPanel({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<"stats" | "procs" | "actions" | "media">("stats");
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [procs, setProcs] = useState<Proc[]>([]);
+  const [clipText, setClipText] = useState("");
+  const [screenshotB64, setScreenshotB64] = useState("");
+  const [actions, setActions] = useState<Record<string, { label: string; tip: string }>>({});
+
+  const refresh = useCallback(async () => {
+    try {
+      const s = await getSystemStats();
+      setStats(s);
+      const p = await getSystemProcesses(10);
+      setProcs(p.processes || []);
+      const c = await getClipboard();
+      setClipText(c.text || "");
+    } catch {}
+  }, []);
+
+  useEffect(() => { refresh(); const i = setInterval(refresh, 3000); return () => clearInterval(i); }, [refresh]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const a = await (await fetch(`http://localhost:8000/api/actions`)).json();
+        setActions(a.actions || {});
+      } catch {}
+    })();
+  }, []);
+
+  const doAction = async (id: string) => {
+    try {
+      await runAction(id);
+      if (onClose) onClose();
+    } catch {}
+  };
+
+  const doScreenshot = async () => {
+    try {
+      const r = await takeScreenshot();
+      if (r.image) setScreenshotB64(`data:image/png;base64,${r.image}`);
+    } catch {}
+  };
+
+  const tabs = [
+    { id: "stats" as const, label: "Stats" },
+    { id: "procs" as const, label: "Processes" },
+    { id: "actions" as const, label: "Actions" },
+  ];
+
+  const quickActions = [
+    { id: "vol_up", icon: " 🔊", label: "Vol Up" },
+    { id: "vol_down", icon: " 🔉", label: "Vol Down" },
+    { id: "vol_mute", icon: " 🔇", label: "Mute" },
+    { id: "brightness_up", icon: " ☀️", label: "Bright+" },
+    { id: "brightness_down", icon: " 🌙", label: "Bright-" },
+    { id: "lock", icon: " 🔒", label: "Lock" },
+    { id: "screenshot", icon: " 📸", label: "SS" },
+    { id: "media_next", icon: " ⏭️", label: "Next" },
+    { id: "media_prev", icon: " ⏮️", label: "Prev" },
+    { id: "media_play", icon: " ▶️", label: "Play" },
+    { id: "media_pause", icon: " ⏸️", label: "Pause" },
+    { id: "process_list", icon: " 📋", label: "Procs" },
+  ];
+
+  return (
+    <div className="absolute right-0 top-9 z-50 w-[28rem] max-w-[90vw] animate-fade-in" style={{ maxHeight: "80vh" }}>
+      <div className="glass-card overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800/20">
+          <span className="text-[9px] font-mono text-purple-400/60 tracking-[0.25em] uppercase">System Control</span>
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors p-1 rounded hover:bg-gray-800/30"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" /></svg></button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-gray-800/20">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} className={`flex-1 text-[9px] font-mono tracking-[0.15em] py-2 transition-colors ${tab === t.id ? "text-purple-400 border-b border-purple-500/40" : "text-gray-600 hover:text-gray-400"}`}>{t.label}</button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div className="overflow-y-auto" style={{ maxHeight: "calc(80vh - 80px)" }}>
+          {tab === "stats" && stats && (
+            <div className="p-4 space-y-3">
+              {/* Quick actions grid */}
+              <div className="grid grid-cols-6 gap-1.5 pb-3 border-b border-gray-800/20">
+                {quickActions.map(a => (
+                  <button key={a.id} onClick={() => doAction(a.id)} className="text-[9px] font-mono text-gray-500 hover:text-purple-400 py-1.5 px-1 rounded-lg hover:bg-purple-900/10 border border-transparent hover:border-purple-500/20 transition-all" title={a.label}>
+                    <div className="text-center"><span className="text-xs">{a.icon.split(" ")[1] || a.icon}</span></div>
+                  </button>
+                ))}
+              </div>
+
+              {/* CPU */}
+              <div><div className="flex justify-between text-[10px] font-mono mb-1"><span className="text-gray-500">CPU</span><span className="text-gray-400">{stats.cpu.percent}%</span></div><BS p={stats.cpu.percent} /></div>
+
+              {/* Memory */}
+              <div><div className="flex justify-between text-[10px] font-mono mb-1"><span className="text-gray-500">RAM</span><span className="text-gray-400">{stats.memory.used_gb}/{stats.memory.total_gb}GB</span></div><BS p={stats.memory.percent} /></div>
+
+              {/* Disk */}
+              <div><div className="flex justify-between text-[10px] font-mono mb-1"><span className="text-gray-500">Disk</span><span className="text-gray-400">{stats.disk.used_gb}/{stats.disk.total_gb}GB</span></div><BS p={stats.disk.percent} /></div>
+
+              {/* Battery */}
+              {stats.battery.present && (
+                <div><div className="flex justify-between text-[10px] font-mono mb-1"><span className="text-gray-500">Battery</span><span className="text-gray-400">{stats.battery.percent}% {stats.battery.charging ? "⚡" : "🔋"}</span></div><BS p={stats.battery.percent ?? 0} /></div>
+              )}
+
+              {/* Info grid */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-800/20">
+                <div className="text-[9px] font-mono text-gray-600"><span className="block text-gray-500/60 text-[8px] tracking-wider">UPTIME</span>{stats.uptime_h}h</div>
+                <div className="text-[9px] font-mono text-gray-600"><span className="block text-gray-500/60 text-[8px] tracking-wider">CORES</span>{stats.cpu.count}</div>
+                <div className="text-[9px] font-mono text-gray-600"><span className="block text-gray-500/60 text-[8px] tracking-wider">NET SENT</span>{stats.network.bytes_sent_mb}MB</div>
+                <div className="text-[9px] font-mono text-gray-600"><span className="block text-gray-500/60 text-[8px] tracking-wider">NET RECV</span>{stats.network.bytes_recv_mb}MB</div>
+              </div>
+
+              {/* Clipboard */}
+              <div className="pt-2 border-t border-gray-800/20">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[8px] font-mono text-gray-600 tracking-[0.2em] uppercase">Clipboard</span>
+                  <button onClick={() => doAction("clipboard_clear")} className="text-[8px] font-mono text-gray-700 hover:text-gray-400 transition-colors">clear</button>
+                </div>
+                <p className="text-[10px] font-mono text-gray-500 bg-gray-900/40 rounded-lg px-3 py-2 truncate">{clipText || "empty"}</p>
+              </div>
+
+              {/* Screenshot */}
+              <div className="pt-2 border-t border-gray-800/20">
+                <button onClick={doScreenshot} className="w-full text-[9px] font-mono text-gray-500 hover:text-purple-400 py-2 rounded-lg border border-dashed border-gray-800/30 hover:border-purple-500/30 transition-all text-center">
+                  📸 Take Screenshot
+                </button>
+                {screenshotB64 && (
+                  <div className="mt-2 rounded-lg overflow-hidden border border-gray-800/30">
+                    <img src={screenshotB64} alt="screenshot" className="w-full" />
+                    <button onClick={() => setScreenshotB64("")} className="w-full text-[8px] font-mono text-gray-700 hover:text-gray-400 py-1 transition-colors">dismiss</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === "procs" && (
+            <div className="p-3">
+              <div className="flex justify-between text-[8px] font-mono text-gray-600 tracking-wider uppercase px-2 pb-1.5 border-b border-gray-800/20">
+                <span className="w-7">PID</span>
+                <span className="flex-1 ml-2">Name</span>
+                <span className="w-10 text-right">CPU%</span>
+                <span className="w-12 text-right">Mem MB</span>
+              </div>
+              <div className="space-y-0.5 mt-1">
+                {procs.map(p => (
+                  <div key={p.pid} className="flex items-center text-[10px] font-mono text-gray-500 px-2 py-1 rounded hover:bg-gray-800/20 transition-colors">
+                    <span className="w-7 text-gray-600">{p.pid}</span>
+                    <span className="flex-1 ml-2 truncate">{p.name}</span>
+                    <span className="w-10 text-right" style={{ color: p.cpu > 10 ? "#ef4444" : p.cpu > 5 ? "#f59e0b" : "#6b7280" }}>{p.cpu.toFixed(1)}</span>
+                    <span className="w-12 text-right text-gray-600">{p.mem_mb.toFixed(0)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab === "actions" && (
+            <div className="p-3">
+              <input type="text" placeholder="Search actions..." className="w-full text-[10px] font-mono bg-gray-900/40 border border-gray-800/30 rounded-lg px-3 py-1.5 text-gray-400 outline-none focus:border-purple-500/30 transition-colors mb-3" onChange={async (e) => {
+                const q = e.target.value;
+                if (!q) { try { const a = await (await fetch(`http://localhost:8000/api/actions`)).json(); setActions(a.actions || {}); } catch {} return; }
+                try { const a = await (await fetch(`http://localhost:8000/api/actions/search?q=${encodeURIComponent(q)}`)).json(); setActions(a.actions || {}); } catch {}
+              }} />
+              <div className="grid grid-cols-3 gap-1">
+                {Object.entries(actions).slice(0, 90).map(([id, info]) => (
+                  <button key={id} onClick={() => doAction(id)} className="text-[8px] font-mono text-gray-500 hover:text-purple-400 truncate px-2 py-1 rounded hover:bg-purple-900/10 transition-all text-left" title={info.tip || id}>
+                    {info.label || id}
+                  </button>
+                ))}
+              </div>
+              {Object.keys(actions).length > 90 && <p className="text-[8px] font-mono text-gray-700 text-center mt-2">{Object.keys(actions).length} total actions</p>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

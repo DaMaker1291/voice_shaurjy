@@ -122,3 +122,87 @@ export async function getWorkflowStatus(executionId: string) {
   const res = await fetch(`${BASE}/api/workflow/status?execution_id=${executionId}`);
   return res.json();
 }
+
+// ── System API ────────────────────────────────────────────────────
+
+export async function getSystemStats() {
+  const res = await fetch(`${BASE}/api/system/stats`);
+  return res.json();
+}
+
+export async function getSystemProcesses(top = 15) {
+  const res = await fetch(`${BASE}/api/system/processes?top=${top}`);
+  return res.json();
+}
+
+export async function getSystemInfo() {
+  const res = await fetch(`${BASE}/api/system/info`);
+  return res.json();
+}
+
+export async function getClipboard() {
+  const res = await fetch(`${BASE}/api/clipboard`);
+  return res.json();
+}
+
+export async function setClipboard(text: string) {
+  const res = await fetch(`${BASE}/api/clipboard`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  return res.json();
+}
+
+export async function getMediaNowPlaying() {
+  const res = await fetch(`${BASE}/api/media/nowplaying`);
+  return res.json();
+}
+
+export async function sendNotification(message: string, title = "Jason") {
+  const res = await fetch(`${BASE}/api/notify?title=${encodeURIComponent(title)}&message=${encodeURIComponent(message)}`, { method: "POST" });
+  return res.json();
+}
+
+export async function listActions() {
+  const res = await fetch(`${BASE}/api/actions`);
+  return res.json();
+}
+
+export async function runAction(actionId: string, params = "") {
+  const res = await fetch(`${BASE}/api/actions/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action_id: actionId, params }),
+  });
+  return res.json();
+}
+
+export async function takeScreenshot() {
+  const res = await fetch(`${BASE}/api/screenshot`, { method: "POST" });
+  return res.json();
+}
+
+export async function setVolume(level?: number, action?: string) {
+  const body: Record<string, unknown> = {};
+  if (level !== undefined) body.level = level;
+  if (action) body.action = action;
+  const res = await fetch(`${BASE}/api/system/volume`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+export async function setBrightness(level?: number, action?: string) {
+  const body: Record<string, unknown> = {};
+  if (level !== undefined) body.level = level;
+  if (action) body.action = action;
+  const res = await fetch(`${BASE}/api/system/brightness`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}

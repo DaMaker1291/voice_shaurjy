@@ -413,3 +413,175 @@ async def list_scenes():
             {"id": "file", "name": "Files", "description": "File system tree with operations animation"},
         ]
     }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# NEW: SYSTEM CONTROL API — structured JSON for rich frontend UIs
+# ═══════════════════════════════════════════════════════════════════
+
+class ActionRequest(BaseModel):
+    action_id: str
+    params: str = ""
+
+@ app.get("/api/system/stats")
+async def system_stats():
+    """Live CPU, RAM, battery, disk, network stats as structured JSON."""
+    import psutil, time
+    cpu_pct = psutil.cpu_percent(interval=0.3)
+    cpu_per_core = psutil.cpu_percent(interval=0, percpu=True)
+    mem = psutil.virtual_memory()
+    bat = psutil.sensors_battery()
+    disk = psutil.disk_usage("/")
+    net = psutil.net_io_counters()
+    boot_ts = psutil.boot_time()
+    uptime_h = round((time.time() - boot_ts) / 3600, 1)
+    return {
+        "cpu": {"percent": cpu_pct, "cores": cpu_per_core, "count": len(cpu_per_core)},
+        "memory": {"percent": mem.percent, "used_gb": round(mem.used / 1e9, 1), "total_gb": round(mem.total / 1e9, 1), "free_gb": round(mem.available / 1e9, 1)},
+        "battery": {"percent": bat.percent if bat else None, "charging": bat.power_plugged if bat else None, "present": bat is not None},
+        "disk": {"percent": disk.percent, "free_gb": round(disk.free / 1e9, 1), "total_gb": round(disk.total / 1e9, 1), "used_gb": round(disk.used / 1e9, 1)},
+        "network": {"bytes_sent_mb": round(net.bytes_sent / 1e6, 1), "bytes_recv_mb": round(net.bytes_recv / 1e6, 1)},
+        "uptime_h": uptime_h, "boot_time": datetime.fromtimestamp(boot_ts).isoformat(),
+    }
+
+
+@ app.get("/api/system/processes")
+async def system_processes(top: int = 15):
+    """Top processes by CPU usage."""
+    import psutil
+    procs = []
+    for p in sorted(psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent", "memory_info"]), key=lambda p: p.info["cpu_percent"] or 0, reverse=True)[:top]:
+        try:
+            mi = p.info["memory_info"]
+            mem_mb = round(mi.rss / 1e6, 1) if mi else 0
+            procs.append({"pid": p.info["pid"], "name": p.info["name"], "cpu": p.info["cpu_percent"] or 0, "mem": round(p.info["memory_percent"] or 0, 1), "mem_mb": mem_mb})
+        except: pass
+    return {"processes": procs}
+
+
+@ app.get("/api/system/info")
+async def system_info_json():
+    """OS, hardware, user info as JSON."""
+    from actions import execute_action
+    os_line = execute_action("os_info", "")
+    cpu_line = execute_action("cpu_usage", "")
+    mem_line = execute_action("memory_usage", "")
+    return {"os": os_line, "cpu": cpu_line, "memory": mem_line}
+
+
+@ app.get("/api/clipboard")
+async def clipboard_get():
+    """Get clipboard content."""
+    from actions import execute_action
+    text = execute_action("clipboard_show", "")
+    return {"text": text.replace("Clipboard: ", "")}
+
+
+@ app.post("/api/clipboard")
+async def clipboard_set(text: str):
+    """Set clipboard content."""
+    from actions import execute_action
+    result = execute_action("clipboard_copy", text)
+    return {"status": result}
+
+
+@ app.get("/api/media/nowplaying")
+async def media_nowplaying():
+    """Get current media info (uses PS to query)."""
+    try:
+        from ps_executor import ps as _ps
+        info = _ps('''
+            $s=New-Object -ComObject "WScript.Shell";
+            $s.SendKeys("{MEDIA_INFO}");
+            Start-Sleep -Milliseconds 200;
+            $t=$s.AppActivate("");  # dummy - media info unreliable via PS
+            "Media query sent"
+        ''')
+        return {"status": "ok", "text": info}
+    except: return {"status": "no_media", "text": "No media detected"}
+
+
+@ app.post("/api/notify")
+async def send_notification(title: str = "Jason", message: str = ""):
+    """Send Windows toast notification."""
+    from actions import execute_action
+    result = execute_action("send_notification", f"send notification {message}")
+    return {"status": result}
+
+
+@ app.get("/api/actions")
+async def list_all_actions():
+    """List all available action executors."""
+    from actions import get_all_actions
+    return {"actions": get_all_actions(), "count": len(get_all_actions())}
+
+
+@ app.post("/api/actions/run")
+async def run_action(req: ActionRequest):
+    """Execute any action by ID with optional params."""
+    from actions import execute_action, detect_action
+    try:
+        aid = detect_action(req.action_id) or req.action_id
+        text = req.params or req.action_id
+        result = execute_action(aid, text)
+        return {"status": "ok", "action_id": aid, "result": result}
+    except Exception as e:
+        return {"status": "error", "action_id": req.action_id, "error": str(e)}
+
+
+@ app.get("/api/actions/search")
+async def action_search(q: str = ""):
+    """Search available actions by keyword."""
+    from actions import get_all_actions, detect_action
+    all_actions = get_all_actions()
+    if not q: return {"actions": all_actions, "count": len(all_actions)}
+    ql = q.lower()
+    matched = {k: v for k, v in all_actions.items() if ql in k or ql in v.get("label", "").lower() or ql in v.get("tip", "").lower()}
+    return {"actions": matched, "count": len(matched)}
+
+
+@ app.post("/api/screenshot")
+async def take_screenshot():
+    """Take screenshot and return as base64."""
+    import base64, os, time
+    path = os.path.expanduser("~/Desktop/_jason_screenshot.png")
+    from actions import execute_action
+    result = execute_action("screenshot", "")
+    if not os.path.exists(path):
+        return {"status": "error", "text": "Screenshot failed"}
+    with open(path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    os.unlink(path)
+    return {"status": "ok", "image": b64, "text": result}
+
+
+@ app.post("/api/system/volume")
+async def set_volume(level: int = -1, action: str = ""):
+    """Set/get volume. level 0-100, or action: up/down/mute."""
+    from actions import execute_action
+    if level >= 0:
+        result = execute_action("vol_set", str(level))
+    elif action == "up":
+        result = execute_action("vol_up", "")
+    elif action == "down":
+        result = execute_action("vol_down", "")
+    elif action == "mute":
+        result = execute_action("vol_mute", "")
+    else:
+        result = execute_action("vol_level", "")
+    return {"status": "ok", "result": result}
+
+
+@ app.post("/api/system/brightness")
+async def set_brightness(level: int = -1, action: str = ""):
+    """Set/get brightness. level 0-100, or action: up/down."""
+    from actions import execute_action
+    if level >= 0:
+        result = execute_action("brightness_set", str(level))
+    elif action == "up":
+        result = execute_action("brightness_up", "")
+    elif action == "down":
+        result = execute_action("brightness_down", "")
+    else:
+        result = execute_action("display_info", "")
+    return {"status": "ok", "result": result} 
