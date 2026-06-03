@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getSystemStats, getSystemProcesses, getClipboard, takeScreenshot, runAction, setVolume, setBrightness, sendNotification, webSearch, getWeather } from "@/lib/api";
 
 interface Stats { cpu: { percent: number; cores: number[]; count: number }; memory: { percent: number; used_gb: number; total_gb: number; free_gb: number }; battery: { percent: number | null; charging: boolean | null; present: boolean }; disk: { percent: number; free_gb: number; total_gb: number; used_gb: number }; network: { bytes_sent_mb: number; bytes_recv_mb: number }; uptime_h: number; boot_time: string }
@@ -12,7 +12,7 @@ const BS = ({ p }: { p: number }) => (
 );
 
 export default function SystemPanel({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<"stats" | "procs" | "actions" | "search" | "weather">("stats");
+  const [tab, setTab] = useState<"stats" | "procs" | "actions" | "search" | "weather" | "tools">("stats");
   const [stats, setStats] = useState<Stats | null>(null);
   const [procs, setProcs] = useState<Proc[]>([]);
   const [clipText, setClipText] = useState("");
@@ -24,6 +24,11 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
   const [weatherCity, setWeatherCity] = useState("");
   const [weatherData, setWeatherData] = useState<any>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
+  const [notifMsg, setNotifMsg] = useState("");
+  const [timerSecs, setTimerSecs] = useState(60);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerRemaining, setTimerRemaining] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -67,6 +72,7 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
     { id: "actions" as const, label: "Actions" },
     { id: "search" as const, label: "Search" },
     { id: "weather" as const, label: "Weather" },
+    { id: "tools" as const, label: "Tools" },
   ];
 
   const quickActions = [
@@ -224,6 +230,67 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
               )}
               {weatherData?.error && <p className="text-[10px] font-mono text-red-400/60 text-center py-4">Could not find weather</p>}
               {!weatherData && !weatherLoading && <p className="text-[10px] font-mono text-gray-700 text-center py-8">Enter a city to check weather</p>}
+            </div>
+          )}
+
+          {tab === "tools" && (
+            <div className="p-3 space-y-3">
+              {/* Notification sender */}
+              <div>
+                <span className="text-[8px] font-mono text-gray-600 tracking-[0.2em] uppercase block mb-1.5">Send Notification</span>
+                <div className="flex gap-2">
+                  <input type="text" value={notifMsg} onChange={e => setNotifMsg(e.target.value)} onKeyDown={async e => { if (e.key === "Enter" && notifMsg.trim()) { try { await sendNotification(notifMsg); setNotifMsg(""); } catch {} } }} placeholder="Message to send..." className="flex-1 text-[10px] font-mono bg-gray-900/40 border border-gray-800/30 rounded-lg px-3 py-1.5 text-gray-400 outline-none focus:border-purple-500/30 transition-colors" />
+                  <button onClick={async () => { if (!notifMsg.trim()) return; try { await sendNotification(notifMsg); setNotifMsg(""); } catch {} }} className="text-[9px] font-mono text-purple-400/60 hover:text-purple-400 px-3 py-1.5 rounded-lg border border-purple-500/20 hover:border-purple-500/40 transition-all">Send</button>
+                </div>
+              </div>
+
+              {/* Timer */}
+              <div className="pt-2 border-t border-gray-800/20">
+                <span className="text-[8px] font-mono text-gray-600 tracking-[0.2em] uppercase block mb-1.5">Timer</span>
+                <div className="flex gap-2 items-center">
+                  <input type="number" value={timerSecs} onChange={e => setTimerSecs(parseInt(e.target.value) || 60)} min={1} max={3600} className="w-20 text-[10px] font-mono bg-gray-900/40 border border-gray-800/30 rounded-lg px-2.5 py-1.5 text-gray-400 outline-none focus:border-purple-500/30 transition-colors" />
+                  <span className="text-[9px] font-mono text-gray-600">sec</span>
+                  <button onClick={() => {
+                    if (timerRunning) {
+                      if (timerRef.current) clearInterval(timerRef.current);
+                      setTimerRunning(false);
+                    } else {
+                      setTimerRemaining(timerSecs);
+                      setTimerRunning(true);
+                      timerRef.current = setInterval(() => {
+                        setTimerRemaining(p => {
+                          if (p <= 1) { clearInterval(timerRef.current!); setTimerRunning(false); return 0; }
+                          return p - 1;
+                        });
+                      }, 1000);
+                    }
+                  }} className="text-[9px] font-mono text-purple-400/60 hover:text-purple-400 px-3 py-1.5 rounded-lg border border-purple-500/20 hover:border-purple-500/40 transition-all">{timerRunning ? "Stop" : "Start"}</button>
+                </div>
+                {(timerRunning || timerRemaining > 0) && (
+                  <div className="mt-2">
+                    <div className="w-full h-2 rounded-full bg-gray-800/60 overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${(timerRemaining / timerSecs) * 100}%`, background: "linear-gradient(90deg,#22c55e,#16a34a)" }} />
+                    </div>
+                    <p className="text-center text-lg font-mono text-gray-400 mt-1">{Math.floor(timerRemaining / 60)}:{(timerRemaining % 60).toString().padStart(2, "0")}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Math eval */}
+              <div className="pt-2 border-t border-gray-800/20">
+                <span className="text-[8px] font-mono text-gray-600 tracking-[0.2em] uppercase block mb-1.5">Quick Math</span>
+                <button onClick={async () => {
+                  const expr = prompt("Enter expression:");
+                  if (expr) { try { const r = await runAction("math_eval", expr); alert(r.result || r.error); } catch {} }
+                }} className="text-[9px] font-mono text-purple-400/60 hover:text-purple-400 px-3 py-1.5 rounded-lg border border-purple-500/20 hover:border-purple-500/40 transition-all w-full text-center">Calculate</button>
+              </div>
+
+              {/* Public IP */}
+              <div className="pt-2 border-t border-gray-800/20">
+                <button onClick={async () => {
+                  try { const r = await runAction("public_ip"); alert(r.result || r.error); } catch {}
+                }} className="text-[9px] font-mono text-purple-400/60 hover:text-purple-400 px-3 py-1.5 rounded-lg border border-purple-500/20 hover:border-purple-500/40 transition-all w-full text-center">Check Public IP</button>
+              </div>
             </div>
           )}
 
