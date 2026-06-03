@@ -552,7 +552,7 @@ export default function Home() {
         {/* Center content */}
         <div className="flex-1 flex flex-col items-center justify-center relative">
           {/* Centered BotSwarm agents */}
-          <div className="w-[420px] h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl shadow-blue-900/30" style={{ marginTop: taskQuestion ? -80 : -40 }}>
+          <div className="w-[420px] h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl shadow-blue-900/30 cursor-pointer" style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
             <BotSwarm
               listening={listening}
               thinking={thinking}
