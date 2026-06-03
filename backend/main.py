@@ -572,6 +572,75 @@ async def set_volume(level: int = -1, action: str = ""):
     return {"status": "ok", "result": result}
 
 
+@ app.get("/api/web/search")
+async def web_search(q: str = ""):
+    """Search the web via DuckDuckGo and return structured results."""
+    if not q:
+        return {"results": []}
+    try:
+        import urllib.request, urllib.parse, json
+        url = f"https://lite.duckduckgo.com/lite/?q={urllib.parse.quote(q)}"
+        # Alternative: use a free API
+        try:
+            req = urllib.request.Request(f"https://api.duckduckgo.com/?q={urllib.parse.quote(q)}&format=json&pretty=1", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+                results = []
+                if data.get("AbstractText"):
+                    results.append({"title": data.get("Heading", q), "snippet": data.get("AbstractText"), "url": data.get("AbstractURL", "")})
+                for topic in data.get("RelatedTopics", [])[:8]:
+                    if "Text" in topic:
+                        results.append({"title": topic.get("Text", "").split(" - ")[0], "snippet": topic.get("Text", ""), "url": topic.get("FirstURL", "")})
+                    elif "Topics" in topic:
+                        for st in topic["Topics"][:3]:
+                            results.append({"title": st.get("Text", "").split(" - ")[0], "snippet": st.get("Text", ""), "url": st.get("FirstURL", "")})
+                return {"query": q, "results": results[:10]}
+        except:
+            pass
+        # Fallback: scrape Google
+        req = urllib.request.Request(f"https://www.google.com/search?q={urllib.parse.quote(q)}&num=10", headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+            results = []
+            import re
+            for m in re.finditer(r'<a[^>]*href="/url\?q=([^"&]+)[^"]*"[^>]*>(.*?)</a>', html)[:10]:
+                url = urllib.parse.unquote(m.group(1))
+                title = re.sub(r"<[^>]+>", "", m.group(2)).strip()
+                if title and not url.startswith("http"):
+                    continue
+                results.append({"title": title[:100], "url": url, "snippet": ""})
+            return {"query": q, "results": results[:8]}
+    except Exception as e:
+        return {"query": q, "results": [], "error": str(e)}
+
+
+@ app.get("/api/web/weather")
+async def web_weather(city: str = ""):
+    """Get weather via wttr.in."""
+    try:
+        import urllib.request, json
+        loc = city or "London"
+        req = urllib.request.Request(f"https://wttr.in/{urllib.parse.quote(loc)}?format=j1", headers={"User-Agent": "curl/8.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            cc = data.get("current_condition", [{}])[0]
+            area = data.get("nearest_area", [{}])[0]
+            return {
+                "location": f"{area.get('areaName', [{}])[0].get('value', loc)}, {area.get('country', [{}])[0].get('value', '')}",
+                "temp_c": cc.get("temp_C", "?"),
+                "temp_f": cc.get("temp_F", "?"),
+                "condition": cc.get("weatherDesc", [{}])[0].get("value", "Unknown"),
+                "humidity": cc.get("humidity", "?"),
+                "wind_kph": cc.get("windspeedKmph", "?"),
+                "wind_dir": cc.get("winddir16Point", "?"),
+                "feels_like": cc.get("FeelsLikeC", "?"),
+                "uv": cc.get("uvIndex", "?"),
+                "visibility": cc.get("visibility", "?"),
+            }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @ app.post("/api/system/brightness")
 async def set_brightness(level: int = -1, action: str = ""):
     """Set/get brightness. level 0-100, or action: up/down."""

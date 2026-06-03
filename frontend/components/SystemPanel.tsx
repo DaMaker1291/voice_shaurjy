@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { getSystemStats, getSystemProcesses, getClipboard, takeScreenshot, runAction, setVolume, setBrightness, sendNotification } from "@/lib/api";
+import { getSystemStats, getSystemProcesses, getClipboard, takeScreenshot, runAction, setVolume, setBrightness, sendNotification, webSearch, getWeather } from "@/lib/api";
 
 interface Stats { cpu: { percent: number; cores: number[]; count: number }; memory: { percent: number; used_gb: number; total_gb: number; free_gb: number }; battery: { percent: number | null; charging: boolean | null; present: boolean }; disk: { percent: number; free_gb: number; total_gb: number; used_gb: number }; network: { bytes_sent_mb: number; bytes_recv_mb: number }; uptime_h: number; boot_time: string }
 interface Proc { pid: number; name: string; cpu: number; mem: number; mem_mb: number }
@@ -12,12 +12,18 @@ const BS = ({ p }: { p: number }) => (
 );
 
 export default function SystemPanel({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<"stats" | "procs" | "actions" | "media">("stats");
+  const [tab, setTab] = useState<"stats" | "procs" | "actions" | "search" | "weather">("stats");
   const [stats, setStats] = useState<Stats | null>(null);
   const [procs, setProcs] = useState<Proc[]>([]);
   const [clipText, setClipText] = useState("");
   const [screenshotB64, setScreenshotB64] = useState("");
   const [actions, setActions] = useState<Record<string, { label: string; tip: string }>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<{ title: string; url: string; snippet: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [weatherCity, setWeatherCity] = useState("");
+  const [weatherData, setWeatherData] = useState<any>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -57,8 +63,10 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
 
   const tabs = [
     { id: "stats" as const, label: "Stats" },
-    { id: "procs" as const, label: "Processes" },
+    { id: "procs" as const, label: "Procs" },
     { id: "actions" as const, label: "Actions" },
+    { id: "search" as const, label: "Search" },
+    { id: "weather" as const, label: "Weather" },
   ];
 
   const quickActions = [
@@ -169,6 +177,53 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {tab === "search" && (
+            <div className="p-3">
+              <div className="flex gap-2 mb-3">
+                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={async e => { if (e.key === "Enter" && searchQuery.trim()) { setSearching(true); try { const r = await webSearch(searchQuery); setSearchResults(r.results || []); } catch {} setSearching(false); } }} placeholder="Search the web..." className="flex-1 text-[10px] font-mono bg-gray-900/40 border border-gray-800/30 rounded-lg px-3 py-1.5 text-gray-400 outline-none focus:border-purple-500/30 transition-colors" />
+                <button onClick={async () => { if (!searchQuery.trim()) return; setSearching(true); try { const r = await webSearch(searchQuery); setSearchResults(r.results || []); } catch {} setSearching(false); }} disabled={searching} className="text-[9px] font-mono text-purple-400/60 hover:text-purple-400 px-3 py-1.5 rounded-lg border border-purple-500/20 hover:border-purple-500/40 transition-all">{searching ? "..." : "Go"}</button>
+              </div>
+              <div className="space-y-2">
+                {searchResults.map((r, i) => (
+                  <div key={i} className="border border-gray-800/20 rounded-lg p-2.5 hover:border-purple-500/20 transition-colors">
+                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono text-purple-400/80 hover:text-purple-300 line-clamp-1 block">{r.title || r.url.slice(0, 60)}</a>
+                    {r.snippet && <p className="text-[9px] font-mono text-gray-600 mt-1 line-clamp-2">{r.snippet.slice(0, 200)}</p>}
+                    <span className="text-[7px] font-mono text-gray-700 mt-1 block truncate">{r.url}</span>
+                  </div>
+                ))}
+                {searchResults.length === 0 && !searching && <p className="text-[10px] font-mono text-gray-700 text-center py-8">Type a query and press Enter</p>}
+              </div>
+            </div>
+          )}
+
+          {tab === "weather" && (
+            <div className="p-3">
+              <div className="flex gap-2 mb-3">
+                <input type="text" value={weatherCity} onChange={e => setWeatherCity(e.target.value)} onKeyDown={async e => { if (e.key === "Enter" && weatherCity.trim()) { setWeatherLoading(true); try { const w = await getWeather(weatherCity); setWeatherData(w); } catch {} setWeatherLoading(false); } }} placeholder="City name..." className="flex-1 text-[10px] font-mono bg-gray-900/40 border border-gray-800/30 rounded-lg px-3 py-1.5 text-gray-400 outline-none focus:border-purple-500/30 transition-colors" />
+                <button onClick={async () => { if (!weatherCity.trim()) return; setWeatherLoading(true); try { const w = await getWeather(weatherCity); setWeatherData(w); } catch {} setWeatherLoading(false); }} disabled={weatherLoading} className="text-[9px] font-mono text-purple-400/60 hover:text-purple-400 px-3 py-1.5 rounded-lg border border-purple-500/20 hover:border-purple-500/40 transition-all">{weatherLoading ? "..." : "Go"}</button>
+              </div>
+              {weatherData && !weatherData.error && (
+                <div className="space-y-2">
+                  <div className="text-center py-3">
+                    <p className="text-[11px] font-mono text-gray-400">{weatherData.location}</p>
+                    <p className="text-3xl font-mono text-gray-200 mt-1">{weatherData.temp_c}°C</p>
+                    <p className="text-[10px] font-mono text-gray-500 mt-0.5">feels like {weatherData.feels_like}°C</p>
+                    <p className="text-[10px] font-mono text-purple-400/60 mt-1">{weatherData.condition}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="text-[9px] font-mono text-gray-600 bg-gray-900/30 rounded-lg p-2"><span className="block text-gray-500/60 text-[8px] tracking-wider">HUMIDITY</span>{weatherData.humidity}%</div>
+                    <div className="text-[9px] font-mono text-gray-600 bg-gray-900/30 rounded-lg p-2"><span className="block text-gray-500/60 text-[8px] tracking-wider">WIND</span>{weatherData.wind_kph} kph {weatherData.wind_dir}</div>
+                    <div className="text-[9px] font-mono text-gray-600 bg-gray-900/30 rounded-lg p-2"><span className="block text-gray-500/60 text-[8px] tracking-wider">UV</span>{weatherData.uv}</div>
+                    <div className="text-[9px] font-mono text-gray-600 bg-gray-900/30 rounded-lg p-2"><span className="block text-gray-500/60 text-[8px] tracking-wider">VISIBILITY</span>{weatherData.visibility} km</div>
+                  </div>
+                  <div className="text-[9px] font-mono text-center"><span className="text-gray-600">{weatherData.temp_f}°F</span></div>
+                </div>
+              )}
+              {weatherData?.error && <p className="text-[10px] font-mono text-red-400/60 text-center py-4">Could not find weather</p>}
+              {!weatherData && !weatherLoading && <p className="text-[10px] font-mono text-gray-700 text-center py-8">Enter a city to check weather</p>}
             </div>
           )}
 

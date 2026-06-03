@@ -195,6 +195,16 @@ export async function setVolume(level?: number, action?: string) {
   return res.json();
 }
 
+export async function webSearch(q: string) {
+  const res = await fetch(`${BASE}/api/web/search?q=${encodeURIComponent(q)}`);
+  return res.json();
+}
+
+export async function getWeather(city = "") {
+  const res = await fetch(`${BASE}/api/web/weather?city=${encodeURIComponent(city)}`);
+  return res.json();
+}
+
 export async function setBrightness(level?: number, action?: string) {
   const body: Record<string, unknown> = {};
   if (level !== undefined) body.level = level;
