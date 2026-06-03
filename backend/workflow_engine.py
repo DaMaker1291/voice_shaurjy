@@ -16,7 +16,19 @@ AVAILABLE_ACTIONS = [
     "ask", "present", "groq_generate", "open_url", "search_google",
     "type_keys", "run", "onenote_write", "word_write", "excel_write",
     "wait", "screenshot", "send_keys", "click", "scroll",
+    # PLUS all 215+ Windows actions — resolved at runtime via action executor
+    "native_action",
 ]
+
+# Load all action IDs dynamically
+def _get_all_action_ids() -> list[str]:
+    try:
+        from actions import get_all_actions
+        return list(get_all_actions().keys())
+    except:
+        return []
+
+ALL_ACTIONS = _get_all_action_ids()
 
 
 # ── Workflow Definition ────────────────────────────────────────────
@@ -79,9 +91,12 @@ def generate_workflow(user_input: str, context: dict = None) -> Workflow:
         if memory:
             context_str += memory[:300] + "\n"
 
+    native_actions_str = "\n".join(f"  - {a}: Execute {a} action (params: text — natural language command)"
+                                    for a in ALL_ACTIONS[:60]) if ALL_ACTIONS else ""
+
     prompt = f"""You are a workflow designer AI. Given a user request, design a multi-step workflow to accomplish it on Windows.
 
-Available actions:
+=== AVAILABLE ACTIONS ===
 - ask: Ask user for information (params: question, field)
 - present: Show final results to user
 - groq_generate: Generate content using AI (params: prompt_template)
@@ -97,6 +112,10 @@ Available actions:
 - send_keys: Send keyboard shortcut (params: keys)
 - click: Click mouse (params: button)
 - scroll: Scroll page (params: amount)
+- native_action: Execute ANY of 215+ Windows actions by ID (params: action_id, text)
+
+Native Windows actions available:
+{native_actions_str[:800]}
 
 User request: {user_input}
 
@@ -114,11 +133,12 @@ Design a 3-8 step workflow. Each step should have:
 IMPORTANT RULES:
 - First step should ask the user for key info if needed
 - Break the task into concrete, executable steps
+- Use native_action for direct Windows actions (volume, brightness, wifi, files, etc.)
 - Use groq_generate with detailed prompts for AI-powered steps
 - Use open_url/search_google for web research
 - Use onenote_write/word_write/excel_write for document tasks
 - End with a present step to show results
-- Steps that don't depend on each other can run in parallel (share the same depends_on)
+- Steps that don't depend on each other can run in parallel
 
 Output ONLY valid JSON. No other text.
 
@@ -130,7 +150,7 @@ Format:
     {{
       "id": "step_name",
       "action": "ask",
-      "params": {{"question": "What info do you need?", "field": "info_field"}},
+      "params": {{"question": "What info?", "field": "info"}},
       "depends_on": [],
       "label": "Get Info",
       "retry_count": 2
@@ -342,6 +362,18 @@ class WorkflowEngine:
                 amount = int(resolved_params.get("amount", 1))
                 _ps(f'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Mouse]::Wheel({amount})')
                 result = f"Scrolled {amount}"
+            elif action == "native_action":
+                from actions import execute_action, detect_action
+                action_id = resolved_params.get("action_id", "")
+                text = resolved_params.get("text", action_id)
+                aid = detect_action(text) or action_id
+                if aid:
+                    try:
+                        result = execute_action(aid, text)
+                    except Exception as e:
+                        result = f"Action '{aid}' error: {e}"
+                else:
+                    result = f"Could not detect action in: {text}"
             else:
                 if action_executor:
                     try:

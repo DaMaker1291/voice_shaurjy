@@ -195,6 +195,27 @@ export async function setVolume(level?: number, action?: string) {
   return res.json();
 }
 
+// ── Computer Agent API ─────────────────────────────────────────
+
+export async function computerRunTask(description: string) {
+  const res = await fetch(`${BASE}/api/computer/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: description }),
+  });
+  return res.json();
+}
+
+export async function computerTaskStatus(taskId = "") {
+  const res = await fetch(`${BASE}/api/computer/status?task_id=${encodeURIComponent(taskId)}`);
+  return res.json();
+}
+
+export async function computerStopTask() {
+  const res = await fetch(`${BASE}/api/computer/stop`, { method: "POST" });
+  return res.json();
+}
+
 export async function webSearch(q: string) {
   const res = await fetch(`${BASE}/api/web/search?q=${encodeURIComponent(q)}`);
   return res.json();

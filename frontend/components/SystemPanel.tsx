@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getSystemStats, getSystemProcesses, getClipboard, takeScreenshot, runAction, setVolume, setBrightness, sendNotification, webSearch, getWeather } from "@/lib/api";
+import { getSystemStats, getSystemProcesses, getClipboard, takeScreenshot, runAction, setVolume, setBrightness, sendNotification, webSearch, getWeather, computerRunTask, computerTaskStatus, computerStopTask } from "@/lib/api";
 
 interface Stats { cpu: { percent: number; cores: number[]; count: number }; memory: { percent: number; used_gb: number; total_gb: number; free_gb: number }; battery: { percent: number | null; charging: boolean | null; present: boolean }; disk: { percent: number; free_gb: number; total_gb: number; used_gb: number }; network: { bytes_sent_mb: number; bytes_recv_mb: number }; uptime_h: number; boot_time: string }
 interface Proc { pid: number; name: string; cpu: number; mem: number; mem_mb: number }
@@ -12,7 +12,11 @@ const BS = ({ p }: { p: number }) => (
 );
 
 export default function SystemPanel({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<"stats" | "procs" | "actions" | "search" | "weather" | "tools">("stats");
+  const [tab, setTab] = useState<"stats" | "procs" | "actions" | "search" | "weather" | "tools" | "computer">("stats");
+  const [computerTask, setComputerTask] = useState("");
+  const [computerStatus, setComputerStatus] = useState<any>(null);
+  const [computerRunning, setComputerRunning] = useState(false);
+  const computerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [procs, setProcs] = useState<Proc[]>([]);
   const [clipText, setClipText] = useState("");
@@ -73,6 +77,7 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
     { id: "search" as const, label: "Search" },
     { id: "weather" as const, label: "Weather" },
     { id: "tools" as const, label: "Tools" },
+    { id: "computer" as const, label: "Computer" },
   ];
 
   const quickActions = [
@@ -291,6 +296,57 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
                   try { const r = await runAction("public_ip"); alert(r.result || r.error); } catch {}
                 }} className="text-[9px] font-mono text-purple-400/60 hover:text-purple-400 px-3 py-1.5 rounded-lg border border-purple-500/20 hover:border-purple-500/40 transition-all w-full text-center">Check Public IP</button>
               </div>
+            </div>
+          )}
+
+          {tab === "computer" && (
+            <div className="p-3 space-y-3">
+              <span className="text-[8px] font-mono text-gray-600 tracking-[0.2em] uppercase block">AI Computer Agent</span>
+              <p className="text-[9px] font-mono text-gray-600 leading-relaxed">The AI can see your screen and control the mouse/keyboard to complete visual tasks — filling forms, using OneNote, navigating apps, etc.</p>
+              <textarea value={computerTask} onChange={e => setComputerTask(e.target.value)} rows={3} placeholder="Describe a task for the AI to do on your computer... e.g. Open OneNote and create a new page called Weekly Notes" className="w-full text-[10px] font-mono bg-gray-900/40 border border-gray-800/30 rounded-lg px-3 py-2 text-gray-400 outline-none focus:border-purple-500/30 transition-colors resize-none" />
+              <div className="flex gap-2">
+                <button onClick={async () => {
+                  if (!computerTask.trim()) return;
+                  setComputerRunning(true);
+                  setComputerStatus({ status: "running" });
+                  try {
+                    const r = await computerRunTask(computerTask);
+                    setComputerStatus((prev: any) => ({ ...prev, task_id: r.task_id }));
+                    // Poll status
+                    if (computerPollRef.current) clearInterval(computerPollRef.current);
+                    computerPollRef.current = setInterval(async () => {
+                      try {
+                        const s = await computerTaskStatus(r.task_id);
+                        setComputerStatus(s);
+                        if (s.status === "done" || s.status === "failed" || s.status === "stopped") {
+                          setComputerRunning(false);
+                          if (computerPollRef.current) clearInterval(computerPollRef.current);
+                        }
+                      } catch {}
+                    }, 2000);
+                  } catch { setComputerRunning(false); }
+                }} disabled={computerRunning} className="flex-1 text-[9px] font-mono text-purple-400/60 hover:text-purple-400 px-3 py-2 rounded-lg border border-purple-500/20 hover:border-purple-500/40 transition-all disabled:opacity-40">{computerRunning ? "Running..." : "▶ Run Task"}</button>
+                <button onClick={async () => {
+                  try { await computerStopTask(); setComputerRunning(false); setComputerStatus({ status: "stopped" }); if (computerPollRef.current) clearInterval(computerPollRef.current); } catch {}
+                }} disabled={!computerRunning} className="text-[9px] font-mono text-red-400/60 hover:text-red-400 px-3 py-2 rounded-lg border border-red-500/20 hover:border-red-500/40 transition-all disabled:opacity-40">Stop</button>
+              </div>
+              {computerStatus && (
+                <div className="bg-gray-900/30 rounded-lg p-2.5 border border-gray-800/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`w-1.5 h-1.5 rounded-full ${computerStatus.status === "running" ? "bg-green-500 animate-pulse" : computerStatus.status === "done" ? "bg-green-500" : computerStatus.status === "failed" ? "bg-red-500" : "bg-gray-600"}`} />
+                    <span className="text-[9px] font-mono text-gray-500 uppercase tracking-wider">{computerStatus.status}</span>
+                  </div>
+                  {computerStatus.summary && <p className="text-[9px] font-mono text-gray-400 mt-1">{computerStatus.summary}</p>}
+                  {computerStatus.steps > 0 && <p className="text-[8px] font-mono text-gray-600 mt-1">{computerStatus.steps} steps in {computerStatus.duration_sec}s</p>}
+                  {computerStatus.log && computerStatus.log.length > 0 && (
+                    <div className="mt-2 space-y-0.5 max-h-24 overflow-y-auto">
+                      {computerStatus.log.map((l: string, i: number) => (
+                        <p key={i} className="text-[7px] font-mono text-gray-700 leading-tight truncate">{l}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

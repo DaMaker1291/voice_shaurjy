@@ -653,4 +653,30 @@ async def set_brightness(level: int = -1, action: str = ""):
         result = execute_action("brightness_down", "")
     else:
         result = execute_action("display_info", "")
-    return {"status": "ok", "result": result} 
+    return {"status": "ok", "result": result}
+
+
+@app.post("/api/computer/run")
+async def computer_run(query: TextQuery):
+    """Run a computer-use task (AI sees screen and controls mouse/keyboard)."""
+    from screen_agent import start_task_bg, get_task_status
+    task_id = start_task_bg(query.text)
+    return {"status": "started", "task_id": task_id, "description": query.text}
+
+
+@app.get("/api/computer/status")
+async def computer_status(task_id: str = ""):
+    """Get status of a computer-use task."""
+    from screen_agent import get_task_status
+    return get_task_status(task_id)
+
+
+@app.post("/api/computer/stop")
+async def computer_stop():
+    """Stop the current computer-use task (flag-based, thread safe)."""
+    from screen_agent import _current_task, _task_lock
+    with _task_lock:
+        if _current_task:
+            _current_task["status"] = "stopped"
+            return {"status": "stopped", "task_id": _current_task["id"]}
+    return {"status": "no_task"} 

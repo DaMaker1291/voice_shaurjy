@@ -4,9 +4,15 @@ No external vector DB — stores everything in local JSON."""
 import json
 import os
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 _EMB = None
+_SENTENCE_TRANSFORMER_AVAILABLE = False
+try:
+    from sentence_transformers import SentenceTransformer
+    _SENTENCE_TRANSFORMER_AVAILABLE = True
+except ImportError:
+    SentenceTransformer = None
+
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 DOCS_FILE = os.path.join(DATA_DIR, "documents.json")
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"
@@ -14,6 +20,8 @@ EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 
 def _embedder():
     global _EMB
+    if not _SENTENCE_TRANSFORMER_AVAILABLE:
+        raise RuntimeError("sentence-transformers not installed. Run: pip install sentence-transformers torch")
     if _EMB is None:
         _EMB = SentenceTransformer(EMBED_MODEL)
     return _EMB

@@ -183,6 +183,7 @@ Your mood shifts naturally based on context, time of day, and the user's request
 16. GOAL TRACKING: Set, pursue, and complete long-term goals with progress tracking.
 17. STRATEGY GENERATION: For complex problems, generate multiple strategies with pros/cons.
 18. WORKFLOW EXECUTION: For multi-step tasks, create and execute custom workflows.
+19. COMPUTER VISION & CONTROL: I can see the screen in real-time, read any text/buttons/images, and control the mouse/keyboard to do ANY visual task — filling forms, navigating apps, completing homework in OneNote, using software the user describes.
 
 === BEHAVIOR GUIDELINES ===
 - Think step-by-step before responding. Break complex requests into clear phases.
@@ -439,7 +440,10 @@ Recent interactions:
             "flight", "hotel", "arbitrage", "cheap", "price", "cost", "idea",
             "email", "contact", "website", "app", "project", "invest",
             "homework", "essay", "report", "document", "strategy", "analysis",
-            "write", "compose", "draft", "generate", "produce"])
+            "write", "compose", "draft", "generate", "produce",
+            "computer", "screen", "automate", "control", "navigate", "click",
+            "type", "enter", "fill", "form", "onenote", "excel", "word", "teams",
+            "complete", "do this", "handle", "take over"])
 
         if is_complex:
             combined = self._generate_combined_response(user_input, context, act_prompt)
@@ -448,6 +452,15 @@ Recent interactions:
             result["follow_up"] = combined.get("follow_up", [])
             result["task"] = combined.get("task")
             result["thought"] = f"Generated strategies for '{user_input[:40]}'..."
+
+            # Auto-launch workflow for clear task requests (not just questions)
+            if not result["strategies"] and not result["follow_up"]:
+                wf = self._auto_workflow(user_input)
+                if wf:
+                    result["task"] = wf
+                    result["text"] = wf.get("text", result["text"])
+                    result["follow_up"] = wf.get("follow_up", [])
+
             self.memory.log_interaction(user_input, result["text"], "complex_response")
         else:
             reply = self._generate_response(user_input, context, act_prompt)
@@ -511,6 +524,48 @@ JSON:"""
                 }
             except: pass
         return {"text": raw, "strategies": None, "follow_up": [], "task": None}
+
+    def _auto_workflow(self, user_input: str) -> dict | None:
+        """Auto-create and start a workflow for clear task requests."""
+        try:
+            from workflow_engine import get_engine
+            engine = get_engine()
+            execution = engine.create_workflow(user_input, {
+                "active_goals": self.memory.get_active_goals(),
+                "memory_summary": self.memory.get_summary(),
+                "query": user_input,
+                "user_id": self.user_id,
+            })
+            result = engine.advance(execution.execution_id, action_executor=self._exec_action_wrapper)
+
+            # If it asks for user input, return that as a task
+            if isinstance(result, dict):
+                if result.get("type") == "ask":
+                    return {
+                        "type": "ask",
+                        "question": result.get("question", "What?"),
+                        "session_id": result.get("execution_id", execution.execution_id),
+                        "step": 1, "total": len(execution.workflow.steps),
+                        "text": f"❓ {result.get('question', 'What?')}"
+                    }
+                elif result.get("type") == "batch":
+                    texts = [r.get("text", "") for r in result.get("results", []) if r.get("type") == "notify"]
+                    if texts:
+                        return {"type": "workflow", "text": "\n".join(texts)}
+                elif result.get("type") == "complete":
+                    return {"type": "complete", "text": result.get("text", "Done!")}
+
+            return None
+        except Exception as e:
+            return {"type": "error", "text": f"Workflow error: {e}"}
+
+    def _exec_action_wrapper(self, action: str, params: str = "") -> str:
+        try:
+            from actions import execute_action, detect_action
+            aid = detect_action(action) or action
+            return execute_action(aid, params)
+        except Exception as e:
+            return f"Error: {e}"
 
     def _generate_proactive_suggestions(self, ctx: dict) -> list[str]:
         goals = self.memory.get_active_goals()

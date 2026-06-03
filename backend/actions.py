@@ -292,6 +292,25 @@ _KEYWORD_MAP: dict[str, str] = {
     "graphics": "gpu_info",
     "gpu": "gpu_info",
     "video card": "gpu_info",
+
+    # Real-world task keywords
+    "flight": "search_flights", "flights": "search_flights", "fly": "search_flights", "travel": "search_flights",
+    "hotel": "search_hotels", "hotels": "search_hotels", "booking": "search_hotels", "stay": "search_hotels",
+    "accommodation": "search_hotels", "vacation": "search_flights", "holiday": "search_flights",
+    "calendar": "calendar_events", "schedule": "calendar_events", "appointment": "calendar_events",
+    "event": "calendar_events", "meeting": "calendar_events", "cal": "calendar_events",
+    "onenote": "onenote_tasks", "notes": "onenote_tasks", "notebook": "onenote_tasks",
+    "arbitrage": "arbitrage_check", "deal": "compare_prices", "cheap": "compare_prices",
+    "price": "compare_prices", "compare": "compare_prices", "discount": "compare_prices",
+    "teams": "teams_status", "microsoft teams": "teams_status",
+    "skyscanner": "search_flights", "kayak": "search_flights",
+
+    # Computer use agent
+    "computer use": "ai_computer_task", "computer": "ai_computer_task",
+    "do": "ai_computer_task", "make": "ai_computer_task",
+    "control": "ai_computer_task", "automate": "ai_computer_task",
+    "screen": "screen_analyze", "what's on screen": "screen_analyze",
+    "what do you see": "screen_analyze", "look at screen": "screen_analyze",
 }
 
 # Pre-compiled keyword → action (lowercase)
@@ -638,7 +657,26 @@ _BROAD_PATTERNS = [
     (r"(?:gpu|graphics|video)\s+(?:info|details|usage)", "gpu_info"),
     (r"(?:weather|temperature|outside|forecast)\s*(?:today|now|outside)?", "weather"),
     (r"(?:what\s+)?(?:external|public|my)\s+ip", "public_ip"),
-    (r"(?:windows\s+)?(?:update|check\s+for\s+updates)", "windows_update"),
+    (    r"(?:windows\s+)?(?:update|check\s+for\s+updates)", "windows_update"),
+
+    # Real-world task patterns
+    (r"(?:search|find|look|book)\s+(?:for\s+)?(?:flights?|airfare|plane)\s+(?:to|from|in)\s+(.+)", "search_flights"),
+    (r"(?:book|plan|organize)\s+(?:a\s+)?(?:holiday|vacation|trip|travel)\s+(?:to|in|for)\s+(.+)", "search_flights"),
+    (r"(?:search|find|look|book)\s+(?:for\s+)?(?:hotels?|accommodation|stay|room)\s+(?:in|at|near)\s+(.+)", "search_hotels"),
+    (r"(?:compare|find\s+cheap|best\s+price|price\s+compare)\s+(?:for\s+)?(.+)", "compare_prices"),
+    (r"(?:check|find|look)\s+(?:for\s+)?(?:arbitrage|deal|price\s+gap)\s+(?:in\s+|for\s+)?(.+)", "arbitrage_check"),
+    (r"(?:show|list|check|read)\s+(?:my\s+)?(?:calendar|schedule|events?|appointments?|meetings?)", "calendar_events"),
+    (r"(?:add|create|schedule)\s+(?:a\s+)?(?:calendar\s+)?(?:event|meeting|appointment)", "calendar_add"),
+    (r"(?:show|list|open)\s+(?:my\s+)?(?:onenote|notes|notebooks?)", "onenote_tasks"),
+    (r"(?:add|write|create)\s+(?:a\s+)?(?:note|page)\s+(?:to|in)\s+(?:onenote|notes)", "onenote_add_note"),
+    (r"(?:open|launch|start)\s+(?:microsoft\s+)?(?:teams|ms\s+teams)", "teams_status"),
+    (r"(?:screenshot|capture)\s+(?:the\s+)?(?:page|website|url|browser|tab|screen)", "browser_tab_screenshot"),
+
+    # Computer use / AI vision patterns
+    (r"(?:use|let|make|have|tell|get)\s+(?:the\s+)?(?:ai|computer|agent)\s+(?:to\s+)?(.+)", "ai_computer_task"),
+    (r"(?:do|complete|finish|handle|take\s+care\s+of)\s+(?:my\s+)?(.+?\b(?:homework|assignment|task|work|note|form|document|report)s?)", "ai_computer_task"),
+    (r"(?:look\s+at|analyze|describe|what'?s\s+on|read)\s+(?:the\s+)?(?:screen|display|desktop)", "screen_analyze"),
+    (r"(?:ai|computer|agent)\s+(?:see|look|watch|control|manage|do)\s+(?:the\s+)?(?:screen|computer|pc)", "ai_computer_task"),
 ]
 
 _ACTION_LABELS = {
@@ -769,6 +807,20 @@ _ACTION_LABELS = {
     "sound_settings": "🔊 Sound settings",
     "storage_settings": "💾 Storage settings",
     "signin_options": "🔒 Sign-in options",
+
+    # Real-world task labels
+    "search_flights": "✈ Searching flights...",
+    "search_hotels": "🏨 Searching hotels...",
+    "compare_prices": "💰 Comparing prices...",
+    "arbitrage_check": "💎 Checking arbitrage...",
+    "calendar_events": "📅 Reading calendar...",
+    "calendar_add": "📅 Adding to calendar...",
+    "onenote_tasks": "📓 Opening OneNote...",
+    "onenote_add_note": "📓 Adding note...",
+    "teams_status": "💬 Opening Teams...",
+    "browser_tab_screenshot": "📸 Capturing page...",
+    "ai_computer_task": "🤖 AI doing computer task...",
+    "screen_analyze": "👁 Analyzing screen...",
 }
 
 _ACTION_TIPS = {
@@ -795,6 +847,20 @@ _ACTION_TIPS = {
     "send_keys": "Type text into active window",
     "disk_cleanup": "Run Windows disk cleanup",
     "defender_scan": "Run Windows Defender scan",
+
+    # Real-world task tips
+    "search_flights": "Search and compare flight prices",
+    "search_hotels": "Find hotels and accommodation",
+    "compare_prices": "Compare prices across multiple sites",
+    "arbitrage_check": "Find price arbitrage opportunities",
+    "calendar_events": "Check calendar events",
+    "calendar_add": "Add event to calendar",
+    "onenote_tasks": "Open OneNote and list notes",
+    "onenote_add_note": "Add a note in OneNote",
+    "teams_status": "Open Microsoft Teams",
+    "browser_tab_screenshot": "Take screenshot of a webpage",
+    "ai_computer_task": "AI uses vision + mouse/keyboard to complete any task on screen",
+    "screen_analyze": "Take screenshot and describe what's on the screen",
 }
 
 
@@ -2031,22 +2097,23 @@ def _search(text):
 
 @register("fetch_search")
 def _fetch(text):
-    """Fetch web search results as text (doesn't open browser)."""
-    q = (extract_param(text, r"(?:fetch|get|read)\s+(?:search\s+)?(?:results\s+)?(?:for\s+)?(.+?)$") or text).strip()
-    import urllib.request
+    """Fetch REAL web search results using DuckDuckGo (returns actual data, not just opens browser)."""
+    from duckduckgo_search import DDGS
+    q = (extract_param(text, r"(?:fetch|get|read|search)\s+(?:search\s+)?(?:results\s+)?(?:for\s+)?(.+?)$") or text).strip()
+    if not q or q.lower() in ["search", "fetch", "get", ""]:
+        q = text.replace("fetch", "").replace("search", "").replace("get", "").strip()
+    if not q: return "What should I search for?"
     try:
-        url = f"https://lite.duckduckgo.com/lite/?q={_uq(q)}"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        resp = urllib.request.urlopen(req, timeout=8)
-        html = resp.read().decode("utf-8", errors="replace")
-        # Extract text content
-        texts = re.findall(r'>([^<]{20,})<', html)
-        results = [t.strip() for t in texts if len(t.strip()) > 30][:8]
+        with DDGS() as ddgs:
+            results = list(ddgs.text(q, max_results=8))
         if results:
-            return f"Search results for '{q}':\n" + "\n".join(f"• {r[:300]}" for r in results)
-        return f"No text results found for '{q}'."
+            lines = [f"📌 {r['title']}\n   {r['body'][:200]}\n   {r['href']}" for r in results]
+            return f"Search results for '{q}':\n\n" + "\n\n".join(lines)
+        return f"No results found for '{q}'."
+    except ImportError:
+        return "DuckDuckGo search library not installed."
     except Exception as e:
-        return f"Search error: {str(e)[:100]}"
+        return f"Search error: {str(e)[:150]}"
 
 @register("search_youtube")
 def _search_youtube(text):
@@ -2649,6 +2716,238 @@ def _screenshot(_):
         $b.Save("{path}"); $g.Dispose(); $b.Dispose()
     ''')
     return f"Screenshot saved to Desktop."
+
+
+# ── REAL-WORLD TASK ACTIONS ──────────────────────────────────────
+
+@register("search_flights")
+def _search_flights(text):
+    """Search for flights between destinations with real data via DuckDuckGo."""
+    from duckduckgo_search import DDGS
+    q = extract_param(text, r"(?:flights?|search)\s+(.+?)$") or text
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(f"flights {q} 2025 2026 cheap", max_results=6))
+        if results:
+            lines = [f"✈️ {r['title']}\n   {r['body'][:200]}\n   {r['href']}" for r in results]
+            return f"Flight results for '{q}':\n\n" + "\n\n".join(lines)
+        return f"No flight results for '{q}'. Opening Skyscanner..."
+    except: pass
+    _ps(f'Start-Process "https://www.skyscanner.net/transport/flights?q={_uq(q)}"')
+    _ps(f'Start-Process "https://www.google.com/travel/flights?q={_uq(q)}"')
+    return f"Opened flight search for '{q}' in browser."
+
+@register("search_hotels")
+def _search_hotels(text):
+    """Search for hotels with real data."""
+    from duckduckgo_search import DDGS
+    q = extract_param(text, r"(?:hotels?|stay|accommodation)\s+(.+?)$") or text
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(f"hotels {q} booking", max_results=6))
+        if results:
+            lines = [f"🏨 {r['title']}\n   {r['body'][:200]}\n   {r['href']}" for r in results]
+            return f"Hotel results for '{q}':\n\n" + "\n\n".join(lines)
+    except: pass
+    _ps(f'Start-Process "https://www.booking.com/searchresults.html?ss={_uq(q)}"')
+    return f"Opened hotel search for '{q}' in browser."
+
+@register("compare_prices")
+def _compare_prices(text):
+    """Search multiple sites to compare prices for flights/hotels/products."""
+    from duckduckgo_search import DDGS
+    q = extract_param(text, r"(?:compare|price|cheap|deal)\s+(.+?)$") or text
+    results_text = f"🔍 Comparing prices for '{q}'...\n\n"
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(q, max_results=10))
+        if results:
+            for r in results[:8]:
+                results_text += f"• {r['title'][:80]}\n  {r['body'][:150]}\n  {r['href']}\n\n"
+        # Also open comparison sites
+        _ps(f'Start-Process "https://www.google.com/search?q={_uq(q)}&tbm=shop"')
+        _ps(f'Start-Process "https://www.kayak.com/search?q={_uq(q)}"')
+        return results_text
+    except:
+        return f"Opened price comparison for '{q}'."
+
+@register("calendar_events")
+def _calendar_events(text):
+    """Read Outlook/Windows calendar events."""
+    q = extract_param(text, r"(?:calendar|schedule|events?|appointments?)\s+(.+?)$") or "today"
+    period = "today"
+    if "tomorrow" in q.lower(): period = "tomorrow"
+    elif "week" in q.lower(): period = "week"
+    elif "month" in q.lower(): period = "month"
+    try:
+        ps_script = '''
+            Add-Type -AssemblyName "Microsoft.Office.Interop.Outlook" 2>$null;
+            if(-not $?) {
+                # Fallback: use Windows Calendar via COM
+                try {
+                    $outlook = New-Object -ComObject Outlook.Application 2>$null;
+                    $ns = $outlook.GetNamespace("MAPI");
+                    $cal = $ns.GetDefaultFolder(9);  # olFolderCalendar
+                    $appts = $cal.Items | Select-Object -First 10 Subject,Start,Duration,Location;
+                    return ($appts | Format-Table -Auto | Out-String);
+                } catch { return "Calendar not available via COM." }
+            }
+        '''
+        result = _ps(ps_script)
+        if "Calendar not available" in result or "outlook" not in result.lower():
+            # Fallback: open calendar web
+            _ps('Start-Process "https://calendar.google.com"')
+            return f"Opened calendar. Upcoming events: not available via COM. Try web calendar."
+        return f"Calendar ({period}):\n{result[:600]}"
+    except:
+        _ps('Start-Process "outlookcal:" 2>$null; Start-Process "https://calendar.google.com"')
+        return f"Opening calendar for {period}..."
+
+@register("calendar_add")
+def _calendar_add(text):
+    """Add event to calendar."""
+    parts = text.split(",")
+    title = parts[0].replace("add", "").replace("calendar", "").replace("event", "").strip()
+    time_str = parts[1].strip() if len(parts) > 1 else "1 hour"
+    duration = parts[2].strip() if len(parts) > 2 else "60"
+    try:
+        _ps(f'''
+            $o = New-Object -ComObject Outlook.Application;
+            $a = $o.CreateItem(1);  # olAppointmentItem
+            $a.Subject = "{title[:100]}";
+            $a.Start = [DateTime]::Now.AddHours(1);
+            $a.Duration = {duration};
+            $a.Save();
+            return "Event created: {title[:50]}"
+        ''')
+        return f"✅ Event added: {title[:50]}"
+    except:
+        _ps('Start-Process "https://calendar.google.com/calendar/u/0/r/eventedit"')
+        return f"Opening calendar to add event: {title[:50]}"
+
+@register("onenote_tasks")
+def _onenote_tasks(text):
+    """List OneNote pages/notes."""
+    try:
+        result = _ps('''
+            try {
+                $o = New-Object -ComObject OneNote.Application 15 $null;
+                $xml = "";
+                $o.GetHierarchy("", [Microsoft.Office.Interop.OneNote.HierarchyScope]::hsPages, [ref]$xml);
+                $xml
+            } catch { "OneNote COM not available" }
+        ''')
+        if "OneNote COM not available" in result or not result.strip():
+            # Fallback: open OneNote
+            _ps('Start-Process "onenote:"')
+            return "Opening OneNote..."
+        return f"OneNote pages:\n{result[:600]}"
+    except:
+        _ps('Start-Process "onenote:"')
+        return f"Opening OneNote..."
+
+@register("onenote_add_note")
+def _onenote_add_note(text):
+    """Add a note/page to OneNote."""
+    content = extract_param(text, r"(?:write|add|create|note)\s+(?:to\s+)?(?:onenote\s+)?(.+?)$") or text
+    try:
+        from app_automation import onenote_write_content
+        result = onenote_write_content(content)
+        return f"📝 Added to OneNote: {content[:50]}"
+    except:
+        _ps(f'Start-Process "onenote:"')
+        return f"Opening OneNote to write: {content[:50]}"
+
+@register("teams_status")
+def _teams_status(text):
+    """Open Microsoft Teams or check status."""
+    _ps('Start-Process "msteams:" 2>$null; if(-not $?) { Start-Process "https://teams.microsoft.com" }')
+    return "Opening Microsoft Teams..."
+
+@register("browser_tab_screenshot")
+def _browser_tab_screenshot(text):
+    """Open a URL, wait, and take a screenshot of the page."""
+    url = extract_param(text, r"(?:screenshot|capture)\s+(?:of\s+)?(.+?)$") or "https://google.com"
+    if not url.startswith("http"): url = "https://" + url
+    path = os.path.expanduser(f"~/Desktop/page_{int(time.time())}.png")
+    _ps(f'Start-Process "{url}"')
+    time.sleep(3)  # Wait for page to load
+    _ps(f'''
+        Add-Type -AssemblyName System.Windows.Forms;
+        $b=[System.Drawing.Bitmap]::new([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width,
+           [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height);
+        $g=[System.Drawing.Graphics]::FromImage($b);
+        $g.CopyFromScreen(0,0,0,0,$b.Size);
+        $b.Save("{path}"); $g.Dispose(); $b.Dispose()
+    ''')
+    return f"📸 Page screenshot saved to Desktop. Opened {url[:60]}..."
+
+@register("arbitrage_check")
+def _arbitrage_check(text):
+    """Check multiple flight/hotel sites for price arbitrage opportunities."""
+    from duckduckgo_search import DDGS
+    q = extract_param(text, r"(?:arbitrage|compare|deal)\s+(.+?)$") or text
+    results_text = f"🔎 Checking arbitrage opportunities for '{q}'...\n\n"
+    try:
+        with DDGS() as ddgs:
+            # Search multiple angles
+            queries = [
+                f"cheapest {q} deals",
+                f"{q} discount coupons promo",
+                f"compare prices {q}",
+                f"best price {q} 2025",
+            ]
+            seen_urls = set()
+            for qry in queries:
+                for r in list(ddgs.text(qry, max_results=4)):
+                    if r["href"] not in seen_urls:
+                        seen_urls.add(r["href"])
+                        results_text += f"💰 {r['title'][:80]}\n  {r['body'][:150]}\n  {r['href']}\n\n"
+        # Open comparison sites
+        _ps(f'Start-Process "https://www.skyscanner.net/transport/flights?q={_uq(q)}"')
+        _ps(f'Start-Process "https://www.kayak.com/in?q={_uq(q)}"')
+        _ps(f'Start-Process "https://www.google.com/travel/flights?q={_uq(q)}"')
+        results_text += "🚀 Opened Skyscanner, Kayak, and Google Flights for side-by-side comparison!"
+        return results_text
+    except Exception as e:
+        _ps(f'Start-Process "https://www.google.com/search?q={_uq(q)}+cheap+deals"')
+        return f"Opened search for '{q}' deals. Error: {str(e)[:80]}"
+
+
+# ── Keyboard shortcuts ─────────────────────────────────────────────
+
+@register("send_keys")
+def _send_keys(text):
+    keys = extract_param(text, r"(?:send|press|type)\s+(?:keys?\s+)?(.+?)$") or "{ENTER}"
+    _ps(f'$k=(New-Object -ComObject WScript.Shell); $k.SendKeys("{keys}")')
+    return f"Sent keys: {keys[:20]}"
+
+
+# ── Computer Use Agent ─────────────────────────────────────────────
+
+@register("ai_computer_task")
+def _ai_computer_task(text):
+    """AI sees the screen and performs visual tasks (OneNote, forms, navigation)."""
+    from screen_agent import start_task_bg, get_task_status
+    task_id = start_task_bg(text)
+    # Give it a moment to start
+    import time as _t
+    _t.sleep(1)
+    status = get_task_status(task_id)
+    if status["status"] == "running":
+        return f"AI computer agent started. Task ID: {task_id}\nThe AI is looking at the screen and working on: {text[:100]}"
+    return f"Computer agent result: {status.get('summary', 'No result')}"
+
+
+@register("screen_analyze")
+def _screen_analyze(text):
+    """Take a screenshot and describe what's on screen."""
+    from screen_agent import capture_screen, analyze_screen
+    img = capture_screen()
+    if not img:
+        return "Screen capture failed — missing dependencies (mss/Pillow)."
+    result = analyze_screen(text or "Describe what's on this screen in detail.", img)
+    return result.get("result") or result.get("summary") or json.dumps(result)
 
 
 # ── Public API ─────────────────────────────────────────────────────
