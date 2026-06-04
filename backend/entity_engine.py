@@ -33,15 +33,20 @@ class EntityMemory:
         self._data = self._load()
 
     def _load(self) -> dict:
+        _defaults = {
+            "facts": [], "preferences": {}, "goals": [], "completed_goals": [],
+            "interactions": [], "learned_patterns": [], "proactive_topics": [],
+            "personality_notes": [], "last_active": datetime.now().isoformat(),
+            "mood_history": [], "self_reflections": [], "system_observations": [],
+        }
         try:
-            with open(self.path, "r") as f: return json.load(f)
+            with open(self.path, "r") as f:
+                data = json.load(f)
+            for k, v in _defaults.items():
+                data.setdefault(k, v)
+            return data
         except:
-            return {
-                "facts": [], "preferences": {}, "goals": [], "completed_goals": [],
-                "interactions": [], "learned_patterns": [], "proactive_topics": [],
-                "personality_notes": [], "last_active": datetime.now().isoformat(),
-                "mood_history": [], "self_reflections": [], "system_observations": [],
-            }
+            return _defaults
 
     def _save(self):
         self._data["last_active"] = datetime.now().isoformat()
