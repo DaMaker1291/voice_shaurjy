@@ -46,3 +46,6 @@ backend/models/
 *.wav
 *.mp3
 *.mp4
+
+# HF Space clone
+hf-temp/
