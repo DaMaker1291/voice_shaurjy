@@ -709,9 +709,15 @@ async def relay_action(req: ActionRequest):
 
 @app.get("/api/relay/pending")
 async def relay_pending():
-    """Polled by local agent — returns list of pending actions."""
-    from relay import get_pending
-    return {"actions": get_pending()}
+    """Polled by local agent — returns list of pending actions (claims them atomically)."""
+    from relay import claim_next_pending
+    actions = []
+    while True:
+        a = claim_next_pending()
+        if a is None:
+            break
+        actions.append(a)
+    return {"actions": actions}
 
 
 @app.post("/api/relay/result")

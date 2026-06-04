@@ -38,6 +38,14 @@ def claim_action(relay_id: str) -> Optional[dict]:
         return _pending.pop(relay_id, None)
 
 
+def claim_next_pending() -> Optional[dict]:
+    """Claim and remove the oldest pending action (FIFO)."""
+    with _lock:
+        for rid in sorted(_pending, key=lambda r: _pending[r]["queued_at"]):
+            return _pending.pop(rid)
+        return None
+
+
 def submit_result(relay_id: str, result: str, success: bool = True):
     with _lock:
         _results[relay_id] = {"status": "done" if success else "failed", "result": result, "completed_at": time.time()}

@@ -918,20 +918,18 @@ def execute_action(action: str, user_text: str = "") -> str:
 def relay_action(action: str, params: str = "") -> str:
     """Route a Windows action through the cloud relay to the local agent."""
     try:
-        import urllib.request, urllib.error, json
-        hf_url = os.environ.get("HF_API_URL", "https://dgfhgjhj-second-brain-api.hf.space")
-        data = json.dumps({"action_id": action, "params": params}).encode()
-        req = urllib.request.Request(
-            f"{hf_url}/api/relay/execute",
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=35) as r:
-            result = json.loads(r.read())
-        if result.get("status") == "done":
-            return result.get("result", f"Action '{action}' completed via relay")
-        return f"Relay: {result.get('status', 'unknown')} — {result.get('result', '')}"
+        from relay import queue_action, get_result
+        import time as _time
+        relay_id = queue_action(action, params)
+        deadline = _time.time() + 55
+        while _time.time() < deadline:
+            _time.sleep(0.5)
+            res = get_result(relay_id)
+            if res["status"] in ("done", "failed", "timeout"):
+                break
+        if res.get("status") == "done":
+            return res.get("result", f"Action '{action}' completed via relay")
+        return f"Relay: {res.get('status', 'unknown')} — {res.get('result', '')}"
     except Exception as e:
         return f"Cannot execute '{action}' on this server and relay unavailable: {e}"
 
