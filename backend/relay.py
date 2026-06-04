@@ -83,23 +83,39 @@ async def _remove_queue(q: asyncio.Queue):
 
 
 async def ws_relay_handler(websocket):
-    """WebSocket handler for relay agent connection."""
-    import json as _json
+    """WebSocket handler for relay agent connection — sends actions, receives results."""
     q = await _client_queue()
-    try:
-        await websocket.accept()
+    await websocket.accept()
+
+    async def send_loop():
+        while True:
+            msg = await q.get()
+            try:
+                await websocket.send_text(msg)
+            except:
+                break
+
+    async def recv_loop():
         while True:
             try:
-                msg = await asyncio.wait_for(q.get(), timeout=_expiry)
-                await websocket.send_text(msg)
-            except asyncio.TimeoutError:
-                await websocket.send_text('{"type":"ping"}')
-                try:
-                    pong = await asyncio.wait_for(websocket.receive_text(), timeout=5)
-                    if pong == '{"type":"pong"}':
-                        pass
-                except:
-                    break
+                raw = await websocket.receive_text()
+            except:
+                break
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if data.get("type") == "pong":
+                continue
+            if data.get("type") == "result":
+                submit_result(
+                    data.get("relay_id", ""),
+                    data.get("result", ""),
+                    data.get("success", True),
+                )
+
+    try:
+        await asyncio.gather(send_loop(), recv_loop())
     except:
         pass
     finally:

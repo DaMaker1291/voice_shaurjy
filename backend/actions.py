@@ -921,7 +921,7 @@ def relay_action(action: str, params: str = "") -> str:
         from relay import queue_action, get_result
         import time as _time
         relay_id = queue_action(action, params)
-        deadline = _time.time() + 55
+        deadline = _time.time() + 20
         while _time.time() < deadline:
             _time.sleep(0.5)
             res = get_result(relay_id)
