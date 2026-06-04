@@ -755,3 +755,18 @@ async def ws_relay(ws: _WS):
     """WebSocket endpoint — relay agent connects here for real-time action push."""
     from relay import ws_relay_handler
     await ws_relay_handler(ws)
+
+
+@app.exception_handler(404)
+async def serve_frontend(req, exc):
+    """Serve frontend static files for non-API routes."""
+    path = req.url.path.lstrip("/") or "index.html"
+    if not path.startswith("api/") and not path.startswith("ws/") and not path.startswith("docs") and not path.startswith("openapi"):
+        _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "out")
+        fp = os.path.join(_frontend_dir, path)
+        if not os.path.isfile(fp):
+            fp = os.path.join(_frontend_dir, "index.html")
+        if os.path.isfile(fp):
+            from fastapi.responses import FileResponse
+            return FileResponse(fp)
+    raise exc
