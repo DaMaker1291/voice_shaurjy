@@ -326,7 +326,8 @@ class Entity:
     def _route_action(self, text: str) -> dict | None:
         from actions import detect_action, cloud_safe_execute, _ACTION_LABELS
 
-        for action, text in pending:
+        action = detect_action(text)
+        if action:
             result = cloud_safe_execute(action, text)
             label = _ACTION_LABELS.get(action, "")
             self._set_mood("focused")
