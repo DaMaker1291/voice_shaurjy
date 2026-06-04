@@ -1,4 +1,4 @@
-"""Relay bridge — queues Windows actions for the local relay agent via WebSocket."""
+"""Relay bridge — queues Windows actions for local relay agent."""
 
 import asyncio
 import json
@@ -8,8 +8,9 @@ import uuid
 from typing import Optional
 
 _lock = threading.Lock()
-_pending: dict[str, dict] = {}
-_results: dict[str, dict] = {}
+_pending: dict[str, dict] = {}       # relay_id → action info (not yet claimed)
+_claimed: set[str] = set()            # relay_ids being executed by agent
+_results: dict[str, dict] = {}        # relay_id → result (done/failed/timeout)
 _ws_clients: list[asyncio.Queue] = []
 _expiry = 60
 
@@ -32,30 +33,24 @@ def queue_action(action: str, params: str = "") -> str:
     return relay_id
 
 
-def get_pending() -> list[dict]:
-    now = time.time()
+def claim_next_pending() -> Optional[dict]:
     with _lock:
+        now = time.time()
         expired = [rid for rid, a in _pending.items() if now - a["queued_at"] > _expiry]
         for rid in expired:
             _pending.pop(rid, None)
             _results[rid] = {"status": "timeout", "result": "Relay agent did not respond in time"}
-        return [dict(a) for a in _pending.values()]
-
-
-def claim_action(relay_id: str) -> Optional[dict]:
-    with _lock:
-        return _pending.pop(relay_id, None)
-
-
-def claim_next_pending() -> Optional[dict]:
-    with _lock:
         for rid in sorted(_pending, key=lambda r: _pending[r]["queued_at"]):
-            return _pending.pop(rid)
+            a = _pending.pop(rid)
+            _claimed.add(rid)
+            return a
         return None
 
 
 def submit_result(relay_id: str, result: str, success: bool = True):
     with _lock:
+        _claimed.discard(relay_id)
+        _pending.pop(relay_id, None)
         _results[relay_id] = {"status": "done" if success else "failed", "result": result, "completed_at": time.time()}
 
 
@@ -64,7 +59,7 @@ def get_result(relay_id: str) -> dict:
         r = _results.get(relay_id)
         if r:
             return r
-        if relay_id in _pending:
+        if relay_id in _pending or relay_id in _claimed:
             return {"status": "pending"}
         return {"status": "not_found"}
 
@@ -83,7 +78,7 @@ async def _remove_queue(q: asyncio.Queue):
 
 
 async def ws_relay_handler(websocket):
-    """WebSocket handler for relay agent connection — sends actions, receives results."""
+    """WebSocket handler — sends actions, receives results."""
     q = await _client_queue()
     await websocket.accept()
 
