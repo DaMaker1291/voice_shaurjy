@@ -1,14 +1,17 @@
-"""Relay bridge — queues Windows actions for the local relay agent to execute."""
+"""Relay bridge — queues Windows actions for the local relay agent via WebSocket."""
 
+import asyncio
+import json
 import threading
 import time
 import uuid
 from typing import Optional
 
 _lock = threading.Lock()
-_pending: dict[str, dict] = {}      # relay_id → action info
-_results: dict[str, dict] = {}       # relay_id → result
-_expiry = 60  # seconds
+_pending: dict[str, dict] = {}
+_results: dict[str, dict] = {}
+_ws_clients: list[asyncio.Queue] = []
+_expiry = 60
 
 
 def queue_action(action: str, params: str = "") -> str:
@@ -20,6 +23,12 @@ def queue_action(action: str, params: str = "") -> str:
             "params": params,
             "queued_at": time.time(),
         }
+        msg = json.dumps({"type": "action", **dict(_pending[relay_id])})
+        for q in list(_ws_clients):
+            try:
+                q.put_nowait(msg)
+            except:
+                pass
     return relay_id
 
 
@@ -39,7 +48,6 @@ def claim_action(relay_id: str) -> Optional[dict]:
 
 
 def claim_next_pending() -> Optional[dict]:
-    """Claim and remove the oldest pending action (FIFO)."""
     with _lock:
         for rid in sorted(_pending, key=lambda r: _pending[r]["queued_at"]):
             return _pending.pop(rid)
@@ -59,3 +67,44 @@ def get_result(relay_id: str) -> dict:
         if relay_id in _pending:
             return {"status": "pending"}
         return {"status": "not_found"}
+
+
+async def _client_queue() -> asyncio.Queue:
+    q: asyncio.Queue = asyncio.Queue()
+    with _lock:
+        _ws_clients.append(q)
+    return q
+
+
+async def _remove_queue(q: asyncio.Queue):
+    with _lock:
+        if q in _ws_clients:
+            _ws_clients.remove(q)
+
+
+async def ws_relay_handler(websocket):
+    """WebSocket handler for relay agent connection."""
+    import json as _json
+    q = await _client_queue()
+    try:
+        await websocket.accept()
+        while True:
+            try:
+                msg = await asyncio.wait_for(q.get(), timeout=_expiry)
+                await websocket.send_text(msg)
+            except asyncio.TimeoutError:
+                await websocket.send_text('{"type":"ping"}')
+                try:
+                    pong = await asyncio.wait_for(websocket.receive_text(), timeout=5)
+                    if pong == '{"type":"pong"}':
+                        pass
+                except:
+                    break
+    except:
+        pass
+    finally:
+        await _remove_queue(q)
+        try:
+            await websocket.close()
+        except:
+            pass
