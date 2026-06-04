@@ -1,6 +1,6 @@
 """Universal automation engine — controls anything & everything on Windows via voice."""
 
-import re, os, socket, struct, threading, time, json
+import re, os, socket, struct, sys, threading, time, json
 from datetime import datetime
 from ps_executor import ps as _ps_fast, ps_batch, ps_async
 from urllib.parse import quote as _uq
