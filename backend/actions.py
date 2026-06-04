@@ -946,7 +946,7 @@ _CLOUD_SAFE_ACTIONS = {
 
 def cloud_safe_execute(action: str, user_text: str = "") -> str:
     """Execute action. If on cloud (non-Windows), relay Windows actions."""
-    if sys.platform == "win32":
+    if os.name == "nt":
         return execute_action(action, user_text)
     if action in _CLOUD_SAFE_ACTIONS:
         return execute_action(action, user_text)
