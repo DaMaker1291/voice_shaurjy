@@ -915,6 +915,44 @@ def execute_action(action: str, user_text: str = "") -> str:
         return f"Failed: {e}"
 
 
+def relay_action(action: str, params: str = "") -> str:
+    """Route a Windows action through the cloud relay to the local agent."""
+    try:
+        import urllib.request, urllib.error, json
+        hf_url = os.environ.get("HF_API_URL", "https://dgfhgjhj-second-brain-api.hf.space")
+        data = json.dumps({"action_id": action, "params": params}).encode()
+        req = urllib.request.Request(
+            f"{hf_url}/api/relay/execute",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=35) as r:
+            result = json.loads(r.read())
+        if result.get("status") == "done":
+            return result.get("result", f"Action '{action}' completed via relay")
+        return f"Relay: {result.get('status', 'unknown')} — {result.get('result', '')}"
+    except Exception as e:
+        return f"Cannot execute '{action}' on this server and relay unavailable: {e}"
+
+
+# Cloud-safe actions — ones that work on Linux without Windows-specific APIs
+_CLOUD_SAFE_ACTIONS = {
+    "search", "weather", "public_ip", "math_eval", "timer", "alarm",
+    "time", "timer_stop", "timer_remaining",
+    "ai_computer_task", "screen_analyze",
+}
+
+
+def cloud_safe_execute(action: str, user_text: str = "") -> str:
+    """Execute action. If on cloud (non-Windows), relay Windows actions."""
+    if sys.platform == "win32":
+        return execute_action(action, user_text)
+    if action in _CLOUD_SAFE_ACTIONS:
+        return execute_action(action, user_text)
+    return relay_action(action, user_text)
+
+
 # ═══════════════════════════════════════════════════════════════════
 #  ACTIONS — 180+ executors for total Windows control
 # ═══════════════════════════════════════════════════════════════════

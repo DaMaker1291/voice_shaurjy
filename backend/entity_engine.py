@@ -324,10 +324,10 @@ class Entity:
     # ── Action Routing ─────────────────────────────────────────────
 
     def _route_action(self, text: str) -> dict | None:
-        from actions import detect_action, execute_action, _ACTION_LABELS
-        action = detect_action(text)
-        if action:
-            result = execute_action(action, text)
+        from actions import detect_action, cloud_safe_execute, _ACTION_LABELS
+
+        for action, text in pending:
+            result = cloud_safe_execute(action, text)
             label = _ACTION_LABELS.get(action, "")
             self._set_mood("focused")
             return {"text": f"{label}\n{result}", "action": action}
@@ -561,9 +561,9 @@ JSON:"""
 
     def _exec_action_wrapper(self, action: str, params: str = "") -> str:
         try:
-            from actions import execute_action, detect_action
+            from actions import cloud_safe_execute, detect_action
             aid = detect_action(action) or action
-            return execute_action(aid, params)
+            return cloud_safe_execute(aid, params)
         except Exception as e:
             return f"Error: {e}"
 

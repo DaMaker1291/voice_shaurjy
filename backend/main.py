@@ -28,6 +28,11 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+async def root():
+    return {"app": "Second Brain API", "status": "running", "docs": "/docs", "health": "/health"}
+
+
 @app.get("/health")
 async def health():
     livekit_url = os.getenv("LIVEKIT_URL", "")
@@ -427,6 +432,7 @@ class ActionRequest(BaseModel):
 async def system_stats():
     """Live CPU, RAM, battery, disk, network stats as structured JSON."""
     import psutil, time
+    from datetime import datetime
     cpu_pct = psutil.cpu_percent(interval=0.3)
     cpu_per_core = psutil.cpu_percent(interval=0, percpu=True)
     mem = psutil.virtual_memory()
@@ -679,4 +685,60 @@ async def computer_stop():
         if _current_task:
             _current_task["status"] = "stopped"
             return {"status": "stopped", "task_id": _current_task["id"]}
-    return {"status": "no_task"} 
+    return {"status": "no_task"}
+
+
+# ── Relay bridge (cloud ↔ local Windows agent) ─────────────────
+
+from pydantic import BaseModel
+
+
+class RelayResult(BaseModel):
+    relay_id: str
+    result: str
+    success: bool = True
+
+
+@app.post("/api/relay/action")
+async def relay_action(req: ActionRequest):
+    """Queue a Windows action for the local relay agent to execute."""
+    from relay import queue_action
+    relay_id = queue_action(req.action_id, req.params)
+    return {"status": "queued", "relay_id": relay_id, "action": req.action_id}
+
+
+@app.get("/api/relay/pending")
+async def relay_pending():
+    """Polled by local agent — returns list of pending actions."""
+    from relay import get_pending
+    return {"actions": get_pending()}
+
+
+@app.post("/api/relay/result")
+async def relay_result(req: RelayResult):
+    """Local agent posts execution results here."""
+    from relay import submit_result
+    submit_result(req.relay_id, req.result, req.success)
+    return {"status": "ok"}
+
+
+@app.get("/api/relay/result")
+async def relay_get_result(relay_id: str):
+    """Frontend or entity polls for result."""
+    from relay import get_result
+    return get_result(relay_id)
+
+
+@app.post("/api/relay/execute")
+async def relay_execute(req: ActionRequest):
+    """Queue AND wait for result (max 30s polling). Used by entity engine."""
+    from relay import queue_action, get_result
+    import time as _time
+    relay_id = queue_action(req.action_id, req.params)
+    deadline = _time.time() + 30
+    while _time.time() < deadline:
+        _time.sleep(0.5)
+        res = get_result(relay_id)
+        if res["status"] in ("done", "failed", "timeout"):
+            return res
+    return {"status": "timeout", "result": "Relay agent did not respond within 30s", "relay_id": relay_id} 

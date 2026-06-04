@@ -171,12 +171,12 @@ def _process_current_step(session_id: str) -> dict:
 
 def _exec_action(action: str, params: str = "") -> str:
     try:
-        from actions import execute_action, detect_action, _EXECUTORS
-        # Exact match first — action may already be a registered executor ID
+        from actions import cloud_safe_execute, detect_action, _EXECUTORS
         if action in _EXECUTORS:
-            return execute_action(action, params)
-        detected = detect_action(action) or action
-        return execute_action(detected, params)
+            return cloud_safe_execute(action, params)
+        detected = detect_action(params)
+        if detected:
+            return cloud_safe_execute(detected, params)
     except Exception as e:
         return f"Error: {e}"
 
