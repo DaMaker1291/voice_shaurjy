@@ -1,0 +1,69 @@
+{
+  "name": "second-brain",
+  "version": "1.0.0",
+  "description": "Second Brain — AI Desktop Assistant",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "dist": "electron-builder --win --x64"
+  },
+  "author": "Second Brain",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.secondbrain.app",
+    "productName": "Second Brain",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.png",
+      "../frontend/out/**/*",
+      "../backend/**/*",
+      "../.venv/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../frontend/out",
+        "to": "frontend",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": ["**/*", "!.entity_data"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icon.png",
+      "artifactName": "SecondBrain-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "Second Brain",
+      "installerIcon": "icon.png",
+      "uninstallerIcon": "icon.png",
+      "license": null
+    },
+    "autoLaunch": {
+      "enabled": true,
+      "args": ["--autostart"]
+    }
+  }
+}
