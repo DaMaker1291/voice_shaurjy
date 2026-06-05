@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from fastapi import FastAPI, HTTPException, WebSocket as _WS
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -709,11 +709,11 @@ async def relay_action(req: ActionRequest):
 
 @app.get("/api/relay/pending")
 async def relay_pending():
-    """Polled by local agent — returns list of pending actions (claims them atomically)."""
-    from relay import claim_next_pending
+    """Polled by local agent — returns pending actions (claims atomically)."""
+    from relay import claim_next
     actions = []
     while True:
-        a = claim_next_pending()
+        a = claim_next()
         if a is None:
             break
         actions.append(a)
@@ -748,13 +748,6 @@ async def relay_execute(req: ActionRequest):
         if res["status"] in ("done", "failed", "timeout"):
             return res
     return {"status": "timeout", "result": "Relay agent did not respond within 30s", "relay_id": relay_id}
-
-
-@app.websocket("/ws/relay")
-async def ws_relay(ws: _WS):
-    """WebSocket endpoint — relay agent connects here for real-time action push."""
-    from relay import ws_relay_handler
-    await ws_relay_handler(ws)
 
 
 @app.exception_handler(404)
