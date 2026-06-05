@@ -1,14 +1,55 @@
 "use client";
 
 import PricingCard from "@/components/PricingCard";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { setBackendUrl, getBackendUrl } from "@/lib/api";
 
 export default function Settings() {
   const [tier, setTier] = useState("free");
+  const [urlInput, setUrlInput] = useState("");
+
+  useEffect(() => {
+    setUrlInput(getBackendUrl());
+  }, []);
 
   return (
     <main className="max-w-2xl mx-auto p-4 space-y-6">
       <h1 className="text-2xl font-bold text-purple-400">Settings & Billing</h1>
+
+      <section className="bg-gray-900 rounded-xl p-4">
+        <h2 className="text-lg font-semibold mb-3">Backend Connection</h2>
+        <p className="text-sm text-gray-400 mb-3">
+          Set a custom backend URL (e.g. ngrok tunnel) to run all Windows actions from anywhere.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            placeholder="https://your-ngrok-url.ngrok.io"
+            className="flex-1 bg-gray-800 text-white rounded px-3 py-2 text-sm border border-gray-700 focus:border-purple-500 outline-none"
+          />
+          <button
+            onClick={() => setBackendUrl(urlInput)}
+            className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded text-sm font-medium"
+          >
+            Save
+          </button>
+          {getBackendUrl() && (
+            <button
+              onClick={() => setBackendUrl("")}
+              className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        {getBackendUrl() && (
+          <p className="text-xs text-green-400 mt-2">
+            Using custom backend: {getBackendUrl()}
+          </p>
+        )}
+      </section>
 
       <section className="bg-gray-900 rounded-xl p-4">
         <h2 className="text-lg font-semibold mb-3">Your Plan</h2>

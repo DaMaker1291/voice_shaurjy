@@ -1,7 +1,15 @@
-const BASE = (typeof window !== "undefined" && (window as any).electronAPI?.backendURL)
-  || (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-    ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-    : "https://dgfhgjhj-second-brain-api.hf.space");
+function getBaseURL(): string {
+  if (typeof window === "undefined") return "http://localhost:8000";
+  const custom = localStorage.getItem("backend_url");
+  if (custom) return custom;
+  if ((window as any).electronAPI?.backendURL) return (window as any).electronAPI.backendURL;
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  }
+  return "https://dgfhgjhj-second-brain-api.hf.space";
+}
+
+const BASE = getBaseURL();
 
 export async function getHealth() {
   const res = await fetch(`${BASE}/health`);
@@ -239,4 +247,14 @@ export async function setBrightness(level?: number, action?: string) {
     body: JSON.stringify(body),
   });
   return res.json();
+}
+
+export function setBackendUrl(url: string) {
+  localStorage.setItem("backend_url", url);
+  window.location.reload();
+}
+
+export function getBackendUrl(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("backend_url") || "";
 }
