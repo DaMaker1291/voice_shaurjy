@@ -30,6 +30,11 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
+    _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "out")
+    fp = os.path.join(_frontend_dir, "index.html")
+    if os.path.isfile(fp):
+        from fastapi.responses import FileResponse
+        return FileResponse(fp)
     return {"app": "Second Brain API", "status": "running", "docs": "/docs", "health": "/health"}
 
 
