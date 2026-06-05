@@ -1,9 +1,7 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, protocol, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, protocol, dialog, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
-const http = require('http');
-const net = require('net');
 
 let mainWindow = null;
 let tray = null;
@@ -69,15 +67,17 @@ async function waitForPort(timeout = 15000) {
 // ── Custom Protocol (serve frontend from disk) ─────────────────
 
 function registerAppProtocol() {
-  protocol.handle('app', (req) => {
-    let url = req.url.replace('app://', '');
-    if (url === '' || url.endsWith('/')) url += 'index.html';
+  protocol.handle('app', (request) => {
+    let url = request.url.slice(5); // strip 'app://'
+    const idx = url.indexOf('/');
+    url = idx >= 0 ? url.slice(idx + 1) : ''; // skip host
+    if (url === '' || url.endsWith('/')) url = 'index.html';
     const filePath = path.join(FRONTEND_DIR, url);
-    if (fs.existsSync(filePath)) {
-      return net.fetch('file://' + filePath.replace(/\\/g, '/'));
+    if (!fs.existsSync(filePath)) {
+      // SPA fallback — serve index.html for unknown routes
+      return net.fetch('file://' + path.join(FRONTEND_DIR, 'index.html').replace(/\\/g, '/'));
     }
-    // SPA fallback
-    return net.fetch('file://' + path.join(FRONTEND_DIR, 'index.html').replace(/\\/g, '/'));
+    return net.fetch('file://' + filePath.replace(/\\/g, '/'));
   });
 }
 
@@ -129,8 +129,7 @@ function createMainWindow() {
     },
   });
 
-  // Load frontend from disk via custom protocol
-  mainWindow.loadURL('app://');
+  mainWindow.loadURL('app://app/index.html');
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
 
