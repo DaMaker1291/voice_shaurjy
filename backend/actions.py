@@ -921,15 +921,24 @@ def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
         from relay import queue_action, get_result
         import time as _time
         relay_id = queue_action(action, params, user_id=user_id)
-        deadline = _time.time() + 20
+        deadline = _time.time() + 25
         while _time.time() < deadline:
             _time.sleep(0.5)
             res = get_result(relay_id)
-            if res["status"] in ("done", "failed", "timeout"):
-                break
-        if res.get("status") == "done":
-            return res.get("result", f"Action '{action}' completed via relay")
-        return f"Relay: {res.get('status', 'unknown')} — {res.get('result', '')}"
+            if res["status"] in ("done", "failed"):
+                return res.get("result", f"Action '{action}' completed")
+        # Fallback: try HTTP lookup in case of thread/process mismatch
+        try:
+            import urllib.request, json as _json
+            hf_url = os.environ.get("HF_API_URL", "https://dgfhgjhj-second-brain-api.hf.space")
+            url = f"{hf_url}/api/relay/result?relay_id={relay_id}"
+            with urllib.request.urlopen(url, timeout=5) as r:
+                res = _json.loads(r.read())
+            if res.get("status") in ("done", "failed"):
+                return res.get("result", f"Action '{action}' completed")
+        except:
+            pass
+        return f"Relay: {res.get('status', 'pending')} — action queued for user '{user_id}'"
     except Exception as e:
         return f"Cannot execute '{action}' on this server and relay unavailable: {e}"
 
