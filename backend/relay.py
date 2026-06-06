@@ -1,4 +1,4 @@
-"""Relay bridge — queues Windows actions for local agent. Dead simple."""
+"""Relay bridge — queues Windows actions by user_id. Multi-tenant."""
 
 import json
 import threading
@@ -11,17 +11,18 @@ _results: dict[str, dict] = {}
 _expiry = 120
 
 
-def queue_action(action: str, params: str = "") -> str:
+def queue_action(action: str, params: str = "", user_id: str = "local") -> str:
     rid = str(uuid.uuid4())[:8]
     with _lock:
-        _pending[rid] = {"relay_id": rid, "action": action, "params": params, "queued_at": time.time()}
+        _pending[rid] = {"relay_id": rid, "action": action, "params": params, "user_id": user_id, "queued_at": time.time()}
     return rid
 
 
-def claim_next() -> dict | None:
+def claim_next(user_id: str = "local") -> dict | None:
     with _lock:
         for rid in sorted(_pending, key=lambda r: _pending[r]["queued_at"]):
-            return _pending.pop(rid)
+            if _pending[rid].get("user_id") == user_id:
+                return _pending.pop(rid)
         return None
 
 

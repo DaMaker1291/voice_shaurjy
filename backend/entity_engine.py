@@ -333,7 +333,7 @@ class Entity:
 
         action = detect_action(text)
         if action:
-            result = cloud_safe_execute(action, text)
+            result = cloud_safe_execute(action, text, user_id=self.user_id)
             label = _ACTION_LABELS.get(action, "")
             self._set_mood("focused")
             return {"text": f"{label}\n{result}", "action": action}
@@ -569,7 +569,7 @@ JSON:"""
         try:
             from actions import cloud_safe_execute, detect_action
             aid = detect_action(action) or action
-            return cloud_safe_execute(aid, params)
+            return cloud_safe_execute(aid, params, user_id=self.user_id)
         except Exception as e:
             return f"Error: {e}"
 

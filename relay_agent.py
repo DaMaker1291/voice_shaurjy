@@ -1,8 +1,9 @@
 """
-Relay agent — runs on your Windows PC, polls HF Space every 0.5s for actions.
-Dead simple, no WebSocket, no complexity.
+Relay agent — runs on any Windows PC, polls HF Space for that user's actions.
+Usage: relay_agent.py --user <user_id>
 """
 
+import argparse
 import json
 import os
 import socket
@@ -28,18 +29,23 @@ def get(url):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Second Brain Relay Agent")
+    parser.add_argument("--user", default="local", help="Your user ID")
+    args = parser.parse_args()
+    user_id = args.user
+
     from urllib.parse import urlparse
     hostname = urlparse(HF_API).hostname
     try:
         socket.gethostbyname(hostname)
-        print(f"[Relay] Connected to {HF_API}")
+        print(f"[Relay] Connected to {HF_API} as user '{user_id}'")
     except socket.gaierror:
         print(f"[Relay] DNS failed for {hostname}"); return
 
-    print("[Relay] Polling every 0.5s...")
+    print(f"[Relay] Polling every 0.5s for user '{user_id}'...")
     while True:
         try:
-            resp = get(f"{HF_API}/api/relay/pending")
+            resp = get(f"{HF_API}/api/relay/pending?user_id={user_id}")
             for a in resp.get("actions", []):
                 rid, act, params = a["relay_id"], a["action"], a.get("params", "")
                 print(f"[Relay] Executing: {act}")

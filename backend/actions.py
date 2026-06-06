@@ -915,12 +915,12 @@ def execute_action(action: str, user_text: str = "") -> str:
         return f"Failed: {e}"
 
 
-def relay_action(action: str, params: str = "") -> str:
+def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
     """Route a Windows action through the cloud relay to the local agent."""
     try:
         from relay import queue_action, get_result
         import time as _time
-        relay_id = queue_action(action, params)
+        relay_id = queue_action(action, params, user_id=user_id)
         deadline = _time.time() + 20
         while _time.time() < deadline:
             _time.sleep(0.5)
@@ -942,13 +942,13 @@ _CLOUD_SAFE_ACTIONS = {
 }
 
 
-def cloud_safe_execute(action: str, user_text: str = "") -> str:
+def cloud_safe_execute(action: str, user_text: str = "", user_id: str = "local") -> str:
     """Execute action. If on cloud (non-Windows), relay Windows actions."""
     if os.name == "nt":
         return execute_action(action, user_text)
     if action in _CLOUD_SAFE_ACTIONS:
         return execute_action(action, user_text)
-    return relay_action(action, user_text)
+    return relay_action(action, user_text, user_id=user_id)
 
 
 # ═══════════════════════════════════════════════════════════════════

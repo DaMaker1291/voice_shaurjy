@@ -432,6 +432,7 @@ async def list_scenes():
 class ActionRequest(BaseModel):
     action_id: str
     params: str = ""
+    user_id: str = "local"
 
 @ app.get("/api/system/stats")
 async def system_stats():
@@ -708,17 +709,17 @@ class RelayResult(BaseModel):
 async def relay_action(req: ActionRequest):
     """Queue a Windows action for the local relay agent to execute."""
     from relay import queue_action
-    relay_id = queue_action(req.action_id, req.params)
+    relay_id = queue_action(req.action_id, req.params, user_id=req.user_id or "local")
     return {"status": "queued", "relay_id": relay_id, "action": req.action_id}
 
 
 @app.get("/api/relay/pending")
-async def relay_pending():
-    """Polled by local agent — returns pending actions (claims atomically)."""
+async def relay_pending(user_id: str = "local"):
+    """Polled by local agent — returns pending actions for that user (claims atomically)."""
     from relay import claim_next
     actions = []
     while True:
-        a = claim_next()
+        a = claim_next(user_id=user_id)
         if a is None:
             break
         actions.append(a)
