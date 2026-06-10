@@ -341,6 +341,40 @@ class Entity:
                 relay_id = parts[1] if len(parts) > 1 else ""
                 return {"text": f"{label}\n⏳ Executing on your computer...", "action": action, "relay_id": relay_id, "async": True}
             return {"text": f"{label}\n{result}", "action": action}
+
+        # Fallback: no specific action matched, but if query starts with an action verb,
+        # route to the AI computer use agent (screen vision + mouse/keyboard)
+        lower = text.lower().strip()
+        first_word = lower.split()[0] if lower.split() else ""
+        QUESTION_STARTS = ("what ", "who ", "why ", "which ", "when ", "how ", "is ", "are ",
+                          "do you ", "can you ", "would you ", "could you ", "does ", "did ",
+                          "will ", "should ", "may ", "might ", "shall ", "has ", "have ", "had ",
+                          "tell me a ", "tell me the ", "tell me about ", "tell me what ",
+                          "tell me how ", "tell me why ", "tell me if ", "tell me some ",
+                          "show me a ", "show me the ", "show me how ", "show me what ")
+        ACTION_FIRST_WORDS = {
+            "do", "make", "create", "build", "find", "search", "open", "launch",
+            "start", "run", "show", "display", "check", "look", "get", "tell",
+            "fetch", "grab", "write", "type", "compose", "draft", "send", "email",
+            "click", "navigate", "go", "visit", "browse", "play", "stop", "pause",
+            "close", "quit", "exit", "delete", "remove", "add", "update", "change",
+            "set", "configure", "install", "download", "upload", "format", "convert",
+            "edit", "modify", "fix", "repair", "scan", "analyze", "inspect",
+            "examine", "organize", "arrange", "sort", "clean", "clear", "calculate",
+            "book", "plan", "enable", "disable", "backup", "restore", "save",
+            "export", "import", "sync", "connect", "disconnect", "optimize",
+            "boost", "research", "investigate", "compare", "contrast",
+        }
+        if first_word in ACTION_FIRST_WORDS and not lower.startswith(QUESTION_STARTS):
+            result = cloud_safe_execute("ai_computer_task", text, user_id=self.user_id)
+            label = _ACTION_LABELS.get("ai_computer_task", "🤖 AI Computer Agent")
+            self._set_mood("focused")
+            if result.startswith("__RELAY__:"):
+                parts = result.split(":", 2)
+                relay_id = parts[1] if len(parts) > 1 else ""
+                return {"text": f"{label}\n⏳ AI agent working on your computer...", "action": "ai_computer_task", "relay_id": relay_id, "async": True}
+            return {"text": f"{label}\n{result}", "action": "ai_computer_task"}
+
         return None
 
     def _all_actions_as_prompt(self) -> str:

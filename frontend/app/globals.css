@@ -597,3 +597,60 @@ body {
   color: rgba(150,150,220,0.3);
   text-shadow: 0 0 8px rgba(120,60,220,0.1);
 }
+
+/* ── Center overlay — flashes main data in middle of screen ── */
+@keyframes overlay-in {
+  0% { opacity: 0; transform: scale(0.92) translateY(10px); filter: blur(4px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+}
+@keyframes overlay-glow {
+  0%, 100% { box-shadow: 0 0 30px rgba(6,182,212,0.08), 0 0 60px rgba(6,182,212,0.03), 0 8px 32px rgba(0,0,0,0.4); }
+  50% { box-shadow: 0 0 50px rgba(6,182,212,0.15), 0 0 80px rgba(6,182,212,0.05), 0 8px 32px rgba(0,0,0,0.4); }
+}
+.center-overlay {
+  background: rgba(5,8,30,0.92);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid rgba(6,182,212,0.15);
+  border-radius: 16px;
+  padding: 20px 24px;
+  animation: overlay-in 0.45s cubic-bezier(0.16,1,0.3,1) both, overlay-glow 4s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+}
+.center-overlay::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(6,182,212,0.2), transparent);
+}
+.center-overlay::after {
+  content: '';
+  position: absolute; top: 0; left: 0; bottom: 0; width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(6,182,212,0.08), transparent);
+}
+.center-overlay pre {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(6,182,212,0.2) transparent;
+}
+.center-overlay pre::-webkit-scrollbar { width: 2px; }
+.center-overlay pre::-webkit-scrollbar-track { background: transparent; }
+.center-overlay pre::-webkit-scrollbar-thumb { background: rgba(6,182,212,0.2); border-radius: 2px; }
+
+/* ── Overlay data lines ── */
+.center-overlay pre {
+  font-size: 12px;
+  line-height: 1.7;
+  color: rgba(200,210,230,0.9);
+}
+.center-overlay pre:first-line {
+  color: rgba(6,182,212,0.7);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+
+/* ── Enhanced scrollbar ── */
+.scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgba(120,60,220,0.3) transparent; }
+.scrollbar-thin::-webkit-scrollbar { width: 3px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(120,60,220,0.3); border-radius: 3px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(120,60,220,0.5); }

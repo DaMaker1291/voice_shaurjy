@@ -273,6 +273,35 @@ _KEYWORD_MAP: dict[str, str] = {
     "open ports": "net_port_scan",
     "network shares": "net_shares", "shared folders": "net_shares",
     "device info": "net_device_info", "device details": "net_device_info",
+    "scan my computer": "device_scan",
+    "scan my device": "device_scan",
+    "scan my system": "device_scan",
+    "scan my laptop": "device_scan",
+    "scan my pc": "device_scan",
+    "device scan": "device_scan",
+    "full scan": "device_scan",
+    "profile my computer": "device_scan",
+    "profile my device": "device_scan",
+    "free up memory": "memory_cleanup",
+    "free up ram": "memory_cleanup",
+    "clean up memory": "memory_cleanup",
+    "clean up ram": "memory_cleanup",
+    "memory is full": "memory_cleanup",
+    "memory too high": "memory_cleanup",
+    "ram is full": "memory_cleanup",
+    "ram too high": "memory_cleanup",
+    "low on memory": "memory_cleanup",
+    "out of memory": "memory_cleanup",
+    "close unnecessary apps": "memory_cleanup",
+    "close unused apps": "memory_cleanup",
+    "reduce memory usage": "memory_cleanup",
+    "reduce ram usage": "memory_cleanup",
+    "too many apps running": "memory_cleanup",
+    "too many programs running": "memory_cleanup",
+    "too many processes running": "memory_cleanup",
+    "why is my computer so slow": "memory_cleanup",
+    "computer is very slow": "memory_cleanup",
+    "pc is lagging": "memory_cleanup",
     "command": "run_dialog",
     "environment": "env_list",
     "environment variable": "env_list",
@@ -303,11 +332,14 @@ _KEYWORD_MAP: dict[str, str] = {
     "arbitrage": "arbitrage_check", "deal": "compare_prices", "cheap": "compare_prices",
     "price": "compare_prices", "compare": "compare_prices", "discount": "compare_prices",
     "teams": "teams_status", "microsoft teams": "teams_status",
+    "my assignments": "teams_assignments", "teams assignments": "teams_assignments",
+    "remaining assignments": "teams_assignments", "due assignments": "teams_assignments",
+    "assignments on teams": "teams_assignments", "teams homework": "teams_assignments",
+    "assignments on microsoft teams": "teams_assignments",
     "skyscanner": "search_flights", "kayak": "search_flights",
 
     # Computer use agent
     "computer use": "ai_computer_task", "computer": "ai_computer_task",
-    "do": "ai_computer_task", "make": "ai_computer_task",
     "control": "ai_computer_task", "automate": "ai_computer_task",
     "screen": "screen_analyze", "what's on screen": "screen_analyze",
     "what do you see": "screen_analyze", "look at screen": "screen_analyze",
@@ -327,6 +359,8 @@ _ACTION_PATTERNS = {
     r"^(?:what\s+(?:is\s+)?my\s+(?:user|username|account)\s*(?:name)?)": "whoami",
     r"^switch\s+(?:user|account)": "switch_user",
     r"^windows\s+version": "winver",
+    r"^(?:scan|inspect|profile|analyze)\s+(?:my\s+)?(?:computer|pc|system|device|machine|laptop|workstation)": "device_scan",
+    r"^(?:full|deep)\s+(?:scan|profile|inspect)\s+(?:of\s+)?(?:my\s+)?(?:computer|pc|system|device)": "device_scan",
 
     # ── Power ───────────────────────────────────────────────────
     r"(?:battery|power)\s+(?:status|level|percentage|remaining|life)": "battery_status",
@@ -405,6 +439,12 @@ _ACTION_PATTERNS = {
     r"^(?:start|run|launch)\s+(?:process|program|app)\s+(.+?)$": "process_start",
     r"^(?:cpu|processor)\s+(?:usage|load|performance)": "cpu_usage",
     r"^(?:memory|ram)\s+(?:usage|load|performance|status)": "memory_usage",
+    r"^(?:free|clean|clear|reduce|lower)\s+(?:up\s+)?(?:memory|ram)": "memory_cleanup",
+    r"^(?:memory|ram)\s+(?:is\s+)?(?:full|high|low|critical|maxed)": "memory_cleanup",
+    r"^(?:close|kill|stop)\s+(?:unnecessary|unused|extra|all)\s+(?:apps|programs|processes|tasks)": "memory_cleanup",
+    r"^(?:too\s+many\s+(?:apps|programs|processes|tasks)\s+(?:running|open))": "memory_cleanup",
+    r"^(?:why\s+(?:is\s+)?(?:my\s+)?(?:computer|pc|laptop)\s+(?:so\s+)?(?:slow|laggy))": "memory_cleanup",
+    r"^(?:speed\s+up|optimize|boost)\s+(?:my\s+)?(?:computer|pc|laptop|system)": "memory_cleanup",
 
     # ── Services ────────────────────────────────────────────────
     r"^(?:list|show)\s+(?:all\s+)?(?:services|windows\s+services)": "service_list",
@@ -671,6 +711,8 @@ _BROAD_PATTERNS = [
     (r"(?:add|write|create)\s+(?:a\s+)?(?:note|page)\s+(?:to|in)\s+(?:onenote|notes)", "onenote_add_note"),
     (r"(?:open|launch|start)\s+(?:microsoft\s+)?(?:teams|ms\s+teams)", "teams_status"),
     (r"(?:screenshot|capture)\s+(?:the\s+)?(?:page|website|url|browser|tab|screen)", "browser_tab_screenshot"),
+    (r"(?:my\s+)?(?:remaining|due|pending|upcoming)\s+(?:assignments?|homework|tasks|work)\s*(?:\S+\s*){0,5}?(?:microsoft\s+)?(?:teams|ms\s+teams)?", "teams_assignments"),
+    (r"(?:what|show|list|tell|find|get|check)\s+(?:my\s+)?(?:assignments?|homework|tasks|work)\s*(?:\S+\s*){0,5}?(?:microsoft\s+)?(?:teams|ms\s+teams)?", "teams_assignments"),
 
     # Computer use / AI vision patterns
     (r"(?:use|let|make|have|tell|get)\s+(?:the\s+)?(?:ai|computer|agent)\s+(?:to\s+)?(.+)", "ai_computer_task"),
@@ -680,6 +722,8 @@ _BROAD_PATTERNS = [
 ]
 
 _ACTION_LABELS = {
+    "memory_cleanup": "🧹 Freeing up memory...",
+    "device_scan": "🔍 Deep scanning your device...",
     "lock": "🔒 Locking workstation...", "sleep": "💤 Going to sleep...",
     "hibernate": "💤 Hibernating...", "restart": "🔄 Restarting...",
     "shutdown": "⏻ Shutting down...", "logoff": "🚪 Signing out...",
@@ -818,12 +862,15 @@ _ACTION_LABELS = {
     "onenote_tasks": "📓 Opening OneNote...",
     "onenote_add_note": "📓 Adding note...",
     "teams_status": "💬 Opening Teams...",
+    "teams_assignments": "📋 Fetching your Teams assignments...",
     "browser_tab_screenshot": "📸 Capturing page...",
     "ai_computer_task": "🤖 AI doing computer task...",
     "screen_analyze": "👁 Analyzing screen...",
 }
 
 _ACTION_TIPS = {
+    "memory_cleanup": "Kill memory-hogging apps and free RAM",
+    "device_scan": "Deep scan of your Windows device (apps, system, network, files)",
     "lock": "Lock your PC", "sleep": "Put PC to sleep",
     "restart": "Restart PC", "shutdown": "Shutdown PC",
     "logoff": "Sign out", "hibernate": "Hibernate PC",
@@ -858,6 +905,7 @@ _ACTION_TIPS = {
     "onenote_tasks": "Open OneNote and list notes",
     "onenote_add_note": "Add a note in OneNote",
     "teams_status": "Open Microsoft Teams",
+    "teams_assignments": "Find and read your remaining Teams assignments",
     "browser_tab_screenshot": "Take screenshot of a webpage",
     "ai_computer_task": "AI uses vision + mouse/keyboard to complete any task on screen",
     "screen_analyze": "Take screenshot and describe what's on the screen",
@@ -929,7 +977,6 @@ def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
 _CLOUD_SAFE_ACTIONS = {
     "search", "weather", "public_ip", "math_eval", "timer", "alarm",
     "time", "timer_stop", "timer_remaining",
-    "ai_computer_task", "screen_analyze",
 }
 
 
@@ -1678,6 +1725,61 @@ def _cpu_usage(_):
     c = _ps("(Get-CimInstance Win32_Processor).LoadPercentage")
     n = _ps("(Get-CimInstance Win32_Processor).Name")
     return f"CPU ({n}): {c}%"
+
+
+@register("memory_cleanup")
+def _memory_cleanup(text):
+    """Find and kill non-critical memory-hungry processes. Report memory freed."""
+    before = _ps("[math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB,1)")
+    total = _ps("[math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB,1)")
+
+    # Get top 15 processes by working set, filter out critical system processes
+    script = '''
+    $procs = Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 15 Name,Id,@{N="MB";E={[math]::Round($_.WorkingSet64/1MB,1)}}
+    $critical = @("System","Idle","Registry","smss","csrss","wininit","winlogon","services","lsass","svchost","conhost","fontdrvhost","sihost","taskhostw","RuntimeBroker","SecurityHealth","SecurityHealthSystray","ShellExperienceHost","SearchApp","SearchIndexer","TextInputHost","StartMenuExperienceHost","LockApp","Widgets","WidgetService","ntoskrnl","dwm","explorer")
+    $killed = @()
+    foreach ($p in $procs) {
+        if ($p.Name -notin $critical -and $p.MB -gt 50) {
+            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; $killed += $p } catch {}
+        }
+    }
+    return @{killed=($killed | ConvertTo-Json -Compress); killed_count=@($killed).Count}
+    '''
+    import json as _json
+    try:
+        result = _ps(script)
+        data = _json.loads(result) if result else {"killed": [], "killed_count": 0}
+    except:
+        data = {"killed": [], "killed_count": 0}
+
+    after = _ps("[math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB,1)")
+
+    try:
+        before_f = float(before or 0)
+        after_f = float(after or 0)
+        freed = round(after_f - before_f, 1)
+    except:
+        freed = 0
+
+    killed_list = data.get("killed", [])
+    killed_count = data.get("killed_count", 0) if isinstance(data.get("killed_count"), int) else len(killed_list)
+
+    lines = [f"── Memory Cleanup ──"]
+    lines.append(f"Before: {before} MB free")
+    lines.append(f"After:  {after} MB free")
+    lines.append(f"Freed:  {freed} MB")
+    lines.append(f"Total:  {total} GB")
+
+    if killed_list:
+        lines.append(f"Killed {killed_count} process(es):")
+        for p in killed_list:
+            name = p.get("Name", p.get("name", "?"))
+            mb = p.get("MB", p.get("mb", "?"))
+            lines.append(f"  • {name} ({mb} MB)")
+    else:
+        lines.append("No non-critical memory-hungry processes found to kill.")
+
+    return "\n".join(lines)
 
 @register("memory_usage")
 def _memory_usage(_):
@@ -2891,6 +2993,22 @@ def _teams_status(text):
     _ps('Start-Process "msteams:" 2>$null; if(-not $?) { Start-Process "https://teams.microsoft.com" }')
     return "Opening Microsoft Teams..."
 
+
+@register("teams_assignments")
+def _teams_assignments(text):
+    """Use the computer vision agent to navigate Teams and read out assignments."""
+    from screen_agent import start_task_bg, get_task_status
+    prompt = "Open Microsoft Teams or https://teams.microsoft.com in browser. Navigate to the Assignments or Tasks section. Find all pending/remaining assignments with their due dates and status. Read them out clearly with subject name, assignment title, due date, and status."
+    task_id = start_task_bg(prompt)
+    import time as _t
+    _t.sleep(2)
+    status = get_task_status(task_id)
+    if not status or status.get("status") == "not_found":
+        return "Screen agent not available — open Teams manually and check Assignments tab."
+    if status["status"] == "running":
+        return f"Looking up your Teams assignments using screen AI... (task: {task_id[:12]}...)\nThe agent is navigating Teams now. Results will appear momentarily."
+    return status.get("summary") or status.get("result") or "Checked Teams — no assignments found or couldn't navigate the UI."
+
 @register("browser_tab_screenshot")
 def _browser_tab_screenshot(text):
     """Open a URL, wait, and take a screenshot of the page."""
@@ -2975,6 +3093,65 @@ def _screen_analyze(text):
         return "Screen capture failed — missing dependencies (mss/Pillow)."
     result = analyze_screen(text or "Describe what's on this screen in detail.", img)
     return result.get("result") or result.get("summary") or json.dumps(result)
+
+
+@register("device_scan")
+def _device_scan(text):
+    """Deep scan of the Windows device — apps, system, network, files, accounts."""
+    try:
+        from device_scanner import scan_device
+        data = scan_device("local", force=True)
+    except Exception as e:
+        return f"Device scan failed: {e}"
+
+    # Save to user profile for personalization
+    try:
+        from user_profile import load_profile, save_profile, merge_device_data
+        p = load_profile("local")
+        merge_device_data(p, data)
+        save_profile("local", p)
+    except:
+        pass
+
+    lines = ["── Device Scan Results ──"]
+
+    sys = data.get("system", {})
+    lines.append(f"OS: {sys.get('os', '?')} Build {sys.get('version', '?')}")
+    lines.append(f"CPU: {sys.get('cpu', '?')} ({sys.get('cores', '?')} cores)")
+    lines.append(f"RAM: {sys.get('ram_gb', '?')} GB")
+    lines.append(f"Disk C: {sys.get('disk_free_gb', '?')} GB free / {sys.get('disk_total_gb', '?')} GB total")
+    lines.append(f"Battery: {sys.get('battery', '?')}%")
+    lines.append(f"Screen: {sys.get('screen_res', '?')}")
+    lines.append(f"GPU: {sys.get('gpu', '?')}")
+
+    apps = data.get("installed_apps", [])
+    lines.append(f"Installed apps: {len(apps)}")
+    if apps:
+        lines.append("Top apps: " + ", ".join(a.get("name", "?")[:30] for a in apps[:10]))
+
+    procs = data.get("running_processes", [])
+    lines.append(f"Running processes: {len(procs)}")
+    if procs:
+        lines.append("Top memory: " + ", ".join(f"{p.get('Name','?')}({p.get('MB','?')}MB)" for p in procs[:5]))
+
+    net = data.get("network", {})
+    lines.append(f"IP: {net.get('local_ip', '?')}")
+    lines.append(f"WiFi: {net.get('wifi_ssid', '?')}")
+    lines.append(f"Hostname: {net.get('hostname', '?')}")
+
+    browsers = data.get("browser_profiles", [])
+    lines.append(f"Browser profiles: {len(browsers)}")
+    for b in browsers:
+        lines.append(f"  {b.get('browser','?')}/{b.get('profile','?')}: {b.get('email','no email')}")
+
+    services = data.get("services", [])
+    lines.append(f"Running services: {len(services)}")
+
+    files = data.get("recent_files", [])
+    lines.append(f"Recent documents: {len(files)} in Desktop/Documents/Downloads")
+
+    lines.append(f"Scan time: {data.get('scan_time', '?')}")
+    return "\n".join(lines)
 
 
 # ── Public API ─────────────────────────────────────────────────────

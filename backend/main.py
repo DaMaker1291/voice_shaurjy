@@ -234,10 +234,14 @@ async def text_to_speech(req: TTSRequest):
 
 @app.post("/api/device/scan")
 async def device_scan(user_id: str = "local"):
+    if os.name != "nt":
+        # On cloud — queue a relay scan for the local agent to pick up
+        from relay import queue_action
+        queue_action("device_scan", "", user_id)
+        return {"status": "queued", "message": "Scan queued on your Windows PC via relay agent"}
+    # Running locally — scan directly
     from device_scanner import scan_device
-
     data = scan_device(user_id, force=True)
-    # Also update profile with fresh scan
     try:
         from user_profile import load_profile, save_profile, merge_device_data
         p = load_profile(user_id)

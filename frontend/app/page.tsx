@@ -77,7 +77,20 @@ export default function Home() {
   const [entityMood, setEntityMood] = useState("curious");
   const [entityMoodEmoji, setEntityMoodEmoji] = useState("🔍");
   const [entityThought, setEntityThought] = useState("");
+  const [centerOverlay, setCenterOverlay] = useState<string | null>(null);
+  const overlayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const capturedTextRef = useRef("");
+
+  const showCenterOverlay = useCallback((content: string) => {
+    setCenterOverlay(content);
+    if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+    overlayTimerRef.current = setTimeout(() => setCenterOverlay(null), 10000);
+  }, []);
+
+  const dismissOverlay = useCallback(() => {
+    setCenterOverlay(null);
+    if (overlayTimerRef.current) { clearTimeout(overlayTimerRef.current); overlayTimerRef.current = null; }
+  }, []);
 
   const addBotEvent = useCallback((type: string, label: string) => {
     setBotEvents(prev => [...prev.slice(-8), { type, label, timestamp: Date.now() }]);
@@ -104,19 +117,33 @@ export default function Home() {
     (async () => {
       setScanning(true);
       addBotEvent("action", "scanning device");
-      try { await fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" }); } catch {}
+      // Fire-and-forget device scan (relay on cloud, direct on local)
+      fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" }).catch(() => {});
+      // Get whatever profile data exists (may be empty on first run)
       try {
         const res = await fetch(`${BASE}/api/profile?user_id=local`);
         const data = await res.json();
         setProfileSummary(data.summary || "");
         setProfileInterests(data.profile?.interests?.slice(0, 8).map((i: any) => i.topic) || []);
-        setMessages((p) => [...p, {
-          role: "assistant",
-          content: `Device scanned. I see ${data.profile?.device?.installed_apps?.length || 0} apps, ${data.profile?.interests?.length || 0} interest areas. Ask me anything — or try a suggestion below.`
-        }]);
       } catch {}
       setScanning(false);
       addBotEvent("action", "scan complete");
+      // Show generic welcome — not stale "0 apps" message
+      setMessages((p) => [...p, {
+        role: "assistant",
+        content: "Welcome back. I'm ready — ask me anything, or tap the orb to speak."
+      }]);
+      // Retry profile fetch after 5s (gives relay scan time on cloud)
+      setTimeout(async () => {
+        try {
+          const res = await fetch(`${BASE}/api/profile?user_id=local`);
+          const data = await res.json();
+          if (data?.profile?.device?.installed_apps?.length > 0 || data?.profile?.interests?.length > 0) {
+            setProfileSummary(data.summary || "");
+            setProfileInterests(data.profile?.interests?.slice(0, 8).map((i: any) => i.topic) || []);
+          }
+        } catch {}
+      }, 5000);
     })();
     const interval = setInterval(async () => {
       try {
@@ -193,15 +220,18 @@ export default function Home() {
         const { relayStatus } = await import("@/lib/api");
         const res = await relayStatus(relayId);
         if (res.status === "done" || res.status === "failed") {
+          const resultText = res.result || (res.status === "done" ? "✅ Done" : "❌ Failed");
           setMessages((p) => {
             const updated = [...p];
             const last = updated[updated.length - 1];
             if (last && last.role === "assistant") {
-              last.content = res.result || (res.status === "done" ? "✅ Done" : "❌ Failed");
+              last.content = resultText;
             }
             return updated;
           });
-          setActionFeedback(res.result || (res.status === "done" ? "✅ Done" : "❌ Failed"));
+          setActionFeedback(resultText);
+          // Show relay result in center overlay
+          if (resultText && resultText.length > 20) showCenterOverlay(resultText);
           setTimeout(() => setActionFeedback(null), 5000);
           return;
         }
@@ -211,7 +241,7 @@ export default function Home() {
       }
     };
     poll();
-  }, []);
+  }, [showCenterOverlay]);
 
   const handleQuery = useCallback(async (text: string) => {
     if (!text.trim()) return;
@@ -258,6 +288,11 @@ export default function Home() {
         setActionFeedback(reply);
         setActionType(res.action_type || "action");
         setSimTask(null);
+
+        // Extract main data part for center overlay (skip first line / label)
+        const lines = reply.split("\n");
+        const mainPart = lines.slice(1).join("\n").trim();
+        if (mainPart && mainPart.length > 20) showCenterOverlay(mainPart);
 
         if (res.async && res.relay_id) {
           setMessages((p) => [...p, { role: "assistant", content: reply }]);
@@ -626,8 +661,23 @@ export default function Home() {
 
         {/* Center content */}
         <div className="flex-1 flex flex-col items-center justify-center relative">
-          {/* Centered BotSwarm agents */}
-          <div className="w-[420px] h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl shadow-blue-900/30 cursor-pointer" style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
+          {/* Center result overlay — flashes main data without sass */}
+          {centerOverlay && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none" onClick={dismissOverlay}>
+              <div className="pointer-events-auto center-overlay max-w-xl w-full mx-6 max-h-[60vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[9px] font-mono tracking-[0.25em] uppercase text-cyan-500/70">result</span>
+                  <button onClick={dismissOverlay} className="text-gray-600 hover:text-gray-300 transition-colors text-[10px] font-mono tracking-wider">✕ dismiss</button>
+                </div>
+                <pre className="text-sm text-gray-200 font-mono leading-relaxed whitespace-pre-wrap">{centerOverlay}</pre>
+              </div>
+              {/* Click backdrop to dismiss */}
+              <div className="absolute inset-0 -z-10" onClick={dismissOverlay} />
+            </div>
+          )}
+
+          {/* Centered BotSwarm agents — dim when overlay active */}
+          <div className={`w-[420px] h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl shadow-blue-900/30 cursor-pointer transition-all duration-500 ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
             <BotSwarm
               listening={listening}
               thinking={thinking}
