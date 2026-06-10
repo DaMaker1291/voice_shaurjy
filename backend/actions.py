@@ -2997,17 +2997,28 @@ def _teams_status(text):
 @register("teams_assignments")
 def _teams_assignments(text):
     """Use the computer vision agent to navigate Teams and read out assignments."""
-    from screen_agent import start_task_bg, get_task_status
-    prompt = "Open Microsoft Teams or https://teams.microsoft.com in browser. Navigate to the Assignments or Tasks section. Find all pending/remaining assignments with their due dates and status. Read them out clearly with subject name, assignment title, due date, and status."
-    task_id = start_task_bg(prompt)
+    from screen_agent import run_task, capture_screen, analyze_screen, _HAS_PYGUI, _HAS_PIL, _HAS_MSS
+
+    if not _HAS_PYGUI or not _HAS_PIL or not _HAS_MSS:
+        # Fallback: just open Teams
+        _ps('Start-Process "msteams:" 2>$null; if(-not $?) { Start-Process "https://teams.microsoft.com" }')
+        return "Screen agent not available. Opening Teams manually — check Assignments tab."
+
+    # Step 1: Open Teams
+    _ps('Start-Process "msteams:" 2>$null; if(-not $?) { Start-Process "https://teams.microsoft.com" }')
     import time as _t
-    _t.sleep(2)
-    status = get_task_status(task_id)
-    if not status or status.get("status") == "not_found":
-        return "Screen agent not available — open Teams manually and check Assignments tab."
-    if status["status"] == "running":
-        return f"Looking up your Teams assignments using screen AI... (task: {task_id[:12]}...)\nThe agent is navigating Teams now. Results will appear momentarily."
-    return status.get("summary") or status.get("result") or "Checked Teams — no assignments found or couldn't navigate the UI."
+    _t.sleep(4)  # Wait for Teams to launch
+
+    # Step 2: Run screen agent synchronously (up to 12 iterations, ~45 seconds)
+    prompt = "Look at the screen. If you see Microsoft Teams, navigate to the Assignments or Tasks section. Find all pending/remaining assignments with their due dates and status. Read them out clearly with subject name, assignment title, due date, and status."
+    result = run_task(prompt, max_iter=12)
+
+    if result.success:
+        return f"✅ Teams Assignments:\n{result.summary}"
+    elif result.steps > 0:
+        return f"Partially completed after {result.steps} steps ({round(result.duration_sec, 1)}s):\n{result.summary}"
+    else:
+        return f"Teams agent: {result.summary}"
 
 @register("browser_tab_screenshot")
 def _browser_tab_screenshot(text):
@@ -3073,15 +3084,20 @@ def _send_keys(text):
 @register("ai_computer_task")
 def _ai_computer_task(text):
     """AI sees the screen and performs visual tasks (OneNote, forms, navigation)."""
-    from screen_agent import start_task_bg, get_task_status
-    task_id = start_task_bg(text)
-    # Give it a moment to start
-    import time as _t
-    _t.sleep(1)
-    status = get_task_status(task_id)
-    if status["status"] == "running":
-        return f"AI computer agent started. Task ID: {task_id}\nThe AI is looking at the screen and working on: {text[:100]}"
-    return f"Computer agent result: {status.get('summary', 'No result')}"
+    from screen_agent import run_task, capture_screen, _HAS_PYGUI, _HAS_PIL, _HAS_MSS
+
+    if not _HAS_PYGUI or not _HAS_PIL or not _HAS_MSS:
+        return "Screen agent not available — missing dependencies (pyautogui/Pillow/mss)."
+
+    # Run synchronously — actually do the work before returning
+    result = run_task(text, max_iter=10)
+
+    if result.success:
+        return f"✅ Done: {result.summary}"
+    elif result.steps > 0:
+        return f"Partially done after {result.steps} steps ({round(result.duration_sec, 1)}s): {result.summary}"
+    else:
+        return f"Screen agent: {result.summary}"
 
 
 @register("screen_analyze")
