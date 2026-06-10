@@ -258,3 +258,8 @@ export function getBackendUrl(): string {
   if (typeof window === "undefined") return "";
   return localStorage.getItem("backend_url") || "";
 }
+
+export async function relayStatus(relayId: string) {
+  const res = await fetch(`${BASE}/api/relay/result?relay_id=${relayId}`);
+  return res.json();
+}

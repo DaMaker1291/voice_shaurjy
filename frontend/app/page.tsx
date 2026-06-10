@@ -183,6 +183,36 @@ export default function Home() {
     setThinking(false);
   }, [taskSession, addBotEvent]);
 
+  const pollRelayResult = useCallback(async (relayId: string) => {
+    let attempts = 0;
+    const maxAttempts = 60;
+    const poll = async () => {
+      if (attempts >= maxAttempts) return;
+      attempts++;
+      try {
+        const { relayStatus } = await import("@/lib/api");
+        const res = await relayStatus(relayId);
+        if (res.status === "done" || res.status === "failed") {
+          setMessages((p) => {
+            const updated = [...p];
+            const last = updated[updated.length - 1];
+            if (last && last.role === "assistant") {
+              last.content = res.result || (res.status === "done" ? "✅ Done" : "❌ Failed");
+            }
+            return updated;
+          });
+          setActionFeedback(res.result || (res.status === "done" ? "✅ Done" : "❌ Failed"));
+          setTimeout(() => setActionFeedback(null), 5000);
+          return;
+        }
+        setTimeout(poll, 1000);
+      } catch {
+        setTimeout(poll, 2000);
+      }
+    };
+    poll();
+  }, []);
+
   const handleQuery = useCallback(async (text: string) => {
     if (!text.trim()) return;
     setMessages((p) => [...p, { role: "user", content: text }]);
@@ -228,8 +258,15 @@ export default function Home() {
         setActionFeedback(reply);
         setActionType(res.action_type || "action");
         setSimTask(null);
-        setMessages((p) => [...p, { role: "assistant", content: reply }]);
-        setTimeout(() => setActionFeedback(null), 4000);
+
+        if (res.async && res.relay_id) {
+          setMessages((p) => [...p, { role: "assistant", content: reply }]);
+          // Poll for relay result
+          pollRelayResult(res.relay_id);
+        } else {
+          setMessages((p) => [...p, { role: "assistant", content: reply }]);
+          setTimeout(() => setActionFeedback(null), 4000);
+        }
       }
       else if (res.task) {
         addBotEvent("workflow", "task started");

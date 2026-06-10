@@ -336,6 +336,10 @@ class Entity:
             result = cloud_safe_execute(action, text, user_id=self.user_id)
             label = _ACTION_LABELS.get(action, "")
             self._set_mood("focused")
+            if result.startswith("__RELAY__:"):
+                parts = result.split(":", 2)
+                relay_id = parts[1] if len(parts) > 1 else ""
+                return {"text": f"{label}\n⏳ Executing on your computer...", "action": action, "relay_id": relay_id, "async": True}
             return {"text": f"{label}\n{result}", "action": action}
         return None
 
@@ -429,6 +433,10 @@ Recent interactions:
                 result["action"] = action_result["action"]
                 result["text"] = action_result.get("text", "")
                 result["thought"] = f"Executing {action_result['action']}..."
+                if action_result.get("async"):
+                    result["relay_id"] = action_result["relay_id"]
+                    result["async"] = True
+                    result["thought"] = f"Queued {action_result['action']} on your computer..."
                 self.memory.log_interaction(user_input, result["text"], action_result["action"])
                 return result
 
