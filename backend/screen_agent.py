@@ -38,8 +38,8 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
-VIS_MODEL = "llama-3.2-90b-vision-preview"
-VIS_FALLBACK = "llama-3.2-11b-vision-preview"
+VIS_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+VIS_FALLBACK = "meta-llama/llama-4-maverick-17b-128e-instruct"
 MAX_ITERATIONS = 50
 MAX_TASK_SEC = 180
 SCREENSHOT_QUALITY = 40  # JPEG compression 1-100
