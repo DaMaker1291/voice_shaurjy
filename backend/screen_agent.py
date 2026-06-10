@@ -1,4 +1,4 @@
-"""Computer Use Agent — AI sees and controls the screen via Groq vision + pyautogui."""
+"""Computer Use Agent — AI sees and controls the screen via vision models + pyautogui."""
 
 import base64
 import io
@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+HF_TOKEN = os.getenv("HF_TOKEN", "")
 
 try:
     import pyautogui
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 VIS_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 VIS_FALLBACK = "meta-llama/llama-4-maverick-17b-128e-instruct"
+HF_VIS_MODEL = "meta-llama/Llama-4-Scout-17B-16E"
 MAX_ITERATIONS = 50
 MAX_TASK_SEC = 180
 SCREENSHOT_QUALITY = 40  # JPEG compression 1-100
@@ -134,6 +136,7 @@ def analyze_screen(task: str, img_bytes: bytes) -> dict:
     client = _get_vision_client()
     b64_img = _b64(img_bytes)
 
+    # Try Groq models first
     for attempt, model in enumerate([VIS_MODEL, VIS_FALLBACK]):
         try:
             resp = client.chat.completions.create(
@@ -151,22 +154,75 @@ def analyze_screen(task: str, img_bytes: bytes) -> dict:
                 max_tokens=300,
             )
             raw = resp.choices[0].message.content.strip()
-            # Extract JSON from response (handle code fences)
             json_match = re.search(r"\{[^}]+\}", raw, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group())
-            # Try parsing entire response
             try:
                 return json.loads(raw)
             except json.JSONDecodeError:
                 if attempt == 0:
                     continue
-                return {"action": "fail", "reason": f"Could not parse vision response: {raw[:200]}"}
+                raise ValueError(f"Could not parse: {raw[:200]}")
         except Exception as e:
             if attempt == 0:
                 continue
-            return {"action": "fail", "reason": f"Vision API error: {e}"}
-    return {"action": "fail", "reason": "All vision models failed"}
+            # Both Groq models failed — try HF Inference API as fallback
+            return _analyze_screen_hf(task, b64_img, model_error=e)
+
+    # Fallback to Hugging Face Inference API
+    return _analyze_screen_hf(task, b64_img)
+
+
+def _analyze_screen_hf(task: str, b64_img: str, model_error: Exception = None) -> dict:
+    """Fallback: use Hugging Face Inference API with HF_TOKEN."""
+    if not HF_TOKEN:
+        reason = f"Vision API error: {model_error}" if model_error else "No HF_TOKEN set and all vision models failed"
+        return {"action": "fail", "reason": reason}
+
+    try:
+        import urllib.request
+        import urllib.error
+
+        payload = json.dumps({
+            "model": HF_VIS_MODEL,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Task: {task}\n\nWhat does the screen look like and what action should I take next? Output ONLY valid JSON."},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}},
+                    ],
+                }
+            ],
+            "temperature": 0.1,
+            "max_tokens": 300,
+        }).encode()
+
+        req = urllib.request.Request(
+            f"https://api-inference.huggingface.co/models/{HF_VIS_MODEL}/v1/chat/completions",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {HF_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read())
+
+        raw = data["choices"][0]["message"]["content"].strip()
+        json_match = re.search(r"\{[^}]+\}", raw, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group())
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {"action": "fail", "reason": f"HF parse error: {raw[:200]}"}
+    except Exception as e:
+        reason = f"HF Inference API error: {e}"
+        if model_error:
+            reason = f"Vision API error: {model_error}; HF fallback also failed: {e}"
+        return {"action": "fail", "reason": reason}
 
 
 # ── Action execution ───────────────────────────────────────────
