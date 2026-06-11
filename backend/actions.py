@@ -918,8 +918,14 @@ def detect_action(text: str) -> str | None:
     lower = text.lower().strip()
 
     # 1. Keyword lookup — sort by longest phrase first to avoid "time" matching "timer"
+    word_count = len(text.split())
+    is_complex = word_count > 4  # multi-word query likely describes a task, not a simple command
     for phrase, action in sorted(_KEYWORD_LOOKUP.items(), key=lambda x: -len(x[0])):
         if phrase in lower:
+            # On complex multi-word queries, only match short keywords if they appear at the start
+            # Prevents "chrome" in "open the shaurjesh chrome profile..." from hijacking routing
+            if is_complex and len(phrase) <= 10 and not lower.startswith(phrase):
+                continue
             if len(phrase) >= 3 or lower == phrase or lower.startswith(phrase):
                 return action
 
