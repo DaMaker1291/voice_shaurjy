@@ -185,9 +185,7 @@ _KEYWORD_MAP: dict[str, str] = {
     "alarm": "alarm",
     "countdown": "timer",
 
-    # Browser
-    "browser": "browser",
-    "chrome": "browser",
+    # Browser (keyword matching too greedy — simple open commands use _ACTION_PATTERNS instead)
     "open url": "open_url",
     "bookmark": "open_bookmarks",
     "history": "open_history",
@@ -689,7 +687,7 @@ _BROAD_PATTERNS = [
     (r"(?:switch|change)\s+(?:windows|apps|tasks)", "alt_tab"),
     (r"(?:dark|light)\s+mode", "toggle_theme"),
     (r"(?:turn\s+(?:the\s+)?)?(?:wifi|wi-fi|wireless)\s+(?:on|off)", "wifi_on"),
-    (r"(?:open\s+)?(?:browser|chrome|firefox|edge)\s*(?:please)?", "browser"),
+    (r"^(?:(?:open|launch|start)\s+(?:the\s+)?)?(?:google\s+|microsoft\s+)?(?:browser|chrome|firefox|edge)\s*(?:please)?$", "browser"),
     (r"(?:list|show)\s+(?:running\s+)?(?:processes|tasks|apps)", "process_list"),
     (r"(?:system|pc|computer)\s+(?:specs|info|details)", "system_info"),
     (r"(?:cpu|processor)\s+(?:usage|info|details)", "cpu_usage"),
@@ -3089,8 +3087,51 @@ def _ai_computer_task(text):
     if not _HAS_PYGUI or not _HAS_PIL or not _HAS_MSS:
         return "Screen agent not available — missing dependencies (pyautogui/Pillow/mss)."
 
+    # Pre-launch relevant apps so vision model has a starting point
+    try:
+        import pyautogui
+        lower = text.lower()
+        if "chrome" in lower:
+            pyautogui.hotkey("win", "r")
+            pyautogui.sleep(0.5)
+            pyautogui.write("chrome", interval=0.05)
+            pyautogui.press("enter")
+            pyautogui.sleep(2)
+        elif "firefox" in lower:
+            pyautogui.hotkey("win", "r")
+            pyautogui.sleep(0.5)
+            pyautogui.write("firefox", interval=0.05)
+            pyautogui.press("enter")
+            pyautogui.sleep(2)
+        elif "edge" in lower:
+            pyautogui.hotkey("win", "r")
+            pyautogui.sleep(0.5)
+            pyautogui.write("microsoft-edge:", interval=0.05)
+            pyautogui.press("enter")
+            pyautogui.sleep(2)
+        elif "teams" in lower:
+            pyautogui.hotkey("win", "r")
+            pyautogui.sleep(0.5)
+            pyautogui.write("teams", interval=0.05)
+            pyautogui.press("enter")
+            pyautogui.sleep(4)
+        elif "outlook" in lower:
+            pyautogui.hotkey("win", "r")
+            pyautogui.sleep(0.5)
+            pyautogui.write("outlook", interval=0.05)
+            pyautogui.press("enter")
+            pyautogui.sleep(3)
+        elif "notepad" in lower or "notes" in lower:
+            pyautogui.hotkey("win", "r")
+            pyautogui.sleep(0.5)
+            pyautogui.write("notepad", interval=0.05)
+            pyautogui.press("enter")
+            pyautogui.sleep(1)
+    except Exception:
+        pass  # Pre-launch is best-effort
+
     # Run synchronously — actually do the work before returning
-    result = run_task(text, max_iter=10)
+    result = run_task(text, max_iter=25)
 
     if result.success:
         return f"✅ Done: {result.summary}"

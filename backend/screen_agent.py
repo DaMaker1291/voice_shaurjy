@@ -91,6 +91,18 @@ SYSTEM_PROMPT = """You are a computer-use AI. You see the screen and control the
 
 Your task: analyze what's on screen and output a **single next action** as JSON.
 
+BREAK DOWN COMPLEX TASKS into small steps. Each step should be ONE action.
+For example, to "open Chrome and go to Outlook":
+  Step 1: look for Chrome icon on taskbar/desktop
+  Step 2: click it
+  Step 3: look for profile picker
+  Step 4: click the right profile
+  Step 5: look for address bar
+  Step 6: click it and type outlook.com
+  Step 7: press enter
+  Step 8: wait for page to load
+  Step 9: check if signed in, etc.
+
 Available actions (output ONLY valid JSON, no other text):
 {"action": "click", "x": int, "y": int, "button": "left"|"right"}
 {"action": "double_click", "x": int, "y": int}
@@ -106,12 +118,14 @@ Available actions (output ONLY valid JSON, no other text):
 RULES:
 1. Always look at the full screen before acting. Read all visible text carefully.
 2. For text input: first click the text field, then use "type" action.
-3. For OneNote/homework: navigate through the interface step by step.
-4. If you see an error or unexpected state, try to recover.
-5. Use wait(0.5-1.0) between actions to let UI update.
-6. Only use "done" when the task is genuinely complete.
-7. Coordinates must be within screen bounds.
-8. Be precise with coordinates — look at button/text positions carefully."""
+3. If the app isn't on screen, press Win and search for it, or use Win+R to launch it.
+4. For Chrome profiles: after opening Chrome, look for the profile picker window. Click the correct profile picture/name. If there's only one profile, it may auto-open.
+5. If you see an error or unexpected state, try to recover or try a different approach.
+6. Use wait(0.5-1.0) between actions to let UI update.
+7. Only use "done" when the task is genuinely complete.
+8. Coordinates must be within screen bounds. Estimate positions from what you see.
+9. Think about the full task plan first, then execute ONE step at a time.
+10. After each action, look at the new screen state to decide the next action."""
 
 
 def _resize_for_api(img_bytes: bytes, max_side: int = MAX_IMAGE_SIZE) -> bytes:
@@ -132,9 +146,24 @@ def _b64(img_bytes: bytes) -> str:
     return base64.b64encode(img_bytes).decode("utf-8")
 
 
-def analyze_screen(task: str, img_bytes: bytes) -> dict:
+def analyze_screen(task: str, img_bytes: bytes, history: list = None) -> dict:
     client = _get_vision_client()
     b64_img = _b64(img_bytes)
+
+    # Build context from previous steps so the model knows what's been done
+    history_text = ""
+    if history:
+        recent = history[-6:]  # last 6 steps for context
+        lines = []
+        for h in recent:
+            step = h.get("step", "?")
+            act = h.get("action", {})
+            res = h.get("result", "")
+            lines.append(f"  Step {step}: {json.dumps(act)} → {res[:80]}")
+        if lines:
+            history_text = "Previous actions:\n" + "\n".join(lines) + "\n\n"
+
+    prompt = f"Task: {task}\n\n{history_text}What does the screen look like and what action should I take next? Output ONLY valid JSON."
 
     # Try Groq models first
     for attempt, model in enumerate([VIS_MODEL, VIS_FALLBACK]):
@@ -145,13 +174,13 @@ def analyze_screen(task: str, img_bytes: bytes) -> dict:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": f"Task: {task}\n\nWhat does the screen look like and what action should I take next? Output ONLY valid JSON."},
+                            {"type": "text", "text": prompt},
                             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}", "detail": "high"}},
                         ],
                     }
                 ],
                 temperature=0.1,
-                max_tokens=300,
+                max_tokens=400,
             )
             raw = resp.choices[0].message.content.strip()
             json_match = re.search(r"\{[^}]+\}", raw, re.DOTALL)
@@ -167,13 +196,13 @@ def analyze_screen(task: str, img_bytes: bytes) -> dict:
             if attempt == 0:
                 continue
             # Both Groq models failed — try HF Inference API as fallback
-            return _analyze_screen_hf(task, b64_img, model_error=e)
+            return _analyze_screen_hf(task, b64_img, history, model_error=e)
 
     # Fallback to Hugging Face Inference API
-    return _analyze_screen_hf(task, b64_img)
+    return _analyze_screen_hf(task, b64_img, history)
 
 
-def _analyze_screen_hf(task: str, b64_img: str, model_error: Exception = None) -> dict:
+def _analyze_screen_hf(task: str, b64_img: str, history: list = None, model_error: Exception = None) -> dict:
     """Fallback: use Hugging Face Inference API with HF_TOKEN."""
     if not HF_TOKEN:
         reason = f"Vision API error: {model_error}" if model_error else "No HF_TOKEN set and all vision models failed"
@@ -183,19 +212,33 @@ def _analyze_screen_hf(task: str, b64_img: str, model_error: Exception = None) -
         import urllib.request
         import urllib.error
 
+        history_text = ""
+        if history:
+            recent = history[-6:]
+            lines = []
+            for h in recent:
+                step = h.get("step", "?")
+                act = h.get("action", {})
+                res = h.get("result", "")
+                lines.append(f"  Step {step}: {json.dumps(act)} → {res[:80]}")
+            if lines:
+                history_text = "Previous actions:\n" + "\n".join(lines) + "\n\n"
+
+        prompt = f"Task: {task}\n\n{history_text}What does the screen look like and what action should I take next? Output ONLY valid JSON."
+
         payload = json.dumps({
             "model": HF_VIS_MODEL,
             "messages": [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": f"Task: {task}\n\nWhat does the screen look like and what action should I take next? Output ONLY valid JSON."},
+                        {"type": "text", "text": prompt},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}},
                     ],
                 }
             ],
             "temperature": 0.1,
-            "max_tokens": 300,
+            "max_tokens": 400,
         }).encode()
 
         req = urllib.request.Request(
@@ -318,7 +361,7 @@ def run_task(task_description: str, max_iter: int = MAX_ITERATIONS) -> TaskResul
 
     start = time.time()
     log = []
-    prev_screenshots = []  # Track recent screenshots to detect no change
+    history = []  # Track action history for context in vision prompts
 
     try:
         for step in range(1, max_iter + 1):
@@ -331,20 +374,15 @@ def run_task(task_description: str, max_iter: int = MAX_ITERATIONS) -> TaskResul
             if img is None:
                 return TaskResult(False, "Screen capture failed", step, elapsed, log)
 
-            # Check if screen changed from last iteration (avoid loops)
-            if prev_screenshots:
-                pass  # We could check similarity, but skip for speed
-
-            prev_screenshots.append(img)
-            if len(prev_screenshots) > 5:
-                prev_screenshots.pop(0)
-
-            # Analyze with vision
-            action = analyze_screen(task_description, img)
+            # Analyze with vision — pass history so model knows what's been done
+            action = analyze_screen(task_description, img, history)
 
             # Execute action
             result = execute_vision_action(action)
             log.append(f"Step {step}: {json.dumps(action)} → {result}")
+
+            # Track for next iteration's context
+            history.append({"step": step, "action": action, "result": result})
 
             # Check completion
             if result.startswith("DONE:"):
