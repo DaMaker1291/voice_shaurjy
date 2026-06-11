@@ -343,9 +343,9 @@ _KEYWORD_MAP: dict[str, str] = {
     "what do you see": "screen_analyze", "look at screen": "screen_analyze",
 }
 
-# Keyword → action lookup (longest-first for specificity)
-# Complex queries route through action-verb fallback → ai_computer_task (screen agent)
-# See: entity_engine._route_action() lines 345-376
+# Keyword phrase → action ID lookup (longest-first for specificity)
+# Complex multi-step queries fall through to action-verb fallback → ai_computer_task
+# _route_action() in entity_engine.py handles the fallback routing
 _KEYWORD_LOOKUP: dict[str, str] = {k.lower().strip(): v for k, v in _KEYWORD_MAP.items()}
 
 _ACTION_PATTERNS = {
