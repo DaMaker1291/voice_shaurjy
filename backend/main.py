@@ -772,4 +772,5 @@ async def serve_frontend(req, exc):
         if os.path.isfile(fp):
             from fastapi.responses import FileResponse
             return FileResponse(fp)
-    raise exc
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"detail": "Not Found"}, status_code=404)
