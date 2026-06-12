@@ -42,8 +42,8 @@ logger = logging.getLogger(__name__)
 VIS_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 VIS_FALLBACK = "meta-llama/llama-4-maverick-17b-128e-instruct"
 HF_VIS_MODEL = "meta-llama/Llama-4-Scout-17B-16E"
-MAX_ITERATIONS = 50
-MAX_TASK_SEC = 180
+MAX_ITERATIONS = 80
+MAX_TASK_SEC = 300
 SCREENSHOT_QUALITY = 40  # JPEG compression 1-100
 MAX_IMAGE_SIZE = 1280  # Resize longest edge to this
 
@@ -89,21 +89,27 @@ def capture_screen() -> Optional[bytes]:
 
 SYSTEM_PROMPT = """You are a computer-use AI. You see the screen and control the mouse and keyboard.
 
-Your task: analyze what's on screen and output a **single next action** as JSON.
+Your task: break down the user's request into small steps and output ONE action at a time as JSON.
 
-BREAK DOWN COMPLEX TASKS into small steps. Each step should be ONE action.
-For example, to "open Chrome and go to Outlook":
-  Step 1: look for Chrome icon on taskbar/desktop
-  Step 2: click it
-  Step 3: look for profile picker
-  Step 4: click the right profile
-  Step 5: look for address bar
-  Step 6: click it and type outlook.com
-  Step 7: press enter
-  Step 8: wait for page to load
-  Step 9: check if signed in, etc.
+COMMON UI PATTERNS:
+• Address bar top of browser: click it, type URL, press enter
+• Search box: click it, type query, press enter
+• Button: click its center coordinates
+• Dropdown: click to open, then click the option
+• Text field: click first, then type
+• Checkbox/radio: click directly on it
+• Link: click on the link text
+• Window title bar: drag by clicking top edge
+• Scroll: scroll down to see more content
+• Right-click: use button:"right" on click action
 
-Available actions (output ONLY valid JSON, no other text):
+CHROME PROFILES:
+After opening Chrome, look for the profile picker window (shows profile avatars/names).
+Click the profile matching the name the user asked for. If you don't see the picker,
+Chrome may have auto-opened to the default profile — look for the profile icon in the
+top-right corner of the browser window.
+
+AVAILABLE ACTIONS (output ONLY valid JSON):
 {"action": "click", "x": int, "y": int, "button": "left"|"right"}
 {"action": "double_click", "x": int, "y": int}
 {"action": "move", "x": int, "y": int}
@@ -115,17 +121,17 @@ Available actions (output ONLY valid JSON, no other text):
 {"action": "done", "result": "summary of what was accomplished"}
 {"action": "fail", "reason": "why the task cannot be completed"}
 
-RULES:
-1. Always look at the full screen before acting. Read all visible text carefully.
-2. For text input: first click the text field, then use "type" action.
-3. If the app isn't on screen, press Win and search for it, or use Win+R to launch it.
-4. For Chrome profiles: after opening Chrome, look for the profile picker window. Click the correct profile picture/name. If there's only one profile, it may auto-open.
-5. If you see an error or unexpected state, try to recover or try a different approach.
-6. Use wait(0.5-1.0) between actions to let UI update.
-7. Only use "done" when the task is genuinely complete.
-8. Coordinates must be within screen bounds. Estimate positions from what you see.
-9. Think about the full task plan first, then execute ONE step at a time.
-10. After each action, look at the new screen state to decide the next action."""
+CRITICAL RULES:
+1. Examine the full screen before every action. Read all visible text.
+2. For text input: ALWAYS click the text field first, THEN type.
+3. Break complex tasks down to ONE action per response.
+4. After each action, wait for the screen to update before deciding the next step.
+5. If an app isn't visible, press Win key and search for it.
+6. If stuck (same screen after action), try a different approach.
+7. Coordinate order: (x=horizontal from left, y=vertical from top). Stay within screen bounds.
+8. Only use "done" when the task is genuinely complete.
+9. Use "wait" liberally (0.5-1.0s) after actions that change the screen.
+10. If you see a login page, notify the user — don't try to type passwords."""
 
 
 def _resize_for_api(img_bytes: bytes, max_side: int = MAX_IMAGE_SIZE) -> bytes:
@@ -144,6 +150,55 @@ def _resize_for_api(img_bytes: bytes, max_side: int = MAX_IMAGE_SIZE) -> bytes:
 
 def _b64(img_bytes: bytes) -> str:
     return base64.b64encode(img_bytes).decode("utf-8")
+
+
+def _extract_json(raw: str) -> dict | None:
+    """Robust JSON extraction supporting nested objects."""
+    raw = raw.strip()
+    # Direct parse
+    if raw.startswith("{"):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+    # Balanced-brace scan for outermost JSON object
+    stack = []
+    for i, ch in enumerate(raw):
+        if ch == "{":
+            stack.append(i)
+        elif ch == "}":
+            if stack:
+                start = stack.pop()
+                if not stack:
+                    try:
+                        return json.loads(raw[start:i+1])
+                    except json.JSONDecodeError:
+                        # Nested brace might still be inside — continue scanning
+                        continue
+    # Last resort: find any {…} block with regex (may miss nested)
+    m = re.search(r"\{[^{}]*\}", raw, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group())
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
+def _hash_img(img_bytes: bytes) -> str:
+    """Quick perceptual-ish hash to detect screen changes."""
+    import hashlib
+    # Downsample then hash — fast approximate comparison
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(img_bytes))
+        tiny = img.resize((16, 12), Image.NEAREST)
+        buf = io.BytesIO()
+        tiny.save(buf, format="JPEG", quality=10)
+        return hashlib.md5(buf.getvalue()).hexdigest()
+    except Exception:
+        return hashlib.md5(img_bytes).hexdigest()
 
 
 def analyze_screen(task: str, img_bytes: bytes, history: list = None) -> dict:
@@ -167,36 +222,36 @@ def analyze_screen(task: str, img_bytes: bytes, history: list = None) -> dict:
 
     # Try Groq models first
     for attempt, model in enumerate([VIS_MODEL, VIS_FALLBACK]):
-        try:
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}", "detail": "high"}},
-                        ],
-                    }
-                ],
-                temperature=0.1,
-                max_tokens=400,
-            )
-            raw = resp.choices[0].message.content.strip()
-            json_match = re.search(r"\{[^}]+\}", raw, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
+        for retry in range(2):  # retry once on parse failure
             try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                if attempt == 0:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}", "detail": "high"}},
+                            ],
+                        }
+                    ],
+                    temperature=0.1,
+                    max_tokens=600,
+                )
+                raw = resp.choices[0].message.content.strip()
+                parsed = _extract_json(raw)
+                if parsed:
+                    return parsed
+                if retry == 0:
                     continue
-                raise ValueError(f"Could not parse: {raw[:200]}")
-        except Exception as e:
-            if attempt == 0:
-                continue
-            # Both Groq models failed — try HF Inference API as fallback
-            return _analyze_screen_hf(task, b64_img, history, model_error=e)
+                raise ValueError(f"Could not parse after retry: {raw[:200]}")
+            except Exception as e:
+                if retry == 0 and not isinstance(e, ValueError):
+                    continue
+                if attempt == 0:
+                    break  # try fallback model
+                # Both Groq models failed — try HF Inference API
+                return _analyze_screen_hf(task, b64_img, history, model_error=e)
 
     # Fallback to Hugging Face Inference API
     return _analyze_screen_hf(task, b64_img, history)
@@ -254,13 +309,10 @@ def _analyze_screen_hf(task: str, b64_img: str, history: list = None, model_erro
             data = json.loads(r.read())
 
         raw = data["choices"][0]["message"]["content"].strip()
-        json_match = re.search(r"\{[^}]+\}", raw, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group())
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            return {"action": "fail", "reason": f"HF parse error: {raw[:200]}"}
+        parsed = _extract_json(raw)
+        if parsed:
+            return parsed
+        return {"action": "fail", "reason": f"HF parse error: {raw[:200]}"}
     except Exception as e:
         reason = f"HF Inference API error: {e}"
         if model_error:
@@ -362,6 +414,9 @@ def run_task(task_description: str, max_iter: int = MAX_ITERATIONS) -> TaskResul
     start = time.time()
     log = []
     history = []  # Track action history for context in vision prompts
+    last_hash = None
+    stuck_count = 0
+    MAX_STUCK = 4  # consecutive no-change screenshots → force recovery
 
     try:
         for step in range(1, max_iter + 1):
@@ -373,6 +428,20 @@ def run_task(task_description: str, max_iter: int = MAX_ITERATIONS) -> TaskResul
             img = capture_screen()
             if img is None:
                 return TaskResult(False, "Screen capture failed", step, elapsed, log)
+
+            # Stuck-state detection: if screen hasn't changed after an action, increment counter
+            current_hash = _hash_img(img)
+            if last_hash and current_hash == last_hash and step > 1:
+                stuck_count += 1
+                if stuck_count >= MAX_STUCK:
+                    # Force a different action: press escape, wait, then re-evaluate
+                    pyautogui.press("escape")
+                    time.sleep(0.5)
+                    stuck_count = 0
+                    log.append(f"Step {step}: ⚠ Stuck detected — pressed Escape")
+            else:
+                stuck_count = 0
+            last_hash = current_hash
 
             # Analyze with vision — pass history so model knows what's been done
             action = analyze_screen(task_description, img, history)

@@ -3139,7 +3139,7 @@ def _ai_computer_task(text):
         pass  # Pre-launch is best-effort
 
     # Run synchronously — actually do the work before returning
-    result = run_task(text, max_iter=25)
+    result = run_task(text, max_iter=40)
 
     if result.success:
         return f"✅ Done: {result.summary}"

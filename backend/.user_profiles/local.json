@@ -1,7 +1,7 @@
 {
   "user_id": "",
   "first_seen": "2026-05-31T19:36:47.009378",
-  "last_seen": "2026-06-11T21:49:59.747785",
+  "last_seen": "2026-06-11T21:54:40.420413",
   "session_count": 0,
   "total_messages": 1,
   "device": {
@@ -9,7 +9,7 @@
     "hostname": "LAPTOP-QG2ATQI5",
     "ram_gb": "7.7",
     "cpu": "12th Gen Intel(R) Core(TM) i7-1255U",
-    "uptime_hours": "18.1",
+    "uptime_hours": "18.2",
     "installed_apps": [
       "Antigravity (User)",
       "Apple Software Update",
@@ -73,10 +73,10 @@
       "WsiAccount"
     ],
     "recent_file_types": [
-      ".jpg",
+      ".docx",
       ".pdf",
       ".png",
-      ".docx",
+      ".jpg",
       ".txt"
     ]
   },
