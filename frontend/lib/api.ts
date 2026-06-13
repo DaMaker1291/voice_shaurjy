@@ -6,7 +6,7 @@ function getBaseURL(): string {
   if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   }
-  return "https://dgfhgjhj-second-brain-api.hf.space";
+  return "https://dgfhgjhj-my-actual-brain.hf.space";
 }
 
 const BASE = getBaseURL();
