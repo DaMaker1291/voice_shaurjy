@@ -202,7 +202,6 @@ def _hash_img(img_bytes: bytes) -> str:
 
 
 def analyze_screen(task: str, img_bytes: bytes, history: list = None) -> dict:
-    client = _get_vision_client()
     b64_img = _b64(img_bytes)
 
     # Build context from previous steps so the model knows what's been done
@@ -220,9 +219,19 @@ def analyze_screen(task: str, img_bytes: bytes, history: list = None) -> dict:
 
     prompt = f"Task: {task}\n\n{history_text}What does the screen look like and what action should I take next? Output ONLY valid JSON."
 
-    # Try Groq models first
+    # Try Hugging Face Inference API first (better vision models)
+    if HF_TOKEN:
+        try:
+            result = _analyze_screen_hf(task, b64_img, history)
+            if result and result.get("action") != "fail":
+                return result
+        except Exception:
+            pass
+
+    # Fall back to Groq models (faster, smaller models)
+    client = _get_vision_client()
     for attempt, model in enumerate([VIS_MODEL, VIS_FALLBACK]):
-        for retry in range(2):  # retry once on parse failure
+        for retry in range(2):
             try:
                 resp = client.chat.completions.create(
                     model=model,
@@ -249,12 +258,9 @@ def analyze_screen(task: str, img_bytes: bytes, history: list = None) -> dict:
                 if retry == 0 and not isinstance(e, ValueError):
                     continue
                 if attempt == 0:
-                    break  # try fallback model
-                # Both Groq models failed — try HF Inference API
-                return _analyze_screen_hf(task, b64_img, history, model_error=e)
+                    break
 
-    # Fallback to Hugging Face Inference API
-    return _analyze_screen_hf(task, b64_img, history)
+    return {"action": "fail", "reason": "All vision models failed (HF + Groq)"}
 
 
 def _analyze_screen_hf(task: str, b64_img: str, history: list = None, model_error: Exception = None) -> dict:
