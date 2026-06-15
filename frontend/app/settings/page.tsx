@@ -7,16 +7,6 @@ import { setBackendUrl, getBackendUrl } from "@/lib/api";
 export default function Settings() {
   const [tier, setTier] = useState("free");
   const [urlInput, setUrlInput] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [origin, setOrigin] = useState("");
-
-  useEffect(() => {
-    setUrlInput(getBackendUrl());
-    setOrigin(window.location.origin);
-  }, []);
-
-  const downloadLink = `${origin}/relay_agent.py`;
-  const psCommand = origin ? `powershell -c "iwr -Uri '${downloadLink}' -OutFile '%TEMP%\\relay_agent.py'; python '%TEMP%\\relay_agent.py' --user $env:USERNAME"` : "";
 
   useEffect(() => {
     setUrlInput(getBackendUrl());
@@ -64,32 +54,47 @@ export default function Settings() {
       <section className="bg-gray-900 rounded-xl p-4 border border-purple-900/40">
         <h2 className="text-lg font-semibold mb-3 text-purple-300">🤖 Windows Agent</h2>
         <p className="text-sm text-gray-400 mb-4">
-          To execute Windows actions (battery, OneNote, volume, etc.), run the relay agent on your PC.
-          It connects to the cloud and executes actions locally.
+          Run the relay agent on your Windows PC to execute actions locally (battery, OneNote, volume, network scan, etc.).
+          It polls the cloud every 0.5s and runs actions on your machine.
         </p>
-        {origin ? (<div className="flex flex-wrap gap-3">
-          <a
-            href={downloadLink}
-            download
-            className="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium inline-flex items-center gap-2"
-          >
-            ⬇️ Download Agent
-          </a>
-          <button
-            onClick={() => { navigator.clipboard.writeText(psCommand); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-            className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-5 py-2.5 rounded-lg text-sm border border-gray-700"
-          >
-            {copied ? "✅ Copied!" : "📋 Copy PowerShell Command"}
-          </button>
-        </div>) : (
-          <div className="animate-pulse h-10 bg-gray-800 rounded-lg" />
-        )}
-        {psCommand && (<div className="mt-3 bg-gray-950 rounded-lg p-3 text-xs text-gray-500 font-mono overflow-x-auto">
-          <span className="text-green-400"># Run this in PowerShell on your Windows PC:</span><br />
-          {psCommand}
-        </div>)}
+
+        <div className="bg-gray-950 rounded-lg p-4 space-y-3 text-sm font-mono">
+          <p className="text-green-400 text-xs font-semibold tracking-wide"># Setup on a NEW Windows PC (one-time):</p>
+
+          <div className="space-y-1.5">
+            <p className="text-gray-500">
+              <span className="text-purple-400">1.</span> Install Python 3.10+ from
+              <a href="https://python.org/downloads" target="_blank" rel="noopener noreferrer"
+                 className="text-cyan-400 hover:text-cyan-300 ml-1">python.org</a>
+            </p>
+            <p className="text-gray-500">
+              <span className="text-purple-400">2.</span> Open PowerShell and clone the repo:
+            </p>
+            <div className="bg-gray-900 rounded p-2 text-xs text-gray-300 break-all select-all">
+              git clone https://github.com/DaMaker1291/voice_shaurjy.git
+            </div>
+            <p className="text-gray-500">
+              <span className="text-purple-400">3.</span> Install dependencies:
+            </p>
+            <div className="bg-gray-900 rounded p-2 text-xs text-gray-300 break-all select-all">
+              cd voice_shaurjy; pip install -r backend/requirements-render.txt
+            </div>
+            <p className="text-gray-500">
+              <span className="text-purple-400">4.</span> Start the relay agent:
+            </p>
+            <div className="bg-gray-900 rounded p-2 text-xs text-gray-300 break-all select-all">
+              python relay_agent.py --user local
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-gray-800">
+            <p className="text-yellow-400/80 text-xs">⚠ The old one-line download command was broken — relay_agent.py needs the whole backend/ folder.</p>
+          </div>
+        </div>
+
         <p className="text-xs text-gray-500 mt-3">
           The agent polls the cloud every 0.5s for actions assigned to your user. It auto-detects your Windows username.
+          Keep the terminal window open while using the assistant.
         </p>
       </section>
 
