@@ -1,18 +1,18 @@
 """
 Relay agent — runs on any Windows PC, polls HF Space for that user's actions.
-Usage: relay_agent.py --user <user_id>
 
-SETUP ON NEW DEVICE:
-  1. git clone https://github.com/DaMaker1291/voice_shaurjy.git
-  2. cd voice_shaurjy
-  3. pip install -r backend/requirements-render.txt
-  4. python relay_agent.py --user <your_user_id>
+USAGE:
+  python relay_agent.py --user <user_id>
+
+ONE-CLICK INSTALL ON NEW DEVICE (run in PowerShell):
+  powershell -c "& { iwr -Uri 'https://dgfhgjhj-my-actual-brain.hf.space/relay_agent.py' -OutFile \"$env:TEMP\\relay_agent.py\"; python \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"
 """
 
 import argparse
 import json
 import os
 import socket
+import subprocess
 import sys
 import time
 import urllib.request
@@ -21,35 +21,16 @@ import urllib.error
 HF_API = os.environ.get("HF_API_URL", "https://dgfhgjhj-my-actual-brain.hf.space").rstrip("/")
 
 
-def check_backend():
-    """Verify backend/ directory exists and actions.py is importable."""
+def ensure_deps():
+    req_file = os.path.join(os.path.dirname(__file__), "backend", "requirements-render.txt")
+    if os.path.isfile(req_file):
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", req_file], shell=True)
+
+
+def ensure_backend():
     backend_dir = os.path.join(os.path.dirname(__file__), "backend")
-    actions_path = os.path.join(backend_dir, "actions.py")
-    if not os.path.isdir(backend_dir):
-        print("")
-        print("=" * 60)
-        print("ERROR: 'backend/' directory not found!")
-        print("=" * 60)
-        print("")
-        print("The relay agent needs the 'backend/' folder with action modules.")
-        print("You likely downloaded relay_agent.py as a single file to %TEMP%.")
-        print("")
-        print("CORRECT SETUP:")
-        print("  1. git clone https://github.com/DaMaker1291/voice_shaurjy.git")
-        print("  2. cd voice_shaurjy")
-        print("  3. pip install -r backend/requirements-render.txt")
-        print("  4. python relay_agent.py --user <user_id>")
-        print("")
-        return False
-    if not os.path.isfile(actions_path):
-        print(f"WARNING: {actions_path} not found. Some actions may fail.")
-    else:
+    if os.path.isdir(backend_dir) and os.path.isfile(os.path.join(backend_dir, "actions.py")):
         sys.path.insert(0, backend_dir)
-        try:
-            __import__("actions")
-        except ImportError as e:
-            print(f"WARNING: Could not import actions module: {e}")
-    return True
 
 
 def post(url, data):
@@ -67,8 +48,14 @@ def get(url):
 def main():
     parser = argparse.ArgumentParser(description="Second Brain Relay Agent")
     parser.add_argument("--user", default="local", help="Your user ID")
+    parser.add_argument("--install", action="store_true", help="Install dependencies and exit")
     args = parser.parse_args()
     user_id = args.user
+
+    if args.install:
+        ensure_deps()
+        print("[Relay] Dependencies installed. Run: python relay_agent.py --user <user_id>")
+        return
 
     from urllib.parse import urlparse
     hostname = urlparse(HF_API).hostname
@@ -76,10 +63,12 @@ def main():
         socket.gethostbyname(hostname)
         print(f"[Relay] Connected to {HF_API} as user '{user_id}'")
     except socket.gaierror:
-        print(f"[Relay] DNS failed for {hostname}"); return
+        print(f"[Relay] DNS failed for {hostname}")
+        print(f"[Relay] Check that the URL is correct: {HF_API}")
+        return
 
-    if not check_backend():
-        sys.exit(1)
+    ensure_backend()
+    ensure_deps()
 
     print(f"[Relay] Polling every 0.5s for user '{user_id}'...")
     while True:
@@ -98,6 +87,9 @@ def main():
                     post(f"{HF_API}/api/relay/result",
                          {"relay_id": rid, "result": f"Error: {e}", "success": False})
                     print(f"[Relay] Failed: {act}")
+        except urllib.error.HTTPError as e:
+            print(f"[Relay] Backend returned {e.code}: {e.reason}")
+            print(f"[Relay] Will retry...")
         except Exception:
             pass
         time.sleep(0.5)
