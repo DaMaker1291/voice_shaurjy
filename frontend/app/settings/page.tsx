@@ -59,42 +59,27 @@ export default function Settings() {
         </p>
 
         <div className="bg-gray-950 rounded-lg p-4 space-y-3 text-sm font-mono">
-          <p className="text-green-400 text-xs font-semibold tracking-wide"># Setup on a NEW Windows PC (one-time):</p>
-
-          <div className="space-y-1.5">
-            <p className="text-gray-500">
-              <span className="text-purple-400">1.</span> Install Python 3.10+ from
-              <a href="https://python.org/downloads" target="_blank" rel="noopener noreferrer"
-                 className="text-cyan-400 hover:text-cyan-300 ml-1">python.org</a>
-            </p>
-            <p className="text-gray-500">
-              <span className="text-purple-400">2.</span> Open PowerShell and clone the repo:
-            </p>
-            <div className="bg-gray-900 rounded p-2 text-xs text-gray-300 break-all select-all">
-              git clone https://github.com/DaMaker1291/voice_shaurjy.git
-            </div>
-            <p className="text-gray-500">
-              <span className="text-purple-400">3.</span> Install dependencies:
-            </p>
-            <div className="bg-gray-900 rounded p-2 text-xs text-gray-300 break-all select-all">
-              cd voice_shaurjy; pip install -r backend/requirements-render.txt
-            </div>
-            <p className="text-gray-500">
-              <span className="text-purple-400">4.</span> Start the relay agent:
-            </p>
-            <div className="bg-gray-900 rounded p-2 text-xs text-gray-300 break-all select-all">
-              python relay_agent.py --user local
-            </div>
+          <p className="text-green-400 text-xs font-semibold tracking-wide"># One-click install — run this in PowerShell:</p>
+          <div className="bg-gray-900 rounded p-3 text-xs text-gray-300 break-all select-all leading-relaxed">
+            {"powershell -c \"& { iwr -Uri 'https://dgfhgjhj-my-actual-brain.hf.space/relay_agent.py' -OutFile \"$env:TEMP\\relay_agent.py\"; python \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }\""}
           </div>
 
-          <div className="pt-2 border-t border-gray-800">
-            <p className="text-yellow-400/80 text-xs">⚠ The old one-line download command was broken — relay_agent.py needs the whole backend/ folder.</p>
+          <div className="pt-3 border-t border-gray-800 space-y-1.5">
+            <p className="text-purple-400 text-xs font-semibold tracking-wide"># Manual setup (if one-click fails):</p>
+            <p className="text-gray-500 text-xs">
+              1. Install Python 3.10+ from <a href="https://python.org/downloads" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">python.org</a>
+            </p>
+            <p className="text-gray-500 text-xs">
+              2. Clone the repo and run:
+            </p>
+            <div className="bg-gray-900/60 rounded p-2 text-xs text-gray-400 break-all select-all">
+              git clone https://github.com/DaMaker1291/voice_shaurjy.git &amp;&amp; cd voice_shaurjy &amp;&amp; pip install -r backend/requirements-render.txt &amp;&amp; python relay_agent.py --user local
+            </div>
           </div>
         </div>
 
         <p className="text-xs text-gray-500 mt-3">
-          The agent polls the cloud every 0.5s for actions assigned to your user. It auto-detects your Windows username.
-          Keep the terminal window open while using the assistant.
+          The agent polls the cloud every 0.5s for actions assigned to your user. Keep the terminal window open while using the assistant.
         </p>
       </section>
 
