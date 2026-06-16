@@ -764,6 +764,11 @@ async def relay_execute(req: ActionRequest):
 async def serve_frontend(req, exc):
     """Serve frontend static files for non-API routes."""
     path = req.url.path.lstrip("/") or "index.html"
+    # Strip basePath prefix (used for GitHub Pages at /voice_shaurjy/)
+    for prefix in ("voice_shaurjy/",):
+        if path.startswith(prefix):
+            path = path[len(prefix):]
+            break
     if not path.startswith("api/") and not path.startswith("ws/") and not path.startswith("docs") and not path.startswith("openapi"):
         _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "out")
         fp = os.path.join(_frontend_dir, path)

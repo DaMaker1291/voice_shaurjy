@@ -3,8 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   output: "export",
   images: { unoptimized: true },
-  basePath: "",
-  assetPrefix: "",
+  basePath: "/voice_shaurjy",
 };
 
 module.exports = nextConfig;
