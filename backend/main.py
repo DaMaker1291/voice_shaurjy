@@ -6,6 +6,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -30,13 +31,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "out")
-    fp = os.path.join(_frontend_dir, "index.html")
-    if os.path.isfile(fp):
-        from fastapi.responses import FileResponse
-        return FileResponse(fp)
-    return {"app": "Second Brain API", "status": "running", "docs": "/docs", "health": "/health"}
-
+    return RedirectResponse(url="/voice_shaurjy/")
 
 @app.get("/health")
 async def health():
