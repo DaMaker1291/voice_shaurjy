@@ -120,6 +120,7 @@ async def reminder_create(req: ReminderCreate):
 
 @app.get("/api/reminders")
 async def reminder_list(user_id: str = "local"):
+    from reminders import list_reminders
     return {"reminders": list_reminders(user_id)}
 
 
