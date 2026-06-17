@@ -59,6 +59,9 @@ export default function Dashboard() {
 
   const totalDocs = docs.length + (hasDocs ? 1 : 0);
 
+  const HF_API = "https://dgfhgjhj-my-actual-brain.hf.space";
+  const psCmd = `powershell -c "& { curl.exe -sL '${HF_API}/relay_agent.py' -o \"$env:TEMP\\relay_agent.py\"; python3 \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"`;
+
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -71,6 +74,29 @@ export default function Dashboard() {
           <div>{totalDocs} documents</div>
         </div>
       </div>
+
+      <section className="bg-gradient-to-r from-purple-900/30 to-gray-900/60 border border-purple-700/30 rounded-xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-mono text-purple-300 uppercase tracking-wider">Windows Agent</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Let Jason control your PC &mdash; install on any Windows machine</p>
+          </div>
+          <a href="/settings" className="text-xs text-purple-400 hover:text-purple-300 underline">Settings &rarr;</a>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href={`${HF_API}/relay_agent.py`}
+            download
+            className="inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs px-3.5 py-2 rounded-lg font-medium transition-all"
+          >
+            Download Agent
+          </a>
+          <span className="text-xs text-gray-600 font-mono">or run:</span>
+          <code className="text-[10px] bg-gray-950 text-gray-400 px-2.5 py-1.5 rounded select-all break-all max-w-md">
+            {psCmd}
+          </code>
+        </div>
+      </section>
 
       <section className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-5 space-y-4">
         <h2 className="text-sm font-mono text-gray-400 uppercase tracking-wider">Upload</h2>
