@@ -771,6 +771,12 @@ async def serve_frontend(req, exc):
             break
     if not path.startswith("api/") and not path.startswith("ws/") and not path.startswith("docs") and not path.startswith("openapi"):
         _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "out")
+        # Next.js static export generates .html files (dashboard.html, settings.html, etc.)
+        if "." not in path:
+            fp_html = os.path.join(_frontend_dir, path + ".html")
+            if os.path.isfile(fp_html):
+                from fastapi.responses import FileResponse
+                return FileResponse(fp_html)
         fp = os.path.join(_frontend_dir, path)
         if not os.path.isfile(fp):
             fp = os.path.join(_frontend_dir, "index.html")
