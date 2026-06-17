@@ -33,6 +33,14 @@ app.add_middleware(
 async def root():
     return RedirectResponse(url="/voice_shaurjy/")
 
+@app.get("/relay_agent.py")
+async def relay_agent():
+    fp = os.path.join(os.path.dirname(__file__), "..", "frontend", "out", "relay_agent.py")
+    if os.path.isfile(fp):
+        from fastapi.responses import FileResponse
+        return FileResponse(fp, media_type="text/plain", filename="relay_agent.py")
+    return {"error": "relay_agent.py not found"}
+
 @app.get("/health")
 async def health():
     livekit_url = os.getenv("LIVEKIT_URL", "")
