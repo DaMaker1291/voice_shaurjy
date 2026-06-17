@@ -18,7 +18,7 @@ export default function Settings() {
   const agentUrl = `${HF_API}/relay_agent.py`;
   const psParts = {
     a: `powershell -c "& { `,
-    b: `curl.exe -sL '${agentUrl}' -o \"$env:TEMP\\relay_agent.py\"; python3 \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"`,
+    b: `curl.exe -sL '${agentUrl}' -o \"$env:TEMP\\relay_agent.py\"; python \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"`,
   };
   const psCommand = psParts.a + psParts.b;
 

@@ -61,7 +61,7 @@ export default function Dashboard() {
   const totalDocs = docs.length + (hasDocs ? 1 : 0);
 
   const HF_API = "https://dgfhgjhj-my-actual-brain.hf.space";
-  const psCmd = `powershell -c "& { curl.exe -sL '${HF_API}/relay_agent.py' -o \"$env:TEMP\\relay_agent.py\"; python3 \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"`;
+  const psCmd = `powershell -c "& { curl.exe -sL '${HF_API}/relay_agent.py' -o \"$env:TEMP\\relay_agent.py\"; python \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"`;
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
