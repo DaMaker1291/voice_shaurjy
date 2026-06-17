@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { uploadDocument, getDocuments } from "@/lib/api";
 
 export default function Dashboard() {
@@ -81,7 +82,7 @@ export default function Dashboard() {
             <h2 className="text-sm font-mono text-purple-300 uppercase tracking-wider">Windows Agent</h2>
             <p className="text-xs text-gray-500 mt-0.5">Let Jason control your PC &mdash; install on any Windows machine</p>
           </div>
-          <a href="/settings" className="text-xs text-purple-400 hover:text-purple-300 underline">Settings &rarr;</a>
+          <Link href="/settings" className="text-xs text-purple-400 hover:text-purple-300 underline">Settings &rarr;</Link>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <a
