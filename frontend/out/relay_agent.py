@@ -5,7 +5,7 @@ USAGE:
   python relay_agent.py --user <user_id>
 
 ONE-CLICK INSTALL ON NEW DEVICE (run in PowerShell):
-  powershell -c "& { iwr -Uri 'https://dgfhgjhj-my-actual-brain.hf.space/relay_agent.py' -OutFile \"$env:TEMP\\relay_agent.py\"; python \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"
+   powershell -c "& { curl.exe -sL 'https://dgfhgjhj-my-actual-brain.hf.space/relay_agent' -o \"$env:TEMP\\relay_agent.py\"; python \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"
 """
 
 import argparse
