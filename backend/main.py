@@ -33,7 +33,7 @@ app.add_middleware(
 async def root():
     return RedirectResponse(url="/voice_shaurjy/")
 
-@app.get("/relay_agent.py")
+@app.get("/relay_agent")
 async def relay_agent():
     fp = os.path.join(os.path.dirname(__file__), "..", "frontend", "out", "relay_agent.py")
     if os.path.isfile(fp):

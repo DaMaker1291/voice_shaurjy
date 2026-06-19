@@ -15,7 +15,7 @@ export default function Settings() {
     setUrlInput(getBackendUrl());
   }, []);
 
-  const agentUrl = `${HF_API}/relay_agent.py`;
+  const agentUrl = `${HF_API}/relay_agent`;
   const psParts = {
     a: `powershell -c "& { `,
     b: `curl.exe -sL '${agentUrl}' -o \"$env:TEMP\\relay_agent.py\"; python \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"`,
@@ -84,14 +84,14 @@ export default function Settings() {
 
         <div className="flex items-center gap-3 mb-4">
           <a
-            href={`${HF_API}/relay_agent.py`}
+            href={`${HF_API}/relay_agent`}
             download
             className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-all"
           >
             Download Agent
           </a>
           <span className="text-xs text-gray-500">
-            via {HF_API}/relay_agent.py
+            via {HF_API}/relay_agent
           </span>
         </div>
 
