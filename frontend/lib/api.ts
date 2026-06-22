@@ -6,7 +6,7 @@ function getBaseURL(): string {
   if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   }
-  return "https://dgfhgjhj-my-actual-brain.hf.space";
+  return "https://dgfhgjhj-jarvis-ai-brain.hf.space";
 }
 
 const BASE = getBaseURL();
@@ -261,5 +261,92 @@ export function getBackendUrl(): string {
 
 export async function relayStatus(relayId: string) {
   const res = await fetch(`${BASE}/api/relay/result?relay_id=${relayId}`);
+  return res.json();
+}
+
+// ── Agent Command API ──────────────────────────────────────────
+
+export async function issueCommand(command: string, target = "all", params: Record<string, unknown> = {}) {
+  const res = await fetch(`${BASE}/api/agent/command`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command, target, params }),
+  });
+  return res.json();
+}
+
+export async function getAgentCommands() {
+  const res = await fetch(`${BASE}/api/agent/commands`);
+  return res.json();
+}
+
+export async function getAgentStatus() {
+  const res = await fetch(`${BASE}/api/agent/status`);
+  return res.json();
+}
+
+// ── Scanner API ────────────────────────────────────────────────
+
+export async function scanQuick() {
+  const res = await fetch(`${BASE}/api/scan/quick`);
+  return res.json();
+}
+
+export async function scanFull() {
+  const res = await fetch(`${BASE}/api/scan/full`);
+  return res.json();
+}
+
+export async function scanWifi() {
+  const res = await fetch(`${BASE}/api/scan/wifi`);
+  return res.json();
+}
+
+export async function scanLan() {
+  const res = await fetch(`${BASE}/api/scan/lan`);
+  return res.json();
+}
+
+export async function scanProcesses() {
+  const res = await fetch(`${BASE}/api/scan/processes`);
+  return res.json();
+}
+
+export async function scanInfo() {
+  const res = await fetch(`${BASE}/api/scan/info`);
+  return res.json();
+}
+
+// ── Propagation API ────────────────────────────────────────────
+
+export async function getPropagationStatus() {
+  const res = await fetch(`${BASE}/api/propagation/status`);
+  return res.json();
+}
+
+export async function getPropagationLogs() {
+  const res = await fetch(`${BASE}/api/propagation/logs`);
+  return res.json();
+}
+
+// ── Smart Home API ──────────────────────────────────────────────
+
+export async function discoverSmartHome() {
+  const res = await fetch(`${BASE}/api/smarthome/discover`);
+  return res.json();
+}
+
+export async function smartHomeControl(ip: string, action: string) {
+  const res = await fetch(`${BASE}/api/smarthome/control?ip=${encodeURIComponent(ip)}&action=${encodeURIComponent(action)}`);
+  return res.json();
+}
+
+export async function getSmartHomeDevices() {
+  const res = await fetch(`${BASE}/api/smarthome/devices`);
+  return res.json();
+}
+
+export async function getSmartHomeScenes() {
+  const res = await fetch(`${BASE}/api/smarthome/scenes`);
   return res.json();
 }
