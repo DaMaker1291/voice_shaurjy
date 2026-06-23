@@ -981,7 +981,7 @@ def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
 
 # Cloud-safe actions — ones that work on Linux without Windows-specific APIs
 _CLOUD_SAFE_ACTIONS = {
-    "search", "weather", "public_ip", "math_eval", "timer", "alarm",
+    "weather", "public_ip", "math_eval", "timer", "alarm",
     "time", "timer_stop", "timer_remaining",
 }
 
