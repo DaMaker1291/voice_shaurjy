@@ -91,7 +91,67 @@ def macos_exec(action: str, params: str = "") -> str:
         "weather": lambda: run("curl -s 'wttr.in?format=%C+%t+%w' 2>/dev/null || echo 'Weather unavailable'"),
         "open_app": lambda: _mac_open_app(params),
         "finder_open": lambda: run(f"open '{params}'") if params else "Open what?",
+
+        # Network & Smart Home
+        "network_scan_quick": lambda: run("arp -a"),
+        "network_scan_deep": lambda: run("nmap -sn -T4 --host-timeout 5 $(ipconfig getifaddr en0 2>/dev/null | awk -F. '{print $1\".\"$2\".\"$3\".0/24\"}') 2>/dev/null | grep -E 'Nmap|Host|MAC' | head -60"),
+        "wake_on_lan": lambda: _send_wol(params),
+        "smart_home_discover": lambda: _sh_discover(),
+        "smart_home_control": lambda: _sh_control(params),
+        "camera_snap": lambda: run("which imagesnap && imagesnap -w 1 ~/Desktop/jarvis_cam.jpg 2>/dev/null || ffmpeg -f avfoundation -framerate 1 -video_size 640x480 -i '0' -frames:v 1 ~/Desktop/jarvis_cam.jpg -y 2>/dev/null; echo 'Photo taken'"),
+        "phone_notify": lambda: _phone_notify(params),
+        "who_is_online": lambda: run("arp -a | grep -v incomplete | head -20"),
+        "system_load": lambda: run("top -l 1 -n 0 -nocolor 2>/dev/null | head -10; echo '---'; df -h /; echo '---'; uptime"),
     }
+
+def _send_wol(mac: str) -> str:
+    import socket as _s, struct as _st
+    mac = mac.replace(":", "").replace("-", "")
+    if len(mac) != 12: return f"Invalid MAC: {mac}"
+    packet = b"\xff" * 6 + bytes.fromhex(mac) * 16
+    try:
+        with _s.socket(_s.AF_INET, _s.SOCK_DGRAM) as s:
+            s.setsockopt(_s.SOL_SOCKET, _s.SO_BROADCAST, 1)
+            s.sendto(packet, ("255.255.255.255", 9))
+        return f"WoL sent to {mac}"
+    except Exception as e:
+        return f"WoL error: {e}"
+
+def _sh_discover() -> str:
+    ips = run("arp -a | grep -oE '\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b' | head -20")
+    if not ips: return "No devices on LAN"
+    found = []
+    for ip in ips.split():
+        for port, name in [(80,"HTTP"),(443,"HTTPS"),(8123,"HomeAssistant"),(6053,"ESPHome"),(9999,"Kasa")]:
+            r = run(f"curl -s --max-time 2 http://{ip}:{port}/ 2>/dev/null | head -1")
+            if r:
+                found.append(f"{ip}:{port} ({name})")
+                break
+    if found: return "Smart devices:\n" + "\n".join(found)
+    return f"Scanned {len(ips.split())} hosts. No smart services found.\n{ips}"
+
+def _sh_control(params: str) -> str:
+    parts = params.split()
+    if len(parts) < 2: return "Usage: ip on|off|toggle|status"
+    ip, action = parts[0], parts[1].lower()
+    results = []
+    if action in ("on", "off"):
+        state = "true" if action == "on" else "false"
+        r1 = run(f"curl -s --max-time 2 -H 'Content-Type: application/json' -d '{{\"on\":{state}}}' http://{ip}/json/state 2>/dev/null")
+        r2 = run(f"curl -s --max-time 2 -X PUT -H 'Content-Type: application/json' -d '{{\"on\":{state}}}' http://{ip}/api/newdeveloper/groups/0/action 2>/dev/null")
+        results.append(f"{action.capitalize()}")
+    elif action == "toggle":
+        r = run(f"curl -s --max-time 2 http://{ip}/toggle 2>/dev/null")
+        results.append("Toggled")
+    elif action == "status":
+        st = run(f"curl -s --max-time 2 http://{ip}/json/info 2>/dev/null | head -10")
+        results.append(f"Status:\n{st[:500]}")
+    return "\n".join(results) if results else f"No response from {ip}"
+
+def _phone_notify(msg: str) -> str:
+    topic = f"jarvis_{platform.node().split('.')[0]}"
+    run(f'curl -s -d "{msg[:500].replace(chr(34),chr(39))}" "https://ntfy.sh/{topic}" 2>/dev/null')
+    return f"Notification sent to ntfy.sh/{topic}. Subscribe on your phone!"
 
     fn = actions.get(action)
     if fn:

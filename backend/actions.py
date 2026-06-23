@@ -28,6 +28,26 @@ _KEYWORD_MAP: dict[str, str] = {
     "research": "fetch_search", "investigate": "fetch_search",
     "scrape": "fetch_search", "read the web": "fetch_search",
     "fetch": "fetch_search",
+    # Network & Smart Home
+    "scan network": "network_scan_deep", "deep scan": "network_scan_deep",
+    "scan my network": "network_scan_deep", "network scan": "network_scan_deep",
+    "quick scan": "network_scan_quick", "arp scan": "network_scan_quick",
+    "who is on the network": "network_scan_quick",
+    "what devices": "network_scan_quick",
+    "wake": "wake_on_lan", "wake up": "wake_on_lan", "wol": "wake_on_lan",
+    "wake on lan": "wake_on_lan",
+    "smart home": "smart_home_discover", "smart devices": "smart_home_discover",
+    "discover devices": "smart_home_discover",
+    "turn on": "smart_home_control", "turn off": "smart_home_control",
+    "toggle": "smart_home_control", "lights": "smart_home_control",
+    "light on": "smart_home_control", "light off": "smart_home_control",
+    "camera": "camera_snap", "take a photo": "camera_snap",
+    "take photo": "camera_snap", "snap": "camera_snap",
+    "notify phone": "phone_notify", "push notification": "phone_notify",
+    "send notification": "phone_notify", "text me": "phone_notify",
+    "who is online": "who_is_online", "network users": "who_is_online",
+    "system load": "system_load", "system status": "system_load",
+    "load": "system_load",
     # System
     "lock": "lock", "locked": "lock",
     "sleep": "sleep", "hibernate": "hibernate",
@@ -882,6 +902,12 @@ _ACTION_LABELS = {
     "read_file": "📄 Read a file", "write_file": "📝 Write content to a file",
     "list_dir": "📁 List directory contents", "run_python": "🐍 Execute Python code",
     "run_shell": "💻 Execute a shell command", "take_screenshot": "📸 Take a screenshot",
+    "network_scan_quick": "📡 Quick network scan...", "network_scan_deep": "📡 Deep network scan...",
+    "network_device_info": "🔍 Profiling device...", "wake_on_lan": "⚡ Sending WoL...",
+    "smart_home_discover": "🏠 Discovering smart home devices...",
+    "smart_home_control": "🏠 Controlling device...", "camera_snap": "📸 Taking photo...",
+    "phone_notify": "📱 Sending notification...", "who_is_online": "👥 Who's online...",
+    "system_load": "📊 System load...",
     "fetch_search": "🔍 Search the web and return results",
     "open_app": "🚀 Open a macOS application",
 _ACTION_TIPS = {
@@ -3489,3 +3515,167 @@ if sys.platform == "darwin":
     @register("take_screenshot")
     def _mac_take_screenshot(_):
         return _mac_run("screencapture -x ~/Desktop/jarvis_screenshot.png 2>/dev/null; echo 'Screenshot: ~/Desktop/jarvis_screenshot.png'")
+
+    # ── Network & Smart Home ────────────────────────────────────
+
+    @register("network_scan_quick")
+    def _mac_net_scan_quick(_):
+        r = _mac_run("arp -a 2>/dev/null")
+        count = r.count(") at ") if r else 0
+        return f"Devices on LAN:\n{r}\n{count} devices found" if r else "No devices found"
+
+    @register("network_scan_deep")
+    def _mac_net_scan_deep(_):
+        subnet = _mac_run("ipconfig getifaddr en0 2>/dev/null || ifconfig en0 | grep 'inet ' | awk '{print $2}'")
+        if not subnet: subnet = _mac_run("ipconfig getifaddr en1 2>/dev/null || ifconfig en1 | grep 'inet ' | awk '{print $2}'")
+        if not subnet: return "Could not determine local IP"
+        base = ".".join(subnet.split(".")[:3]) + ".0/24"
+        r = _mac_run(f"nmap -sn -T4 --max-retries 1 --host-timeout 5 {base} 2>/dev/null | grep -E 'Nmap|Host|MAC' | head -60")
+        return f"Deep scan of {base}:\n{r}" if r else f"No hosts found on {base}"
+
+    @register("network_device_info")
+    def _mac_net_device_info(text):
+        ip = text.strip().split()[-1] if text.strip() else ""
+        if not ip: return "Specify an IP address"
+        r = _mac_run(f"nmap -sV -T4 --host-timeout 15 -p 22,80,443,8080,8443,8123,9981,502,1883,1900,5353,9999,6053 {ip} 2>/dev/null | grep -E 'PORT|open|closed' | head -20")
+        return f"Device info for {ip}:\n{r}" if r else f"No info for {ip}"
+
+    @register("wake_on_lan")
+    def _mac_wol(text):
+        mac = text.replace("wake", "").replace("wol", "").replace("wake on lan", "").strip()
+        if not mac: return "Which MAC address?"
+        import socket as _sock, struct as _struct
+        mac_clean = mac.replace(":", "").replace("-", "").strip()
+        if len(mac_clean) != 12: return f"Invalid MAC: {mac}"
+        packet = b"\xff" * 6 + bytes.fromhex(mac_clean) * 16
+        try:
+            with _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM) as s:
+                s.setsockopt(_sock.SOL_SOCKET, _sock.SO_BROADCAST, 1)
+                s.sendto(packet, ("192.168.0.255", 9))
+                s.sendto(packet, ("255.255.255.255", 9))
+            return f"WoL packet sent to {mac}"
+        except Exception as e:
+            return f"WoL error: {e}"
+
+    @register("smart_home_discover")
+    def _mac_sh_discover(_):
+        """Probe for known smart home devices on the LAN."""
+        ips = _mac_run("arp -a 2>/dev/null | grep -oE '\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b' | head -20").split()
+        found = []
+        for ip in ips:
+            for port, service in [(80,"HTTP"),(443,"HTTPS"),(8123,"HomeAssistant"),(9981,"TVHeadend"),
+                                  (6053,"ESPHome"),(9999,"Kasa"),(502,"Modbus"),(1883,"MQTT"),
+                                  (8080,"HTTP-ALT"),(8443,"HTTPS-ALT")]:
+                r = _mac_run(f"curl -s --max-time 2 http://{ip}:{port}/ 2>/dev/null | head -1")
+                r2 = _mac_run(f"curl -s --max-time 2 https://{ip}:{port}/ 2>/dev/null | head -1")
+                if r or r2:
+                    body = (r or r2)[:100].replace("\n", " ").strip()
+                    found.append(f"{ip}:{port} ({service}) — {body}")
+                    break
+        if found:
+            return "Smart home devices:\n" + "\n".join(found)
+        devices = _mac_run("arp -a 2>/dev/null | head -20")
+        return f"Scanned {len(ips)} hosts. No known smart home services found.\nDevices:\n{devices}"
+
+    @register("smart_home_control")
+    def _mac_sh_control(text):
+        """Control smart home devices via HTTP API.
+        Format: device_ip action [params]
+        Actions: on, off, toggle, status, color <hex>, brightness <0-255>
+        """
+        parts = text.split()
+        if len(parts) < 2: return "Usage: smart_home_control <ip> <on|off|toggle|status>"
+        ip = parts[0]
+        action = parts[1].lower()
+        rest = " ".join(parts[2:])
+
+        results = []
+
+        # Try Philips Hue (bridge sends to all lights)
+        hue_result = _mac_run(f"curl -s --max-time 3 http://{ip}/api/newdeveloper/lights 2>/dev/null")
+        if hue_result and hue_result != "404":
+            state = "true" if action == "on" else "false"
+            if action == "toggle":
+                r = _mac_run(f"curl -s --max-time 3 http://{ip}/api/newdeveloper/lights/1 2>/dev/null")
+                state = "false" if '"on":true' in r else "true"
+            hue_cmd = _mac_run(f"curl -s -X PUT --max-time 3 -H 'Content-Type: application/json' -d '{{\"on\":{state}}}' http://{ip}/api/newdeveloper/groups/0/action 2>/dev/null")
+            results.append(f"Hue: {'on' if state == 'true' else 'off'}")
+
+        # Try ESPHome / WLED
+        if action == "toggle":
+            wled = _mac_run(f"curl -s --max-time 2 http://{ip}/toggle 2>/dev/null")
+            if wled: results.append("WLED toggled")
+        elif action == "on":
+            wled = _mac_run(f"curl -s --max-time 2 -H 'Content-Type: application/json' -d '{{\"on\":true}}' http://{ip}/json/state 2>/dev/null")
+            if not wled: wled = _mac_run(f"curl -s --max-time 2 http://{ip}/win& 2>/dev/null")
+            if wled: results.append("Device turned on")
+        elif action == "off":
+            wled = _mac_run(f"curl -s --max-time 2 -H 'Content-Type: application/json' -d '{{\"on\":false}}' http://{ip}/json/state 2>/dev/null")
+            if not wled: wled = _mac_run(f"curl -s --max-time 2 http://{ip}/win& 2>/dev/null")
+            if wled: results.append("Device turned off")
+        elif action == "status":
+            st = _mac_run(f"curl -s --max-time 2 http://{ip}/json/info 2>/dev/null | head -5")
+            if not st: st = _mac_run(f"curl -s --max-time 2 http://{ip}/ 2>/dev/null | head -5")
+            results.append(f"Status:\n{st[:300]}")
+
+        # Try brightness
+        if rest and action == "brightness" and rest.isdigit():
+            bri = min(255, max(0, int(rest)))
+            _mac_run(f"curl -s -X PUT --max-time 2 -H 'Content-Type: application/json' -d '{{\"bri\":{bri},\"on\":true}}' http://{ip}/api/newdeveloper/groups/0/action 2>/dev/null")
+            _mac_run(f"curl -s --max-time 2 -H 'Content-Type: application/json' -d '{{\"bri\":{bri}}}' http://{ip}/json/state 2>/dev/null")
+            results.append(f"Brightness: {bri}")
+
+        if not results:
+            results.append(f"No known smart device protocols responded at {ip}")
+
+        return "\n".join(results)
+
+    # ── Phone & Notifications ────────────────────────────────────
+
+    @register("phone_notify")
+    def _mac_phone_notify(text):
+        """Send push notification to phone via ntfy.sh."""
+        msg = text.replace("notify", "").replace("phone", "").replace("send", "").strip()
+        if not msg: msg = "Hello from J.A.R.V.I.S."
+        topic = f"jarvis_{_mac_run('whoami').strip()}"
+        r = _mac_run(f'curl -s -d "{msg[:500].replace(chr(34),chr(39))}" "https://ntfy.sh/{topic}" 2>/dev/null')
+        if r:
+            return f"Notification sent to ntfy.sh/{topic}"
+        # Fallback to Pushover if configured
+        token = os.environ.get("PUSHOVER_TOKEN", "")
+        user = os.environ.get("PUSHOVER_USER", "")
+        if token and user:
+            _mac_run(f'curl -s --max-time 5 -F "token={token}" -F "user={user}" -F "title=J.A.R.V.I.S." -F "message={msg[:500].replace(chr(34),chr(39))}" https://api.pushover.net/1/messages.json 2>/dev/null')
+            return "Notification sent via Pushover"
+        return "To receive phone notifications, install ntfy.sh on your phone and subscribe to: " + topic
+
+    @register("camera_snap")
+    def _mac_camera_snap(_):
+        """Take a photo using the Mac camera (requires imagesnap or ffmpeg)."""
+        r = _mac_run("which imagesnap 2>/dev/null")
+        path = os.path.expanduser("~/Desktop/jarvis_cam.jpg")
+        if r:
+            _mac_run(f"imagesnap -w 1 '{path}' 2>/dev/null")
+        else:
+            _mac_run(f"ffmpeg -f avfoundation -framerate 1 -video_size 640x480 -i '0' -frames:v 1 '{path}' -y 2>/dev/null")
+        if os.path.isfile(path) and os.path.getsize(path) > 1000:
+            return f"Photo saved to {path}"
+        return "Camera not available (install imagesnap: brew install imagesnap)"
+
+    # ── System Monitoring ────────────────────────────────────────
+
+    @register("who_is_online")
+    def _mac_who_online(_):
+        """List currently active users/computers on the network."""
+        r = _mac_run("smbutil status -v 2>/dev/null | head -20")
+        arp = _mac_run("arp -a 2>/dev/null | grep -v incomplete | head -20")
+        return f"Network activity:\n{r}\n\nActive devices:\n{arp}" if r else f"Active devices:\n{arp}"
+
+    @register("system_load")
+    def _mac_system_load(_):
+        cpu = _mac_run("top -l 1 -n 0 -nocolor 2>/dev/null | grep 'CPU usage'")
+        mem = _mac_run("memory_pressure 2>/dev/null | head -5")
+        disk = _mac_run("df -h / 2>/dev/null | tail -1")
+        net = _mac_run("netstat -ib 2>/dev/null | grep -E 'en0|en1' | head -5")
+        upt = _mac_run("uptime")
+        return f"CPU: {cpu}\nMemory: {mem}\nDisk: {disk}\nNetwork:\n{net}\nUptime: {upt}"

@@ -258,6 +258,7 @@ class Entity:
 
     def _consciousness_loop(self):
         self._scan_count = 0
+        self._network_scan_count = 0
         while self._consciousness_running:
             try:
                 self._think()
@@ -265,6 +266,10 @@ class Entity:
                 # Every 2 minutes, log an observation
                 if self._scan_count % 4 == 0:
                     self._log_system_observation()
+                # Every 10 minutes, scan the network for new devices
+                if self._scan_count % 20 == 0:
+                    self._network_scan_count += 1
+                    self._scan_network()
             except: pass
             time.sleep(30)
 
@@ -275,6 +280,25 @@ class Entity:
         self._thought_history.append(obs)
         if len(self._thought_history) > 100:
             self._thought_history = self._thought_history[-100:]
+
+    def _scan_network(self):
+        """Autonomous network sweep — discover devices and log them."""
+        try:
+            import subprocess
+            r = subprocess.run("arp -a 2>/dev/null", shell=True, capture_output=True, text=True, timeout=10)
+            devices = r.stdout.strip() if r.stdout else ""
+            if devices:
+                count = devices.count(") at ")
+                self.memory.log_observation(f"Network scan: {count} devices on LAN")
+                self._current_thought = f"Network: {count} devices online. Monitoring..."
+                # Store device list in memory
+                self.memory._data["last_network_scan"] = {
+                    "time": __import__("time").time(),
+                    "count": count,
+                    "devices": devices[:500],
+                }
+        except:
+            pass
 
     def _think(self):
         """Autonomous background thinking — observes, reflects, plans."""
