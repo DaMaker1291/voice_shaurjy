@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import ClientLayout from "@/components/ClientLayout";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -8,11 +9,14 @@ export const metadata: Metadata = {
 };
 
 const navLinks = [
-  { href: "/", label: "Home" },
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/agent", label: "Agent" },
+  { href: "/", label: "Chat" },
+  { href: "/dashboard", label: "Brain" },
+  { href: "/secretary", label: "Secretary" },
+  { href: "/life", label: "Life OS" },
+  { href: "/trading", label: "Trading" },
+  { href: "/marketplace", label: "Plugins" },
+  { href: "/smarthome", label: "Smart Home" },
   { href: "/settings", label: "Settings" },
-  { href: "/reminders", label: "Reminders" },
 ];
 
 export default function RootLayout({
@@ -33,7 +37,9 @@ export default function RootLayout({
             </div>
           </div>
         </nav>
-        {children}
+        <main className="pt-12">
+          <ClientLayout>{children}</ClientLayout>
+        </main>
       </body>
     </html>
   );

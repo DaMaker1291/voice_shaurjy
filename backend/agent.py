@@ -110,11 +110,23 @@ async def _process_audio(track: rtc.Track, room: rtc.Room):
 
         await _send(room, {"type": "status", "state": "speaking"})
         reply = generate_response("lk-user", text, "premium")
-        logger.info("Jason: %s", reply)
-        await _send(room, {"type": "transcript", "role": "assistant", "text": reply})
+        reply_text = reply["text"] if isinstance(reply, dict) else str(reply)
+        logger.info("Jason: %s", reply_text)
+        await _send(room, {"type": "transcript", "role": "assistant", "text": reply_text})
 
-        audio = tts_speak(reply)
-        source = rtc.AudioSource(rtc.AudioSourceOptions(num_channels=1, sample_rate=22050))
+        audio = tts_speak(reply_text)
+        source = rtc.AudioSource(22050, 1)
+        import struct
+        frames = audio[44:] if len(audio) > 44 and audio[:4] == b"RIFF" else audio
+        samples = len(frames) // 2
+        if samples > 0:
+            audio_frame = rtc.AudioFrame(
+                data=frames,
+                sample_rate=22050,
+                num_channels=1,
+                samples_per_channel=samples,
+            )
+            source.push_frame(audio_frame)
         await room.local_participant.publish_track(source)
         await _send(room, {"type": "status", "state": "idle"})
 

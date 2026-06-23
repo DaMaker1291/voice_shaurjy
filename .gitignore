@@ -13,6 +13,11 @@ node_modules/
 # Env
 .env
 
+# Build output
+frontend/out/
+frontend/.next/
+pharos-nft-manager/
+
 # IDE
 .idea/
 .vscode/
