@@ -97,6 +97,8 @@ def macos_exec(action: str, params: str = "") -> str:
         "network_info": lambda: run("ifconfig en0 2>/dev/null || ifconfig en1 2>/dev/null || networksetup -getinfo Wi-Fi"),
         "speak": lambda: run(f"say '{params[:200].replace(chr(39), '')}'"),
         "notify": lambda: run(f"osascript -e 'display notification \"{params[:200].replace(chr(34), '')}\" with title \"J.A.R.V.I.S.\" 2>/dev/null'"),
+        "notify_persistent": lambda: _notify_window(params),
+        "notify_center": lambda: _notify_window(params),
         "lock_screen": lambda: run("/System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend 2>/dev/null || echo 'Lock not supported'"),
         "volume_set": lambda: run(f"osascript -e 'set volume output volume {params}'"),
         "volume_up": lambda: run("osascript -e 'set volume output volume (output volume of (get volume settings) + 10)'"),
@@ -199,6 +201,15 @@ def _phone_notify(msg: str) -> str:
     topic = f"jarvis_{platform.node().split('.')[0]}"
     run(f'curl -s -d "{msg[:500].replace(chr(34),chr(39))}" "https://ntfy.sh/{topic}" 2>/dev/null')
     return f"Notification sent to ntfy.sh/{topic}. Subscribe on your phone!"
+
+def _notify_window(msg: str) -> str:
+    """Show a persistent floating notification window (centre-screen, always-on-top, draggable)."""
+    np_path = os.path.join(os.path.dirname(__file__), "backend", "notification_window.py")
+    if not os.path.isfile(np_path):
+        return f"Notification window script not found at {np_path}"
+    escaped = msg[:500].replace("'", "'\\''")
+    run(f"python3 '{np_path}' '{escaped}' &", timeout=2)
+    return f"Notification window: '{msg[:60]}'"
 
 def _ui_get_text() -> str:
     """OCR the screen and return all text."""

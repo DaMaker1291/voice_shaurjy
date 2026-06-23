@@ -418,6 +418,14 @@ _KEYWORD_MAP: dict[str, str] = {
     "stop monitoring": "cognitive_monitor",
     "alert me": "cognitive_alert", "set alert": "cognitive_alert",
     "warn me": "cognitive_alert",
+
+    # Persistent Notifications
+    "remind me": "notify_persistent", "set a reminder": "notify_persistent",
+    "remind me to": "notify_persistent", "don't forget": "notify_persistent",
+    "persistent notification": "notify_persistent", "pop up": "notify_persistent",
+    "notification center": "notify_center", "center notification": "notify_center",
+    "show notification": "notify_persistent", "sticky note": "notify_persistent",
+    "sticky notification": "notify_persistent",
 }
 
 # Keyword phrase → action ID lookup (longest-first for specificity)
@@ -975,6 +983,9 @@ _ACTION_LABELS = {
     # Cognitive Surveillance
     "cognitive_scan": "🧠 Scanning environment...", "cognitive_insight": "🧠 Generating insight...",
     "cognitive_monitor": "🧠 Starting monitor...", "cognitive_alert": "⚠️ Setting alert...",
+
+    # Persistent Notifications
+    "notify_persistent": "📌 Persistent reminder...", "notify_center": "📌 Center notification...",
 }
 _ACTION_TIPS = {
     "memory_cleanup": "Kill memory-hogging apps and free RAM",
@@ -3475,6 +3486,23 @@ if sys.platform == "darwin":
         if not t: t = "Hello from J.A.R.V.I.S."
         _mac_run(f"""osascript -e 'display notification "{t[:200].replace(chr(34), '')}" with title "J.A.R.V.I.S."' 2>/dev/null""")
         return "Notification sent."
+
+    @register("notify_persistent")
+    def _mac_notify_persistent(text):
+        """Show a persistent floating notification window (centre-screen, always-on-top, draggable)."""
+        _notify_window(text)
+
+    @register("notify_center")
+    def _mac_notify_center(text):
+        _notify_window(text)
+
+    def _notify_window(msg: str) -> str:
+        np_path = os.path.join(os.path.dirname(__file__), "notification_window.py")
+        if not os.path.isfile(np_path):
+            return "Notification window script not found"
+        escaped = msg[:500].replace("'", "'\\''")
+        _mac_run(f"python3 '{np_path}' '{escaped}' &", timeout=2)
+        return f"Notification: '{msg[:60]}'"
 
     @register("lock")
     def _mac_lock(_):
