@@ -17,6 +17,17 @@ def _ps(cmd: str) -> str:
 
 # Keyword hash map: if ANY of these words appear, try the corresponding action
 _KEYWORD_MAP: dict[str, str] = {
+    # Autonomous / Complex
+    "read file": "read_file", "read the file": "read_file",
+    "write file": "write_file", "create file": "write_file", "save file": "write_file",
+    "list directory": "list_dir", "list files": "list_dir", "show files": "list_dir",
+    "run python": "run_python", "execute python": "run_python",
+    "run shell": "run_shell", "run command": "run_shell", "execute command": "run_shell",
+    "run code": "run_python",
+    "open app": "open_app", "launch app": "open_app", "start app": "open_app",
+    "research": "fetch_search", "investigate": "fetch_search",
+    "scrape": "fetch_search", "read the web": "fetch_search",
+    "fetch": "fetch_search",
     # System
     "lock": "lock", "locked": "lock",
     "sleep": "sleep", "hibernate": "hibernate",
@@ -868,6 +879,11 @@ _ACTION_LABELS = {
     "screen_analyze": "👁 Analyzing screen...",
 }
 
+    "read_file": "📄 Read a file", "write_file": "📝 Write content to a file",
+    "list_dir": "📁 List directory contents", "run_python": "🐍 Execute Python code",
+    "run_shell": "💻 Execute a shell command", "take_screenshot": "📸 Take a screenshot",
+    "fetch_search": "🔍 Search the web and return results",
+    "open_app": "🚀 Open a macOS application",
 _ACTION_TIPS = {
     "memory_cleanup": "Kill memory-hogging apps and free RAM",
     "device_scan": "Deep scan of your Windows device (apps, system, network, files)",
@@ -3219,6 +3235,57 @@ def _device_scan(text):
     return "\n".join(lines)
 
 
+# ── Platform-agnostic file I/O & code execution ──────────────────
+
+@register("read_file")
+def _read_file(text):
+    path = text.replace("read file", "").replace("read", "").strip() or text
+    path = os.path.expanduser(path)
+    if not os.path.isfile(path): return f"File not found: {path}"
+    try:
+        with open(path, "r", errors="replace") as f:
+            content = f.read(5000)
+        return content[:3000]
+    except Exception as e:
+        return f"Read error: {e}"
+
+@register("write_file")
+def _write_file(text):
+    rest = text.replace("write file", "").replace("write", "").strip()
+    if "::" in rest:
+        path, content = rest.split("::", 1)
+    else:
+        parts = rest.rsplit(" ", 1)
+        if len(parts) < 2: return "Usage: write_file path::content"
+        path, content = parts
+    path = os.path.expanduser(path.strip())
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w") as f:
+            f.write(content.strip())
+        return f"Written to {path}"
+    except Exception as e:
+        return f"Write error: {e}"
+
+@register("list_dir")
+def _list_dir(text):
+    path = text.replace("list dir", "").replace("list", "").replace("directory", "").strip()
+    if not path: path = "."
+    path = os.path.expanduser(path)
+    if not os.path.isdir(path): return f"Directory not found: {path}"
+    try:
+        entries = sorted(os.listdir(path))[:50]
+        lines = []
+        for e in entries:
+            fp = os.path.join(path, e)
+            sz = os.path.getsize(fp) if os.path.isfile(fp) else 0
+            typ = "📄" if os.path.isfile(fp) else "📁" if os.path.isdir(fp) else "🔗"
+            lines.append(f"{typ} {e}" + (f" ({sz} bytes)" if os.path.isfile(fp) else ""))
+        return "\n".join(lines) + f"\n\n{len(entries)} entries"
+    except Exception as e:
+        return f"List error: {e}"
+
+
 # ── Public API ─────────────────────────────────────────────────────
 
 def get_all_actions() -> dict:
@@ -3382,3 +3449,43 @@ if sys.platform == "darwin":
         if not path: path = "~"
         _mac_run(f"open '{path}'")
         return f"Opening {path}..."
+
+    @register("read_file")
+    def _mac_read_file(text):
+        path = text.replace("read file", "").replace("read", "").strip() or text
+        path = os.path.expanduser(path.strip())
+        return _mac_run(f"cat '{path}' 2>/dev/null || echo 'File not found: {path}'")
+
+    @register("write_file")
+    def _mac_write_file(text):
+        rest = text.replace("write file", "").replace("write", "").strip()
+        if "::" in rest:
+            path, content = rest.split("::", 1)
+        else:
+            parts = rest.rsplit(" ", 1)
+            if len(parts) < 2: return "Usage: write_file path::content"
+            path, content = parts
+        path = os.path.expanduser(path.strip())
+        escaped = content.strip().replace("'", "'\\''")
+        _mac_run(f"mkdir -p '{os.path.dirname(path)}' 2>/dev/null; printf '%s' '{escaped}' > '{path}'")
+        return f"Written to {path}"
+
+    @register("list_dir")
+    def _mac_list_dir(text):
+        path = text.replace("list dir", "").replace("list", "").replace("directory", "").strip() or "."
+        path = os.path.expanduser(path)
+        return _mac_run(f"ls -la '{path}' 2>/dev/null | head -40 || echo 'Not found: {path}'")
+
+    @register("run_python")
+    def _mac_run_python(text):
+        code = text.replace("run python", "").replace("run_python", "").strip() or text
+        return _mac_run(f"python3 -c '{code.replace(chr(39), chr(39)+'\\'+chr(39)+chr(39))}'", timeout=30)
+
+    @register("run_shell")
+    def _mac_run_shell(text):
+        cmd = text.replace("run shell", "").replace("run_shell", "").strip() or text
+        return _mac_run(cmd, timeout=30)
+
+    @register("take_screenshot")
+    def _mac_take_screenshot(_):
+        return _mac_run("screencapture -x ~/Desktop/jarvis_screenshot.png 2>/dev/null; echo 'Screenshot: ~/Desktop/jarvis_screenshot.png'")

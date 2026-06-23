@@ -824,6 +824,97 @@ async def relay_devices(user_id: str = "local"):
     return {"devices": [_relay_devices.get(user_id, {})]}
 
 
+# ── Autonomous Agent ────────────────────────────────────────────
+
+@app.post("/api/agent/autonomous")
+async def start_autonomous(data: dict):
+    """Start a complex autonomous task. Returns session_id + plan."""
+    from autonomous_agent import start_autonomous_task
+    goal = data.get("goal", data.get("text", ""))
+    user_id = data.get("user_id", "local")
+    if not goal:
+        return {"error": "No goal specified"}
+    return start_autonomous_task(user_id, goal)
+
+@app.get("/api/agent/autonomous/{session_id}")
+async def get_autonomous_status(session_id: str):
+    """Get status and results of an autonomous task."""
+    from autonomous_agent import _ACTIVE_TASKS
+    session = _ACTIVE_TASKS.get(session_id)
+    if not session:
+        return {"error": "Task not found"}
+    return {
+        "status": session["status"],
+        "goal": session["goal"],
+        "step_index": session["step_index"],
+        "total_steps": len(session["plan"]),
+        "current_step": session.get("current_step", ""),
+        "results": session["results"],
+        "last_result": session.get("last_result"),
+    }
+
+@app.post("/api/agent/autonomous/{session_id}/continue")
+async def continue_autonomous(session_id: str, data: dict = {}):
+    """Continue an autonomous task (advance to next step, optionally with user input)."""
+    from autonomous_agent import continue_autonomous_task
+    user_input = data.get("user_input", data.get("response", ""))
+    return continue_autonomous_task(session_id, user_input or None)
+
+@app.post("/api/agent/autonomous/{session_id}/cancel")
+async def cancel_autonomous(session_id: str):
+    """Cancel an autonomous task."""
+    from autonomous_agent import _ACTIVE_TASKS
+    if session_id in _ACTIVE_TASKS:
+        _ACTIVE_TASKS[session_id]["status"] = "cancelled"
+        return {"status": "cancelled"}
+    return {"error": "Task not found"}
+
+# ── SSE streaming executor ────────────────────────────────────
+
+@app.post("/api/task/stream")
+async def stream_task_execution(data: dict):
+    """SSE stream: execute a multi-step task with real-time progress."""
+    from autonomous_agent import start_autonomous_task, continue_autonomous_task, _ACTIVE_TASKS
+    from fastapi.responses import StreamingResponse
+    import asyncio
+
+    goal = data.get("goal", data.get("text", ""))
+    user_id = data.get("user_id", "local")
+    if not goal:
+        return {"error": "No goal"}
+
+    result = start_autonomous_task(user_id, goal)
+    if "error" in result:
+        return result
+    session_id = result["session_id"]
+
+    async def event_stream():
+        session = _ACTIVE_TASKS.get(session_id)
+        if not session:
+            yield f"data: {json.dumps({'type':'error','text':'Session not found'})}\n\n"
+            return
+
+        yield f"data: {json.dumps({'type':'plan','steps':result['steps'],'total':len(result['steps'])})}\n\n"
+
+        while session["status"] == "running":
+            try:
+                step_result = continue_autonomous_task(session_id)
+                if step_result.get("type") == "ask":
+                    yield f"data: {json.dumps({'type':'ask','question':step_result['question'],'session_id':session_id})}\n\n"
+                    return
+                yield f"data: {json.dumps({'type':'progress','step':session['step_index'],'total':len(session['plan']),'current':session.get('current_step',''),'last_result':session.get('last_result')})}\n\n"
+                if session["step_index"] >= len(session["plan"]):
+                    break
+            except Exception as e:
+                yield f"data: {json.dumps({'type':'error','text':str(e)})}\n\n"
+                break
+
+        final = _ACTIVE_TASKS.get(session_id, {})
+        yield f"data: {json.dumps({'type':'complete','results':final.get('results',[]),'summary':final.get('results',[])})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 # ── Entity / Agent thoughts ─────────────────────────────────────
 
 @app.get("/api/jarvis/thoughts")
