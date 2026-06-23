@@ -54,7 +54,7 @@ def get_text(url):
         return r.read().decode()
 
 
-def run(cmd: str, timeout=15) -> str:
+def run(cmd: str, timeout=30) -> str:
     """Run a shell command and return output."""
     try:
         r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
@@ -113,7 +113,7 @@ def macos_exec(action: str, params: str = "") -> str:
 
         # Network & Smart Home
         "network_scan_quick": lambda: run("arp -a"),
-        "network_scan_deep": lambda: run("nmap -sn -T4 --host-timeout 5 $(ipconfig getifaddr en0 2>/dev/null | awk -F. '{print $1\".\"$2\".\"$3\".0/24\"}') 2>/dev/null | grep -E 'Nmap|Host|MAC' | head -60"),
+        "network_scan_deep": lambda: _net_scan_deep(),
         "wake_on_lan": lambda: _send_wol(params),
         "smart_home_discover": lambda: _sh_discover(),
         "smart_home_control": lambda: _sh_control(params),
@@ -196,6 +196,15 @@ def _sh_control(params: str) -> str:
         st = run(f"curl -s --max-time 2 http://{ip}/json/info 2>/dev/null | head -10")
         results.append(f"Status:\n{st[:500]}")
     return "\n".join(results) if results else f"No response from {ip}"
+
+def _net_scan_deep() -> str:
+    """Deep network scan with robust subnet detection."""
+    ip = run("ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || ifconfig en0 2>/dev/null | grep 'inet ' | awk '{print $2}' || ifconfig en1 2>/dev/null | grep 'inet ' | awk '{print $2}'")
+    if not ip or "error" in ip.lower():
+        return "Could not determine local IP. Ensure Wi-Fi/Ethernet is connected."
+    base = ".".join(ip.split(".")[:3]) + ".0/24"
+    r = run(f"nmap -sn -T4 --max-retries 1 --host-timeout 5 {base} 2>/dev/null | grep -E 'Nmap|Host|MAC' | head -60", timeout=30)
+    return f"Deep scan of {base}:\n{r}" if r else f"No hosts found on {base}"
 
 def _phone_notify(msg: str) -> str:
     topic = f"jarvis_{platform.node().split('.')[0]}"
