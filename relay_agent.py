@@ -16,6 +16,23 @@ import sys
 import time
 import urllib.request
 import urllib.error
+import ssl
+
+# SSL context — try certifi first, fall back to unverified
+try:
+    import certifi
+    _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _SSL_CTX = ssl.create_default_context()
+    try:
+        _SSL_CTX.load_default_certs()
+    except:
+        _SSL_CTX = ssl._create_unverified_context()
+
+def _urlopen(req_or_url, **kwargs):
+    kwargs.setdefault("context", _SSL_CTX)
+    kwargs.setdefault("timeout", 30)
+    return urllib.request.urlopen(req_or_url, **kwargs)
 
 HF_API = os.environ.get("HF_API_URL", "https://dgfhgjhj-jarvis-ai-brain.hf.space").rstrip("/")
 
@@ -23,17 +40,17 @@ HF_API = os.environ.get("HF_API_URL", "https://dgfhgjhj-jarvis-ai-brain.hf.space
 def post(url, data):
     req = urllib.request.Request(url, data=json.dumps(data).encode(),
                                  headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with _urlopen(req, timeout=30) as r:
         return json.loads(r.read())
 
 
 def get(url):
-    with urllib.request.urlopen(url, timeout=20) as r:
+    with _urlopen(url, timeout=20) as r:
         return json.loads(r.read())
 
 
 def get_text(url):
-    with urllib.request.urlopen(url, timeout=20) as r:
+    with _urlopen(url, timeout=20) as r:
         return r.read().decode()
 
 
@@ -316,7 +333,7 @@ def _cognitive_insight() -> str:
         import urllib.request
         payload = json.dumps({"text": f"Analyze this environment scan and produce ONE concise, useful insight (1 sentence):\n{scan[:800]}", "user_id": "jarvis", "tier": "free"}).encode()
         req = urllib.request.Request(f"{HF_API}/api/text/chat", data=payload, headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with _urlopen(req, timeout=15) as r:
             resp = json.loads(r.read())
             return f"[INSIGHT] {resp.get('text', 'Analysis complete')[:300]}"
     except:
