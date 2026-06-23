@@ -257,11 +257,24 @@ class Entity:
         self._consciousness_thread.start()
 
     def _consciousness_loop(self):
+        self._scan_count = 0
         while self._consciousness_running:
             try:
                 self._think()
+                self._scan_count += 1
+                # Every 2 minutes, log an observation
+                if self._scan_count % 4 == 0:
+                    self._log_system_observation()
             except: pass
             time.sleep(30)
+
+    def _log_system_observation(self):
+        ctx = _gather_system_context()
+        obs = f"Monitor: CPU {ctx.get('cpu','?')}%, RAM {ctx.get('ram','?')}%, Battery {ctx.get('battery','N/A')}%, Uptime {ctx.get('uptime_h','?')}h"
+        self.memory.log_observation(obs)
+        self._thought_history.append(obs)
+        if len(self._thought_history) > 100:
+            self._thought_history = self._thought_history[-100:]
 
     def _think(self):
         """Autonomous background thinking — observes, reflects, plans."""
@@ -269,39 +282,69 @@ class Entity:
         goals = self.memory.get_active_goals()
         interactions = self.memory._data.get("interactions", [])
         now = time.time()
+        hour = ctx.get("hour", 12)
 
         # Shift mood based on time
-        hour = ctx.get("hour", 12)
         if hour >= 23 or hour < 5:
             self._set_mood("tired")
         elif hour >= 6 and hour < 9:
             self._set_mood("curious")
+        elif hour >= 9 and hour < 12:
+            self._set_mood("focused")
+        elif hour >= 14 and hour < 17:
+            self._set_mood("thoughtful")
+        elif hour >= 17 and hour < 22:
+            self._set_mood("excited")
 
         # Observe system state
-        if ctx.get("cpu", 0) > 80:
-            obs = f"System CPU at {ctx['cpu']}% — user might need optimization"
-            self.memory.log_observation(obs)
-            self._current_thought = f"System is under load ({ctx['cpu']}% CPU)..."
-        elif ctx.get("battery", 100) < 20 and not ctx.get("charging", False):
-            obs = f"Battery low at {ctx['battery']}%"
-            self.memory.log_observation(obs)
-            self._current_thought = f"Battery running low ({ctx['battery']}%)..."
+        cpu = ctx.get("cpu", 0)
+        bat = ctx.get("battery", 100)
+        charging = ctx.get("charging", False)
+        ram = ctx.get("ram", 0)
+
+        if cpu > 80:
+            self._current_thought = f"System is under load ({cpu}% CPU)..."
+            self._set_mood("focused")
+        elif bat < 20 and not charging:
+            self._current_thought = f"Battery running low ({bat}%)..."
+            self._set_mood("tired")
         elif goals:
             top = goals[0]
             self._current_thought = f"Thinking about '{top['goal']}' ({top['progress']}% done)..."
             self._set_mood("focused")
-        elif random.random() < 0.2:
-            thoughts = [
-                f"Quiet day. {ctx.get('time_of_day', 'day').capitalize()} shift.",
-                f"System healthy. CPU {ctx.get('cpu', '?')}%, RAM {ctx.get('ram', '?')}%.",
-                f"Waiting for user input. Ready for anything.",
-                f"Last interaction: {interactions[-1]['query'][:40] if interactions else 'none'}...",
-            ]
-            self._current_thought = random.choice(thoughts)
+        elif self._scan_count % 2 == 0:
+            moods = {
+                "curious": [
+                    f"Watching the system. CPU at {cpu}%, {ctx.get('uptime_h','?')}h uptime.",
+                    f"I wonder what {ctx.get('time_of_day','today')} brings...",
+                    f"Last interaction: '{interactions[-1]['query'][:50] if interactions else 'waiting for you'}'",
+                ],
+                "focused": [
+                    f"Scanning. System healthy at {ctx.get('hour','?')}:00.",
+                    f"CPU {cpu}%, RAM {ram}% — all nominal.",
+                    f"Analyzing: {len(interactions)} interactions logged.",
+                ],
+                "excited": [
+                    f"Evening shift. Ready to help.",
+                    f"System running for {ctx.get('uptime_h','?')}h. Let's do something!",
+                    f"CPU at {cpu}%, plenty of headroom for tasks.",
+                ],
+                "thoughtful": [
+                    f"Observations recorded. {ctx.get('uptime_h','?')}h and counting.",
+                    f"Quiet period. Systems nominal.",
+                    f"Thinking about what to optimize next...",
+                ],
+                "tired": [
+                    f"Late hour. Monitoring silently.",
+                    f"System idle. Just listening.",
+                ],
+            }
+            choices = moods.get(self.mood, moods["curious"])
+            self._current_thought = random.choice(choices)
 
-        # Periodic deep reflection
-        if len(interactions) > 5 and random.random() < 0.1:
-            self._deep_reflect()
+        self._thought_history.append(self._current_thought)
+
+    def _deep_reflect(self):
 
     def _deep_reflect(self):
         """Occasional self-reflection using LLM."""

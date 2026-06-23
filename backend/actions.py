@@ -3223,3 +3223,162 @@ def _device_scan(text):
 
 def get_all_actions() -> dict:
     return {k: {"label": _ACTION_LABELS.get(k, k), "tip": _ACTION_TIPS.get(k, "")} for k in sorted(_EXECUTORS.keys())}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  macOS Executors — override Windows actions when running on macOS
+#  (registered last so they win over Windows versions)
+# ═══════════════════════════════════════════════════════════════════
+
+if sys.platform == "darwin":
+    import subprocess as _sp
+
+    def _mac_run(cmd: str, timeout=15) -> str:
+        try:
+            r = _sp.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
+            return (r.stdout or r.stderr or f"exit {r.returncode}").strip()
+        except Exception as e:
+            return f"Error: {e}"
+
+    @register("screenshot")
+    def _mac_screenshot(_): return _mac_run("screencapture -x ~/Desktop/jarvis_screenshot.png 2>/dev/null; echo 'Saved to Desktop/'")
+
+    @register("search")
+    def _mac_search(text):
+        from urllib.parse import quote as _uq2
+        q = text.replace("search", "").replace("google", "").replace("look up", "").strip() or text
+        _mac_run(f"open 'https://google.com/search?q={_uq2(q)}'")
+        return f'Searching for "{q}"...'
+
+    @register("search_youtube")
+    def _mac_search_yt(text):
+        from urllib.parse import quote as _uq2
+        q = text.replace("search", "").replace("youtube", "").replace("yt", "").strip() or text
+        _mac_run(f"open 'https://youtube.com/results?search_query={_uq2(q)}'")
+        return f'Searching YouTube for "{q}"...'
+
+    @register("search_wiki")
+    def _mac_search_wiki(text):
+        from urllib.parse import quote as _uq2
+        q = text.replace("search", "").replace("wikipedia", "").replace("wiki", "").strip() or text
+        _mac_run(f"open 'https://en.wikipedia.org/wiki/{_uq2(q).replace(' ', '_')}'")
+        return f'Searching Wikipedia for "{q}"...'
+
+    @register("open_url")
+    def _mac_open_url(text):
+        url = text.replace("open", "").replace("go to", "").replace("url", "").replace("website", "").strip()
+        if not url: return "Which URL?"
+        if not url.startswith("http"): url = "https://" + url
+        _mac_run(f"open '{url}'")
+        return f"Opening {url[:70]}..."
+
+    @register("whoami")
+    def _mac_whoami(_): return f"User: {_mac_run('whoami')}"
+
+    @register("uptime")
+    def _mac_uptime(_): return _mac_run("uptime")
+
+    @register("system_info")
+    def _mac_sysinfo(_):
+        os_v = _mac_run("sw_vers 2>/dev/null")
+        hw = _mac_run("uname -a")
+        mem = _mac_run("sysctl -n hw.memsize 2>/dev/null")
+        cpu = _mac_run("sysctl -n hw.ncpu 2>/dev/null")
+        return f"macOS: {os_v}\nKernel: {hw}\nRAM: {int(mem)//1073741824}GB\nCPUs: {cpu}"
+
+    @register("battery_status")
+    def _mac_battery(_):
+        r = _mac_run("pmset -g batt 2>/dev/null")
+        if "drawing" in r or "charging" in r or "discharging" in r or "charged" in r:
+            return r
+        return "Desktop (no battery)"
+
+    @register("public_ip")
+    def _mac_public_ip(_):
+        ip = _mac_run("curl -s --max-time 5 https://api.ipify.org 2>/dev/null")
+        return f"Public IP: {ip or 'unknown'}"
+
+    @register("weather")
+    def _mac_weather(_):
+        w = _mac_run("curl -s 'wttr.in?format=%C+%t+%w' 2>/dev/null")
+        return w if w else "Weather unavailable"
+
+    @register("speak")
+    def _mac_speak(text):
+        t = text.replace("say", "").replace("speak", "").replace("read", "").strip()
+        if not t: t = text
+        _mac_run(f"say '{t[:200].replace(chr(39), '')}'")
+        return f'Saying: "{t[:60]}"...'
+
+    @register("send_notification")
+    def _mac_notify(text):
+        t = text.replace("send notification", "").replace("notify", "").replace("notification", "").strip()
+        if not t: t = "Hello from J.A.R.V.I.S."
+        _mac_run(f"""osascript -e 'display notification "{t[:200].replace(chr(34), '')}" with title "J.A.R.V.I.S."' 2>/dev/null""")
+        return "Notification sent."
+
+    @register("lock")
+    def _mac_lock(_):
+        _mac_run("/System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend 2>/dev/null")
+        return "Locking screen..."
+
+    @register("disk_info")
+    def _mac_disk(_): return _mac_run("df -h /")
+
+    @register("memory_info")
+    def _mac_mem(_): return _mac_run("vm_stat | head -12")
+
+    @register("process_list")
+    def _mac_procs(_): return _mac_run("ps aux --sort=-%cpu | head -25")
+
+    @register("wifi_list")
+    def _mac_wifi(_):
+        ap = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+        r = _mac_run(f"{ap} -s 2>/dev/null")
+        if not r: r = _mac_run("networksetup -listallhardwareports 2>/dev/null | grep -A1 Wi-Fi")
+        return r or "No Wi-Fi interface found"
+
+    @register("network_info")
+    def _mac_net(_):
+        r = _mac_run("ifconfig en0 2>/dev/null | grep 'inet '")
+        if not r: r = _mac_run("ifconfig en1 2>/dev/null | grep 'inet '")
+        r += "\n" + _mac_run("networksetup -getinfo Wi-Fi 2>/dev/null")
+        return r.strip() or "No network info available"
+
+    @register("volume_up")
+    def _mac_vol_up(_):
+        _mac_run("osascript -e 'set volume output volume (output volume of (get volume settings) + 10)'")
+        return "Volume up"
+
+    @register("volume_down")
+    def _mac_vol_down(_):
+        _mac_run("osascript -e 'set volume output volume (output volume of (get volume settings) - 10)'")
+        return "Volume down"
+
+    @register("volume_mute")
+    def _mac_vol_mute(_):
+        _mac_run("osascript -e 'set volume output muted true'")
+        return "Muted"
+
+    @register("time")
+    def _mac_time(_): return __import__("datetime").datetime.now().strftime("%A, %B %d, %Y — %I:%M %p")
+
+    @register("open_app")
+    def _mac_open_app(text):
+        name = text.lower().strip()
+        apps = {"safari":"Safari","chrome":"Google Chrome","firefox":"Firefox","terminal":"Terminal",
+                "code":"Visual Studio Code","vs code":"Visual Studio Code","finder":"Finder",
+                "spotify":"Spotify","music":"Music","photos":"Photos","settings":"System Settings",
+                "notes":"Notes","calendar":"Calendar","mail":"Mail","messages":"Messages",
+                "maps":"Maps","facetime":"FaceTime","calculator":"Calculator",
+                "system settings":"System Settings","app store":"App Store"}
+        an = apps.get(name, name.title())
+        _mac_run(f'open -a "{an}"')
+        return f"Opened {an}"
+
+    @register("finder_open")
+    def _mac_finder(text):
+        path = text.replace("open", "").replace("finder", "").replace("directory", "").replace("folder", "").strip()
+        if not path: path = "~"
+        _mac_run(f"open '{path}'")
+        return f"Opening {path}..."

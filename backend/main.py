@@ -764,6 +764,85 @@ async def relay_execute(req: ActionRequest):
     return {"status": "timeout", "result": "Relay agent did not respond within 30s", "relay_id": relay_id}
 
 
+# ── Agent command dispatch (relay agents poll this) ─────────────
+
+@app.get("/api/agent/pending")
+async def agent_pending(target: str = "", user_id: str = "local"):
+    """Legacy endpoint — relay agents poll this. Maps to relay system."""
+    from relay import claim_next
+    actions = []
+    while True:
+        a = claim_next(user_id=user_id)
+        if a is None:
+            break
+        actions.append(a)
+    return {"actions": actions}
+
+@app.post("/api/agent/command")
+async def agent_command(data: dict):
+    """Dispatch a command to all relay agents for this user."""
+    from relay import queue_action
+    action = data.get("command", data.get("action", ""))
+    params = data.get("params", data.get("text", ""))
+    user_id = data.get("user_id", "local")
+    target = data.get("target", "all")
+    if action:
+        relay_id = queue_action(action, params, user_id=user_id)
+        return {"status": "queued", "relay_id": relay_id, "action": action, "target": target}
+    return {"status": "no_action"}
+
+
+@app.get("/api/jarvis/command")
+async def jarvis_command_get(user_id: str = "local"):
+    """Get pending commands for jarvis relay."""
+    return await agent_pending(user_id=user_id)
+
+@app.post("/api/jarvis/command")
+async def jarvis_command_post(data: dict):
+    """Post a command for jarvis relay."""
+    return await agent_command(data)
+
+
+# ── Relay device registration ───────────────────────────────────
+
+_relay_devices: dict[str, dict] = {}
+
+@app.post("/api/relay/register")
+async def relay_register(data: dict):
+    """Called by relay agent on startup to register this device."""
+    uid = data.get("user_id", "local")
+    _relay_devices[uid] = {
+        "hostname": data.get("hostname", "?"),
+        "platform": data.get("platform", "?"),
+        "info": data.get("info", {}),
+        "last_seen": __import__("time").time(),
+    }
+    return {"status": "registered"}
+
+@app.get("/api/relay/devices")
+async def relay_devices(user_id: str = "local"):
+    return {"devices": [_relay_devices.get(user_id, {})]}
+
+
+# ── Entity / Agent thoughts ─────────────────────────────────────
+
+@app.get("/api/jarvis/thoughts")
+async def jarvis_thoughts(user_id: str = "local", limit: int = 10):
+    """Return the entity's current thought + recent thought history."""
+    from entity_engine import get_entity
+    entity = get_entity(user_id)
+    return {
+        "current_thought": entity._current_thought,
+        "mood": entity.mood,
+        "thought_history": entity._thought_history[-limit:],
+    }
+
+@app.get("/api/jarvis/status")
+async def jarvis_status(user_id: str = "local"):
+    """Return full agent status summary."""
+    return await jarvis_thoughts(user_id)
+
+
 @app.exception_handler(404)
 async def serve_frontend(req, exc):
     """Serve frontend static files for non-API routes."""
