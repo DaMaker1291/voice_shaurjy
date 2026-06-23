@@ -102,6 +102,36 @@ def macos_exec(action: str, params: str = "") -> str:
         "phone_notify": lambda: _phone_notify(params),
         "who_is_online": lambda: run("arp -a | grep -v incomplete | head -20"),
         "system_load": lambda: run("top -l 1 -n 0 -nocolor 2>/dev/null | head -10; echo '---'; df -h /; echo '---'; uptime"),
+
+        # ── UI Automation (Computer Vision + Mouse/Keyboard) ──
+        "ui_screenshot": lambda: run("screencapture -x /tmp/jv_screen.png && echo '/tmp/jv_screen.png'"),
+        "ui_get_text": lambda: _ui_get_text(),
+        "ui_find": lambda: _ui_find(params),
+        "ui_click": lambda: _ui_click(params),
+        "ui_type": lambda: run(f"osascript -e 'tell application \"System Events\" to keystroke \"{params[:300].replace(chr(34),chr(39))}\"' 2>/dev/null"),
+        "ui_click_text": lambda: _ui_click_text(params),
+        "ui_handwrite": lambda: _ui_handwrite(params),
+        "ui_drag": lambda: _ui_drag(params),
+        "ui_open_app": lambda: _mac_open_app(params),
+        "ui_activate_app": lambda: run(f"osascript -e 'tell application \"{params}\" to activate' 2>/dev/null"),
+        "ui_app_running": lambda: run(f"osascript -e 'tell application \"System Events\" to exists process \"{params}\"' 2>/dev/null"),
+
+        # ── Phone Bridge (ADB over WiFi) ──
+        "phone_adb_connect": lambda: _phone_adb_connect(params),
+        "phone_read_sms": lambda: _phone_adb("content query --uri content://sms/inbox --projection address,body,date --sort date DESC --limit 10 2>/dev/null"),
+        "phone_get_notifications": lambda: _phone_adb("dumpsys notification --naked 2>/dev/null | grep -A 5 'tickerText=|title=|text=' | head -60"),
+        "phone_call_log": lambda: _phone_adb("content query --uri content://call_log/calls --projection number,type,duration,date --sort date DESC --limit 10 2>/dev/null"),
+        "phone_battery": lambda: _phone_adb("shell dumpsys battery 2>/dev/null | grep -E 'level|status|powered'"),
+
+        # ── Home Assistant Integration ──
+        "ha_discover": lambda: _ha_discover(),
+        "ha_status": lambda: _ha_api("", "GET"),
+        "ha_control": lambda: _ha_control(params),
+        "ha_sensors": lambda: _ha_api("states", "GET"),
+
+        # ── Cognitive Surveillance ──
+        "cognitive_scan": lambda: _cognitive_scan(),
+        "cognitive_insight": lambda: _cognitive_insight(),
     }
 
 def _send_wol(mac: str) -> str:
@@ -152,6 +182,145 @@ def _phone_notify(msg: str) -> str:
     topic = f"jarvis_{platform.node().split('.')[0]}"
     run(f'curl -s -d "{msg[:500].replace(chr(34),chr(39))}" "https://ntfy.sh/{topic}" 2>/dev/null')
     return f"Notification sent to ntfy.sh/{topic}. Subscribe on your phone!"
+
+def _ui_get_text() -> str:
+    """OCR the screen and return all text."""
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
+        from ui_automation import get_screen_text
+        return get_screen_text()
+    except: pass
+    return run("screencapture -x /tmp/jv_screen.png 2>/dev/null && which tesseract && tesseract /tmp/jv_screen.png stdout 2>/dev/null || echo 'OCR not available'")
+
+def _ui_find(text: str) -> str:
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
+        from ui_automation import find_text_on_screen
+        el = find_text_on_screen(text)
+        if el: return f"Found '{el['text']}' at ({el['x']},{el['y']}) size {el['width']}x{el['height']}"
+        return f"'{text}' not found on screen"
+    except: return f"UI find error"
+
+def _ui_click(params: str) -> str:
+    """Click at x,y coordinates. Format: 'x y' or 'x y button' (button: left/right/double)."""
+    parts = params.split()
+    if len(parts) < 2: return "Usage: ui_click x y [button]"
+    x, y = parts[0], parts[1]
+    btn = parts[2].lower() if len(parts) > 2 else "left"
+    if btn == "right":
+        run(f"osascript -e 'tell application \"System Events\" to click at {{{x},{y}}}' 2>/dev/null")
+    elif btn == "double":
+        run(f"osascript -e 'tell application \"System Events\" to double click at {{{x},{y}}}' 2>/dev/null")
+    else:
+        run(f"osascript -e 'tell application \"System Events\" to click at {{{x},{y}}}' 2>/dev/null")
+    return f"Clicked ({x},{y})"
+
+def _ui_click_text(text: str) -> str:
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
+        from ui_automation import click_text
+        found = click_text(text, timeout=5)
+        return f"Clicked '{text}'" if found else f"'{text}' not found"
+    except: return f"Click text error"
+
+def _ui_handwrite(params: str) -> str:
+    """Handwrite text on screen. Format: 'text|start_x|start_y' or 'text' (uses center)."""
+    parts = params.split("|")
+    text = parts[0]
+    x = int(parts[1]) if len(parts) > 1 else 400
+    y = int(parts[2]) if len(parts) > 2 else 400
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
+        from ui_automation import handwrite_text
+        handwrite_text(text, x, y)
+        return f"Handwriting: '{text[:50]}' at ({x},{y})"
+    except Exception as e:
+        return f"Handwriting error: {e}"
+
+def _ui_drag(params: str) -> str:
+    """Drag from (x1,y1) to (x2,y2). Format: 'x1 y1 x2 y2'."""
+    parts = params.split()
+    if len(parts) < 4: return "Usage: ui_drag x1 y1 x2 y2"
+    x1, y1, x2, y2 = parts[:4]
+    run(f"osascript -e 'tell application \"System Events\" to drag from {{{x1},{y1}}} to {{{x2},{y2}}}' 2>/dev/null")
+    return f"Dragged ({x1},{y1}) -> ({x2},{y2})"
+
+def _phone_adb(cmd: str) -> str:
+    """Execute an ADB command (requires WiFi ADB connected)."""
+    r = run(f"adb shell {cmd} 2>/dev/null", timeout=15)
+    return r if r else "ADB not available. Connect phone: adb connect <phone_ip>:5555"
+
+def _phone_adb_connect(phone_ip: str) -> str:
+    if not phone_ip: return "Usage: phone_adb_connect <phone_ip>"
+    r = run(f"adb connect {phone_ip}:5555 2>/dev/null", timeout=10)
+    return f"ADB connect: {r}" if r else "ADB not installed"
+
+def _ha_discover() -> str:
+    ips = run("arp -a | grep -oE '\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b' | head -20")
+    for ip in (ips or "").split():
+        r = run(f"curl -s --max-time 2 http://{ip}:8123/api/ 2>/dev/null")
+        if r and "message" in r.lower() or "api" in r.lower() or "config" in r.lower():
+            return f"Home Assistant found at {ip}:8123"
+        r2 = run(f"curl -s --max-time 2 http://{ip}:8123/ 2>/dev/null | head -1")
+        if r2 and "home" in r2.lower():
+            return f"Home Assistant found at {ip}:8123"
+    return "No Home Assistant instance found on LAN"
+
+def _ha_api(endpoint: str, method: str = "GET") -> str:
+    token = os.environ.get("HA_TOKEN", "")
+    host = os.environ.get("HA_HOST", "")
+    if not host:
+        ips = run("arp -a | grep -oE '\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b' | head -20")
+        for ip in (ips or "").split():
+            r = run(f"curl -s --max-time 2 http://{ip}:8123/api/ 2>/dev/null")
+            if r:
+                host = f"http://{ip}:8123"
+                break
+    if not host: return "Home Assistant not found"
+    url = f"{host}/api/{endpoint}" if endpoint else host + "/api/"
+    headers = f'-H "Authorization: Bearer {token}"' if token else ""
+    r = run(f"curl -s --max-time 5 {headers} '{url}' 2>/dev/null | head -50")
+    return r or f"No response from {url}"
+
+def _ha_control(params: str) -> str:
+    """Control Home Assistant entity. Format: 'entity_id state' or 'entity_id attribute value'."""
+    parts = params.split()
+    if len(parts) < 2: return "Usage: ha_control entity_id state [attributes...]"
+    entity, state = parts[0], parts[1]
+    data = json.dumps({"state": state})
+    token = os.environ.get("HA_TOKEN", "")
+    host = os.environ.get("HA_HOST", "http://localhost:8123")
+    headers = f'-H "Authorization: Bearer {token}" -H "Content-Type: application/json"' if token else '-H "Content-Type: application/json"'
+    r = run(f"curl -s --max-time 5 -X POST {headers} -d '{data}' '{host}/api/states/{entity}' 2>/dev/null")
+    return f"HA: {entity} -> {state}" if r else f"HA control failed for {entity}"
+
+def _cognitive_scan() -> str:
+    """Scan environment: check windows, doors, lights, network, system."""
+    lines = []
+    lines.append("=== COGNITIVE ENVIRONMENT SCAN ===")
+    lines.append(f"Time: {run('date')}")
+    lines.append(f"System: {run('uptime')}")
+    lines.append(f"Network: {run('arp -a')}")
+    lines.append(f"Active users: {run('who')}")
+    _wincmd = """osascript -e 'tell application "System Events" to get name of every process whose visible is true' 2>/dev/null"""
+    lines.append(f"Open windows: {run(_wincmd)}")
+    lines.append(f"WiFi: {run('/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null | grep -E \"SSID|agrCtlRSSI|state\"')}")
+    lines.append(f"Battery: {run('pmset -g batt 2>/dev/null')}")
+    lines.append(f"Disk: {run('df -h / | tail -1')}")
+    return "\n".join(lines)
+
+def _cognitive_insight() -> str:
+    """Generate a synthesized insight about the user's environment."""
+    scan = _cognitive_scan()
+    try:
+        import urllib.request
+        payload = json.dumps({"text": f"Analyze this environment scan and produce ONE concise, useful insight (1 sentence):\n{scan[:800]}", "user_id": "jarvis", "tier": "free"}).encode()
+        req = urllib.request.Request(f"{HF_API}/api/text/chat", data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=15) as r:
+            resp = json.loads(r.read())
+            return f"[INSIGHT] {resp.get('text', 'Analysis complete')[:300]}"
+    except:
+        return "[INSIGHT] Environment scanned. All systems nominal."
 
     fn = actions.get(action)
     if fn:

@@ -372,6 +372,52 @@ _KEYWORD_MAP: dict[str, str] = {
     "control": "ai_computer_task", "automate": "ai_computer_task",
     "screen": "screen_analyze", "what's on screen": "screen_analyze",
     "what do you see": "screen_analyze", "look at screen": "screen_analyze",
+
+    # UI Automation
+    "click there": "ui_click", "click at": "ui_click", "click on": "ui_click_text",
+    "tap that": "ui_click", "tap on": "ui_click_text", "press that": "ui_click",
+    "type this": "ui_type", "type text": "ui_type", "enter text": "ui_type",
+    "keyboard": "ui_type", "keystroke": "ui_type",
+    "handwrite": "ui_handwrite", "hand writing": "ui_handwrite",
+    "handwrite this": "ui_handwrite", "write naturally": "ui_handwrite",
+    "drag mouse": "ui_drag", "drag from": "ui_drag",
+    "what's on screen": "ui_get_text", "what do you see on screen": "ui_get_text",
+    "read screen": "ui_get_text", "screen text": "ui_get_text",
+    "find text": "ui_find", "locate text": "ui_find", "find on screen": "ui_find",
+    "app running": "ui_app_running", "activate app": "ui_activate_app",
+    "bring app": "ui_activate_app", "focus app": "ui_activate_app",
+    "screenshot ui": "ui_screenshot", "capture screen": "ui_screenshot",
+
+    # Phone Bridge
+    "read my texts": "phone_read_sms", "read my sms": "phone_read_sms",
+    "show texts": "phone_read_sms", "read messages": "phone_read_sms",
+    "check messages": "phone_read_sms", "any new messages": "phone_read_sms",
+    "phone notifications": "phone_get_notifications", "read notifications": "phone_get_notifications",
+    "check notifications": "phone_get_notifications",
+    "call log": "phone_call_log", "recent calls": "phone_call_log",
+    "phone battery": "phone_battery", "phone charge": "phone_battery",
+    "connect phone": "phone_adb_connect", "adb connect": "phone_adb_connect",
+    "phone contacts": "phone_contacts", "my contacts": "phone_contacts",
+    "phone location": "phone_location", "where is my phone": "phone_location",
+    "find my phone": "phone_location",
+
+    # Home Assistant
+    "home assistant": "ha_status", "ha status": "ha_status",
+    "smart home status": "ha_status",
+    "discover ha": "ha_discover", "find home assistant": "ha_discover",
+    "ha sensors": "ha_sensors", "read sensors": "ha_sensors",
+    "turn on": "smart_home_control", "turn off": "smart_home_control",
+    "toggle light": "smart_home_control", "dim light": "smart_home_control",
+
+    # Cognitive Surveillance
+    "scan environment": "cognitive_scan", "survey environment": "cognitive_scan",
+    "what's happening": "cognitive_scan", "status report": "cognitive_scan",
+    "insight": "cognitive_insight", "analyze environment": "cognitive_insight",
+    "cognitive insight": "cognitive_insight",
+    "monitor environment": "cognitive_monitor", "start monitoring": "cognitive_monitor",
+    "stop monitoring": "cognitive_monitor",
+    "alert me": "cognitive_alert", "set alert": "cognitive_alert",
+    "warn me": "cognitive_alert",
 }
 
 # Keyword phrase → action ID lookup (longest-first for specificity)
@@ -897,8 +943,6 @@ _ACTION_LABELS = {
     "browser_tab_screenshot": "📸 Capturing page...",
     "ai_computer_task": "🤖 AI doing computer task...",
     "screen_analyze": "👁 Analyzing screen...",
-}
-
     "read_file": "📄 Read a file", "write_file": "📝 Write content to a file",
     "list_dir": "📁 List directory contents", "run_python": "🐍 Execute Python code",
     "run_shell": "💻 Execute a shell command", "take_screenshot": "📸 Take a screenshot",
@@ -910,6 +954,28 @@ _ACTION_LABELS = {
     "system_load": "📊 System load...",
     "fetch_search": "🔍 Search the web and return results",
     "open_app": "🚀 Open a macOS application",
+
+    # UI Automation
+    "ui_screenshot": "📸 Screen capture...", "ui_get_text": "🔍 Reading screen text...",
+    "ui_find": "🔎 Finding text on screen...", "ui_click": "🖱 Clicking at position...",
+    "ui_click_text": "🖱 Clicking text...", "ui_type": "⌨ Typing text...",
+    "ui_handwrite": "✍️ Handwriting text...", "ui_drag": "↗️ Dragging mouse...",
+    "ui_activate_app": "🚀 Activating app...", "ui_app_running": "🔍 Checking app...",
+
+    # Phone Bridge
+    "phone_adb_connect": "📱 Connecting to phone...", "phone_read_sms": "📱 Reading SMS...",
+    "phone_get_notifications": "📱 Reading notifications...", "phone_call_log": "📱 Reading call log...",
+    "phone_battery": "📱 Phone battery...", "phone_contacts": "📱 Reading contacts...",
+    "phone_location": "📍 Phone location...",
+
+    # Home Assistant
+    "ha_discover": "🏠 Discovering Home Assistant...", "ha_status": "🏠 Home Assistant status...",
+    "ha_sensors": "🏠 Reading sensors...", "ha_control": "🏠 Controlling entity...",
+
+    # Cognitive Surveillance
+    "cognitive_scan": "🧠 Scanning environment...", "cognitive_insight": "🧠 Generating insight...",
+    "cognitive_monitor": "🧠 Starting monitor...", "cognitive_alert": "⚠️ Setting alert...",
+}
 _ACTION_TIPS = {
     "memory_cleanup": "Kill memory-hogging apps and free RAM",
     "device_scan": "Deep scan of your Windows device (apps, system, network, files)",
@@ -3679,3 +3745,315 @@ if sys.platform == "darwin":
         net = _mac_run("netstat -ib 2>/dev/null | grep -E 'en0|en1' | head -5")
         upt = _mac_run("uptime")
         return f"CPU: {cpu}\nMemory: {mem}\nDisk: {disk}\nNetwork:\n{net}\nUptime: {upt}"
+
+    # ── UI Automation (Computer Vision + Mouse/Keyboard) ────────
+
+    @register("ui_screenshot")
+    def _mac_ui_screenshot(_):
+        """Take screenshot and return path."""
+        _mac_run("screencapture -x /tmp/jv_ui_screen.png 2>/dev/null")
+        return "/tmp/jv_ui_screen.png"
+
+    @register("ui_get_text")
+    def _mac_ui_get_text(_):
+        """OCR the screen and return all visible text."""
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+            from ui_automation import get_screen_text
+            return get_screen_text()
+        except:
+            _mac_run("screencapture -x /tmp/jv_ui_screen.png 2>/dev/null")
+            r = _mac_run("which tesseract && tesseract /tmp/jv_ui_screen.png stdout 2>/dev/null || echo 'OCR not available'")
+            return r or "Tesseract not installed (brew install tesseract)"
+
+    @register("ui_find")
+    def _mac_ui_find(text):
+        """Find text on screen and return coordinates."""
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+            from ui_automation import find_text_on_screen
+            el = find_text_on_screen(text)
+            if el:
+                return f"Found '{el['text']}' at ({el['x']},{el['y']}) size {el['width']}x{el['height']}"
+            return f"'{text}' not found on screen"
+        except:
+            return f"UI find error for '{text}'"
+
+    @register("ui_click")
+    def _mac_ui_click(text):
+        """Click at coordinates. Format: 'x y' or 'x y button'."""
+        parts = text.split()
+        if len(parts) < 2: return "Usage: ui_click x y [left|right|double]"
+        x, y = parts[0], parts[1]
+        btn = parts[2].lower() if len(parts) > 2 else "left"
+        if btn == "right":
+            _mac_run(f"osascript -e 'tell application \"System Events\" to click at {{{x},{y}}}' 2>/dev/null")
+        elif btn == "double":
+            _mac_run(f"osascript -e 'tell application \"System Events\" to double click at {{{x},{y}}}' 2>/dev/null")
+        else:
+            _mac_run(f"osascript -e 'tell application \"System Events\" to click at {{{x},{y}}}' 2>/dev/null")
+        return f"Clicked ({x},{y})"
+
+    @register("ui_click_text")
+    def _mac_ui_click_text(text):
+        """Find text on screen and click it."""
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+            from ui_automation import click_text
+            found = click_text(text, timeout=5)
+            return f"Clicked '{text}'" if found else f"'{text}' not found"
+        except:
+            return f"Click text error for '{text}'"
+
+    @register("ui_type")
+    def _mac_ui_type(text):
+        """Type text using macOS keystroke simulation."""
+        t = text.replace("type", "").replace("ui_type", "").strip() or text
+        escaped = t[:300].replace(chr(34), chr(39))
+        _mac_run(f"osascript -e 'tell application \"System Events\" to keystroke \"{escaped}\"' 2>/dev/null")
+        return f"Typed: '{t[:50]}'"
+
+    @register("ui_handwrite")
+    def _mac_ui_handwrite(text):
+        """Handwrite text using bezier strokes. Format: text|start_x|start_y"""
+        parts = text.split("|")
+        txt = parts[0]
+        xs = int(parts[1]) if len(parts) > 1 else 400
+        ys = int(parts[2]) if len(parts) > 2 else 400
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+            from ui_automation import handwrite_text
+            handwrite_text(txt, xs, ys)
+            return f"Handwriting: '{txt[:50]}' at ({xs},{ys})"
+        except:
+            return f"Handwriting error for '{txt[:30]}'"
+
+    @register("ui_drag")
+    def _mac_ui_drag(text):
+        """Drag from (x1,y1) to (x2,y2). Format: 'x1 y1 x2 y2'."""
+        parts = text.split()
+        if len(parts) < 4: return "Usage: ui_drag x1 y1 x2 y2"
+        x1, y1, x2, y2 = parts[:4]
+        _mac_run(f"osascript -e 'tell application \"System Events\" to drag from {{{x1},{y1}}} to {{{x2},{y2}}}' 2>/dev/null")
+        return f"Dragged ({x1},{y1}) -> ({x2},{y2})"
+
+    @register("ui_activate_app")
+    def _mac_ui_activate(text):
+        """Bring an app to the foreground."""
+        _mac_run(f"osascript -e 'tell application \"{text}\" to activate' 2>/dev/null")
+        return f"Activated {text}"
+
+    @register("ui_app_running")
+    def _mac_ui_running(text):
+        """Check if an app is running."""
+        r = _mac_run(f"osascript -e 'tell application \"System Events\" to exists process \"{text}\"' 2>/dev/null")
+        return f"{text} is {'running' if 'true' in r else 'not running'}"
+
+    # ── Phone Bridge (ADB over WiFi) ─────────────────────────────
+
+    _adb_cache: str | None = None
+
+    def _mac_adb(cmd: str) -> str:
+        r = _mac_run(f"adb shell {cmd} 2>/dev/null", timeout=15)
+        if r: return r
+        # Try to auto-connect known phones
+        global _adb_cache
+        if _adb_cache is None:
+            ip = _mac_run("arp -a 2>/dev/null | grep -i 'android\|oneplus\|samsung\|pixel\|xiaomi\|motorola' | grep -oE '\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b' | head -1")
+            if ip:
+                _mac_run(f"adb connect {ip}:5555 2>/dev/null", timeout=5)
+                _adb_cache = ip
+                r = _mac_run(f"adb shell {cmd} 2>/dev/null", timeout=15)
+                if r: return r
+        _adb_cache = ""
+        return "ADB not available. Connect phone: adb connect <phone_ip>:5555"
+
+    @register("phone_adb_connect")
+    def _mac_phone_connect(text):
+        """Connect to phone via ADB over WiFi."""
+        ip = text.strip()
+        if not ip: return "Usage: phone_adb_connect <phone_ip>"
+        r = _mac_run(f"adb connect {ip}:5555 2>/dev/null", timeout=10)
+        global _adb_cache
+        _adb_cache = ip
+        return f"ADB connected to {ip}" if r else f"Connection failed for {ip}"
+
+    @register("phone_read_sms")
+    def _mac_phone_sms(_):
+        """Read recent SMS messages from connected Android phone."""
+        r = _mac_adb("content query --uri content://sms/inbox --projection address,body,date --sort date DESC --limit 10 2>/dev/null")
+        if r: return r
+        return _mac_adb("content query --uri content://sms --projection address,body,date --sort date DESC --limit 5 2>/dev/null")
+
+    @register("phone_get_notifications")
+    def _mac_phone_notifications(_):
+        """Get recent notifications from connected Android phone."""
+        r = _mac_adb("dumpsys notification --naked 2>/dev/null | grep -E 'tickerText=|title=|text=' | head -60")
+        if not r:
+            r = _mac_adb("dumpsys notification 2>/dev/null | grep -A 2 'NotificationRecord' | head -40")
+        return r or "No notifications or ADB not connected"
+
+    @register("phone_call_log")
+    def _mac_phone_call_log(_):
+        """Read recent call log from connected Android phone."""
+        return _mac_adb("content query --uri content://call_log/calls --projection number,type,duration,date --sort date DESC --limit 10 2>/dev/null")
+
+    @register("phone_battery")
+    def _mac_phone_battery(_):
+        """Get battery status of connected Android phone."""
+        r = _mac_adb("shell dumpsys battery 2>/dev/null | grep -E 'level|status|powered'")
+        return r or "Phone battery info not available"
+
+    @register("phone_contacts")
+    def _mac_phone_contacts(_):
+        """Read recent contacts from connected Android phone."""
+        return _mac_adb("content query --uri content://contacts/phones/ --projection display_name,number --sort data_id DESC --limit 20 2>/dev/null")
+
+    @register("phone_location")
+    def _mac_phone_location(_):
+        """Get last known location from connected Android phone."""
+        r = _mac_adb("shell dumpsys location 2>/dev/null | grep -E 'last.*Location|LastKnownLocation' | head -5")
+        return r or "Location not available (may need GPS enabled)"
+
+    # ── Home Assistant Integration ───────────────────────────────
+
+    @register("ha_discover")
+    def _mac_ha_discover(_):
+        """Discover Home Assistant instance on LAN."""
+        ips = _mac_run("arp -a 2>/dev/null | grep -oE '\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b' | head -20").split()
+        for ip in ips:
+            r = _mac_run(f"curl -s --max-time 2 http://{ip}:8123/api/ 2>/dev/null")
+            if r and "message" in r:
+                return f"Home Assistant found at {ip}:8123"
+            r2 = _mac_run(f"curl -s --max-time 2 http://{ip}:8123/ 2>/dev/null | head -1")
+            if r2 and "home" in r2.lower():
+                return f"Home Assistant found at {ip}:8123"
+        return "No Home Assistant instance found on LAN"
+
+    @register("ha_status")
+    def _mac_ha_status(_):
+        """Get Home Assistant API status."""
+        return _ha_api_call("", "GET")
+
+    @register("ha_sensors")
+    def _mac_ha_sensors(_):
+        """List all Home Assistant sensor states."""
+        return _ha_api_call("states", "GET")
+
+    @register("ha_control")
+    def _mac_ha_control(text):
+        """Control a Home Assistant entity. Format: entity_id state or entity_id on|off|toggle."""
+        parts = text.split()
+        if len(parts) < 2: return "Usage: ha_control entity_id state"
+        return _ha_api_call(f"states/{parts[0]}", "POST", {"state": parts[1]})
+
+    def _ha_api_call(endpoint: str, method: str = "GET", data: dict | None = None) -> str:
+        token = os.environ.get("HA_TOKEN", "")
+        host = os.environ.get("HA_HOST", "")
+        if not host:
+            ips = _mac_run("arp -a 2>/dev/null | grep -oE '\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b' | head -20").split()
+            for ip in ips:
+                r = _mac_run(f"curl -s --max-time 2 http://{ip}:8123/api/ 2>/dev/null")
+                if r and "message" in r:
+                    host = f"http://{ip}:8123"
+                    break
+        if not host: return "Home Assistant not found on LAN"
+        url = f"{host}/api/{endpoint}" if endpoint else host + "/api/"
+        headers = f'-H "Authorization: Bearer {token}"' if token else ""
+        if method == "POST" and data:
+            payload = data.get("state", "")
+            r = _mac_run(f'curl -s --max-time 5 -X POST {headers} -H "Content-Type: application/json" -d \'{{"state":"{payload}"}}\' "{url}" 2>/dev/null')
+        else:
+            r = _mac_run(f"curl -s --max-time 5 {headers} '{url}' 2>/dev/null | head -50")
+        return r or f"No response from {url}"
+
+    # ── Cognitive Surveillance ───────────────────────────────────
+
+    @register("cognitive_scan")
+    def _mac_cognitive_scan(_):
+        """Comprehensive environment scan: processes, windows, network, system."""
+        lines = []
+        lines.append(f"=== COGNITIVE ENVIRONMENT SCAN ===")
+        lines.append(f"Time: {_mac_run('date')}")
+        lines.append(f"Uptime: {_mac_run('uptime')}")
+        lines.append(f"Users: {_mac_run('who')}")
+        lines.append(f"Processes (top 5 by CPU): {_mac_run('ps aux --sort=-%cpu | head -6')}")
+        _winc = """osascript -e 'tell application "System Events" to get name of every process whose visible is true' 2>/dev/null"""
+        lines.append(f"Visibility: {_mac_run(_winc)}")
+        wifi = _mac_run("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null | grep -E 'SSID|agrCtlRSSI|state'")
+        lines.append(f"WiFi: {wifi}")
+        lines.append(f"Network neighbours: {_mac_run('arp -a 2>/dev/null')}")
+        lines.append(f"Disk: {_mac_run('df -h / 2>/dev/null | tail -1')}")
+        return "\n".join(lines)
+
+    @register("cognitive_insight")
+    def _mac_cognitive_insight(_):
+        """Generate a synthesized insight about the user's environment."""
+        scan = _mac_cognitive_scan(None)
+        try:
+            import urllib.request
+            payload = json.dumps({"text": f"Analyze this environment scan and produce ONE concise, useful insight (1 sentence):\n{scan[:800]}",
+                                  "user_id": "jarvis", "tier": "free"}).encode()
+            req = urllib.request.Request(f"{_mac_run('echo $HF_API')}/api/text/chat", data=payload,
+                                          headers={"Content-Type": "application/json"}, method="POST")
+            with urllib.request.urlopen(req, timeout=15) as r:
+                resp = json.loads(r.read())
+                return f"[INSIGHT] {resp.get('text', 'Analysis complete')[:300]}"
+        except:
+            return "[INSIGHT] Environment scanned. All systems nominal."
+
+    @register("cognitive_monitor")
+    def _mac_cognitive_monitor(text):
+        """Start or stop ambient monitoring thread. Format: 'start' or 'stop' or 'status'."""
+        import threading
+        action = text.strip().lower()
+        if not hasattr(_mac_cognitive_monitor, "_thread"):
+            _mac_cognitive_monitor._thread = None
+            _mac_cognitive_monitor._running = False
+        if action == "start" and not (_mac_cognitive_monitor._running and _mac_cognitive_monitor._thread and _mac_cognitive_monitor._thread.is_alive()):
+            _mac_cognitive_monitor._running = True
+            def _monitor_loop():
+                import time
+                while _mac_cognitive_monitor._running:
+                    _mac_cognitive_scan(None)
+                    time.sleep(120)
+            _mac_cognitive_monitor._thread = threading.Thread(target=_monitor_loop, daemon=True)
+            _mac_cognitive_monitor._thread.start()
+            return "Cognitive monitoring started (interval: 120s)"
+        elif action == "stop":
+            _mac_cognitive_monitor._running = False
+            return "Cognitive monitoring stopped"
+        else:
+            running = _mac_cognitive_monitor._thread and _mac_cognitive_monitor._thread.is_alive() if _mac_cognitive_monitor._thread else False
+            return f"Cognitive monitoring: {'running' if running else 'stopped'}"
+
+    @register("cognitive_alert")
+    def _mac_cognitive_alert(text):
+        """Set a cognitive alert condition. Format: 'condition' e.g. 'cpu > 90' or 'battery < 20'."""
+        condition = text.strip()
+        if not condition: return "Usage: cognitive_alert <condition>"
+        import threading, time
+        if not hasattr(_mac_cognitive_alert, "_thread"):
+            _mac_cognitive_alert._thread = None
+            _mac_cognitive_alert._running = False
+            _mac_cognitive_alert._condition = ""
+        if not (_mac_cognitive_alert._running and _mac_cognitive_alert._thread and _mac_cognitive_alert._thread.is_alive()):
+            _mac_cognitive_alert._running = True
+            _mac_cognitive_alert._condition = condition
+            def _alert_loop():
+                while _mac_cognitive_alert._running:
+                    try:
+                        if "cpu" in _mac_cognitive_alert._condition.lower():
+                            r = _mac_run("ps aux --sort=-%cpu | head -2 | tail -1 | awk '{print $3}'")
+                            if r and float(r) > 90:
+                                _mac_run(f"""osascript -e 'display notification "CPU at {r}%!" with title "J.A.R.V.I.S. Alert"' 2>/dev/null""")
+                        if "battery" in _mac_cognitive_alert._condition.lower():
+                            r = _mac_run("pmset -g batt 2>/dev/null | grep -E '\\d+%' | grep -oE '\\d+'")
+                            if r and int(r) < 20:
+                                _mac_run(f"""osascript -e 'display notification "Battery at {r}%!" with title "J.A.R.V.I.S. Alert"' 2>/dev/null""")
+                    except: pass
+                    time.sleep(60)
+            _mac_cognitive_alert._thread = threading.Thread(target=_alert_loop, daemon=True)
+            _mac_cognitive_alert._thread.start()
+            return f"Cognitive alert set: '{condition}'"
+        return f"Alert already running: {_mac_cognitive_alert._condition}"
