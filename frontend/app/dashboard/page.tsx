@@ -60,7 +60,7 @@ export default function Dashboard() {
 
   const totalDocs = docs.length + (hasDocs ? 1 : 0);
 
-  const HF_API = "https://dgfhgjhj-my-actual-brain.hf.space";
+  const HF_API = "https://dgfhgjhj-jarvis-ai-brain.hf.space";
   const psCmd = `powershell -c "& { curl.exe -sL '${HF_API}/relay_agent' -o \"$env:TEMP\\relay_agent.py\"; python \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"`;
 
   return (
