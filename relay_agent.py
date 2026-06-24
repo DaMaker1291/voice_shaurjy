@@ -448,10 +448,15 @@ def main():
         sys.path.insert(0, backend_dir)
         has_actions = True
 
+    # Poll for primary user_id AND fallback "local" (frontend hardcodes "local")
+    poll_ids = list(dict.fromkeys([user_id, "local"]))  # dedup preserving order
+    fallback_idx = 0
     print(f"[Relay] Polling every 0.5s for user '{user_id}'...")
     while True:
         try:
-            resp = get(f"{HF_API}/api/relay/pending?user_id={user_id}")
+            uid = poll_ids[fallback_idx % len(poll_ids)]
+            fallback_idx += 1
+            resp = get(f"{HF_API}/api/relay/pending?user_id={uid}")
             for a in resp.get("actions", []):
                 rid, act, params = a["relay_id"], a["action"], a.get("params", "")
                 print(f"[Relay] Executing: {act} ({params[:50] if params else ''})")

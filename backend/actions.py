@@ -67,6 +67,7 @@ _KEYWORD_MAP: dict[str, str] = {
     "switch user": "switch_user",
     "current user": "whoami",
     "who am i": "whoami",
+    "whoami": "whoami",
 
     # Power
     "battery": "battery_status",
