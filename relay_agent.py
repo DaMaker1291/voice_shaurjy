@@ -99,7 +99,7 @@ def macos_exec(action: str, params: str = "") -> str:
         "notify": lambda: run(f"osascript -e 'display notification \"{params[:200].replace(chr(34), '')}\" with title \"J.A.R.V.I.S.\" 2>/dev/null'"),
         "notify_persistent": lambda: _notify_window(params),
         "notify_center": lambda: _notify_window(params),
-        "lock_screen": lambda: run("/System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend 2>/dev/null || echo 'Lock not supported'"),
+        "lock": lambda: run("/System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend 2>/dev/null || echo 'Lock not supported'"),
         "volume_set": lambda: run(f"osascript -e 'set volume output volume {params}'"),
         "volume_up": lambda: run("osascript -e 'set volume output volume (output volume of (get volume settings) + 10)'"),
         "volume_down": lambda: run("osascript -e 'set volume output volume (output volume of (get volume settings) - 10)'"),

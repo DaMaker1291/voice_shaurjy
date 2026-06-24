@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import BotSwarm from "@/components/BotSwarm";
 import Sidebar from "@/components/Sidebar";
-import SystemPanel from "@/components/SystemPanel";
 import { entityProcess } from "@/lib/api";
 
 interface Message { role: string; content: string }
@@ -68,12 +67,7 @@ export default function Home() {
   const [selectedStrategy, setSelectedStrategy] = useState<number | null>(null);
   const [entityMemory, setEntityMemory] = useState("");
   const [activityIntensity, setActivityIntensity] = useState(0);
-  const [voice, setVoice] = useState<string>(() => {
-    if (typeof window === "undefined") return "en-GB-RyanNeural";
-    return localStorage.getItem("tts_voice") || "en-GB-RyanNeural";
-  });
-  const [showVoicePicker, setShowVoicePicker] = useState(false);
-  const [showSystemPanel, setShowSystemPanel] = useState(false);
+  const [voice, setVoice] = useState<string>("en-GB-RyanNeural");
   const [entityMood, setEntityMood] = useState("curious");
   const [entityMoodEmoji, setEntityMoodEmoji] = useState("🔍");
   const [entityThought, setEntityThought] = useState("");
@@ -535,129 +529,33 @@ export default function Home() {
     return () => window.removeEventListener("keydown", h);
   }, [listening, stopListening, taskQuestion, textInput, sendTaskResponse]);
 
-  const statusText = taskQuestion ? `answering step ${taskStep}/${taskTotal}` :
-    listening ? (interim ? `"${interim.slice(0, 40)}"` : "listening") :
-    thinking ? "processing" :
-    speaking ? "speaking" :
-    entityState?.active_goals?.length ? `${entityState.active_goals.length} active goals` :
-    "ask me anything";
 
   return (
     <div className="relative h-screen w-full overflow-hidden flex flex-row" style={{ backgroundColor: '#05081a' }}>
-      {/* ── Background layers ── */}
       <div className="gradient-bg" />
       <div className="grid-overlay" />
       <div className="stars" />
       <div className="stars2" />
       <div className="stars3" />
 
-      {/* ── Main content ── */}
       <div className="relative z-10 flex-[3] min-w-0 flex flex-col px-4">
-        {/* Action notification */}
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 ${actionFeedback ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-8 pointer-events-none"}`}>
-          <div className="bot-toast flex items-center gap-3 px-5 py-2.5">
-            <span className={`bot-toast-dot ${actionType === "workflow" ? "bg-blue-400" : actionType === "error" ? "bg-red-400" : "bg-cyan-400"}`} />
-            <div>
-              <p className="text-[9px] font-mono tracking-[0.25em] uppercase" style={{ color: actionType === "workflow" ? "rgba(96,165,250,0.7)" : actionType === "error" ? "rgba(248,113,113,0.7)" : "rgba(34,211,238,0.7)" }}>{actionType}</p>
-              <p className="text-xs text-gray-200 font-mono">{actionFeedback}</p>
-            </div>
-          </div>
+
+        {/* Status bar — tiny unobtrusive */}
+        <div className="absolute top-3 left-4 z-30 flex items-center gap-2">
+          <div className={`w-1.5 h-1.5 rounded-full ${listening ? "bg-green-400" : thinking ? "bg-purple-400" : speaking ? "bg-cyan-400" : "bg-gray-600"}`} />
+          <span className="text-[9px] font-mono text-gray-500/70 tracking-wider">{scanning ? "scanning..." : thinking ? "processing" : speaking ? "speaking" : entityMoodEmoji ? `${entityMoodEmoji} ${entityMood}` : "idle"}</span>
         </div>
 
-        {/* Top bar */}
-        <div className="top-bar flex items-center justify-between px-5 py-3">
-          <div className="flex items-center gap-3">
-            <div className="relative flex items-center justify-center w-8 h-8">
-              <div className={`status-dot ${listening ? "listening" : thinking ? "thinking" : speaking ? "speaking" : "idle"}`} />
-              {listening && <div className="absolute inset-0 rounded-full status-ring-listening" />}
-              {thinking && <div className="absolute inset-0 rounded-full status-ring-thinking" />}
-              {speaking && <div className="absolute inset-0 rounded-full status-ring-speaking" />}
-            </div>
-             <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <span className="status-text">{scanning ? "scanning device..." : statusText}</span>
-                {entityThought && !listening && !thinking && !speaking && (
-                  <span className="text-[8px] font-mono text-purple-500/30 italic tracking-normal max-w-[160px] truncate animate-fade-in">{entityThought}</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[9px] font-mono">{entityMoodEmoji} <span className="text-purple-500/40 tracking-[0.15em]">{entityMood}</span></span>
-                {entityState && (
-                  <span className="text-[8px] font-mono text-purple-500/30 tracking-[0.15em]">
-                    {entityState.active_goals?.length || 0} goals &middot; {entityState.interaction_count} interactions
-                  </span>
-                )}
-              </div>
-            </div>
-            {confidence > 0 && (
-              <div className="ml-2 flex items-center gap-1.5">
-                <div className="w-12 h-1 rounded-full bg-gray-800/50 overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-300" style={{ width: `${confidence}%` }} />
-                </div>
-                <span className="text-[9px] font-mono text-gray-600">{confidence}%</span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {profileInterests.length > 0 && (
-              <div className="hidden md:flex items-center gap-1.5 mr-2">
-                {profileInterests.slice(0, 3).map((t, i) => (
-                  <span key={i} className="interest-tag">{t}</span>
-                ))}
-              </div>
-            )}
-            <div className="relative">
-              <button
-                onClick={() => { setShowVoicePicker((o) => !o); setShowSystemPanel(false); }}
-                className="control-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
-                title="TTS Voice"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
-                <span className="text-[9px] font-mono tracking-wider">{voice.replace("en-US-", "").replace("Neural", "").replace("en-GB-", "UK-").replace("en-AU-", "AU-")}</span>
-              </button>
-              {showVoicePicker && (
-                <div className="absolute right-0 top-9 z-50 w-44 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-1.5 shadow-2xl animate-fade-in">
-                  {[
-                    { id: "en-GB-RyanNeural", label: "Ryan (UK Male) ★ JARVIS" },
-                    { id: "en-US-AriaNeural", label: "Aria (US Female)" },
-                    { id: "en-US-JennyNeural", label: "Jenny (US Friendly)" },
-                    { id: "en-US-GuyNeural", label: "Guy (US Male)" },
-                    { id: "en-US-DavisNeural", label: "Davis (US Calm)" },
-                    { id: "en-GB-SoniaNeural", label: "Sonia (UK Female)" },
-                    { id: "en-AU-NatashaNeural", label: "Natasha (AU Fem.)" },
-                  ].map((v) => (
-                    <button
-                      key={v.id}
-                      onClick={() => { setVoice(v.id); setShowVoicePicker(false); localStorage.setItem("tts_voice", v.id); }}
-                      className={`w-full text-left text-[10px] font-mono px-2.5 py-1.5 rounded-lg transition-colors ${
-                        voice === v.id ? "bg-purple-900/20 text-purple-400" : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/30"
-                      }`}
-                    >
-                      {v.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="relative">
-              <button onClick={() => { setShowSystemPanel(o => !o); setShowVoicePicker(false); }} className="control-btn p-1.5 rounded-lg" title="System Control">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6V6m0 0a2 2 0 100-4 2 2 0 000 4zm0 0v4m0 0a2 2 0 100 4 2 2 0 000-4zm0 0v4m0 0a2 2 0 100 4 2 2 0 000-4z" /></svg>
-              </button>
-              {showSystemPanel && <SystemPanel onClose={() => setShowSystemPanel(false)} />}
-            </div>
-            <button onClick={() => setSidebarOpen((o) => !o)} className="control-btn p-1.5 rounded-lg">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
-              </svg>
-            </button>
-          </div>
-        </div>
+        {/* Sidebar toggle — top right */}
+        <button onClick={() => setSidebarOpen((o) => !o)} className="absolute top-3 right-4 z-30 text-gray-600 hover:text-gray-300 transition-colors p-1 rounded">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+          </svg>
+        </button>
 
         {/* Task progress */}
         {taskTotal > 0 && taskStep > 0 && (
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-10 w-72 animate-fade-in">
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-10 w-72 animate-fade-in">
             <div className="task-progress-bar">
               <div className="task-progress-fill" style={{ width: `${(taskStep / taskTotal) * 100}%` }} />
             </div>

@@ -1,7 +1,7 @@
 {
   "user_id": "",
   "first_seen": "2026-05-31T19:36:47.009378",
-  "last_seen": "2026-06-24T20:35:27.182491",
+  "last_seen": "2026-06-24T22:03:43.022204",
   "session_count": 0,
   "total_messages": 1,
   "device": {
@@ -14,8 +14,8 @@
     "browsers": [],
     "wifi": [],
     "recent_file_types": [
-      ".docx",
-      ".png"
+      ".png",
+      ".docx"
     ]
   },
   "interests": [],
