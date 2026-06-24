@@ -69,8 +69,8 @@ export default function Home() {
   const [entityMemory, setEntityMemory] = useState("");
   const [activityIntensity, setActivityIntensity] = useState(0);
   const [voice, setVoice] = useState<string>(() => {
-    if (typeof window === "undefined") return "en-US-AriaNeural";
-    return localStorage.getItem("tts_voice") || "en-US-AriaNeural";
+    if (typeof window === "undefined") return "en-GB-RyanNeural";
+    return localStorage.getItem("tts_voice") || "en-GB-RyanNeural";
   });
   const [showVoicePicker, setShowVoicePicker] = useState(false);
   const [showSystemPanel, setShowSystemPanel] = useState(false);
@@ -183,7 +183,7 @@ export default function Home() {
       utterance.rate = 1.05; utterance.pitch = 1.0;
       utterance.onend = () => setSpeaking(false);
       const voices = synth.getVoices();
-      const preferred = voices.find((v) => v.name.includes(voiceName.split("-")[1] || "Aria") || v.name.includes("Aria") || v.name.includes("Jenny"));
+      const preferred = voices.find((v) => v.name.includes(voiceName.split("-")[1] || "Ryan") || v.name.includes("Ryan") || v.name.includes("Aria") || v.name.includes("Jenny"));
       if (preferred) utterance.voice = preferred;
       synth.speak(utterance);
     }
@@ -620,12 +620,12 @@ export default function Home() {
               {showVoicePicker && (
                 <div className="absolute right-0 top-9 z-50 w-44 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-1.5 shadow-2xl animate-fade-in">
                   {[
+                    { id: "en-GB-RyanNeural", label: "Ryan (UK Male) ★ JARVIS" },
                     { id: "en-US-AriaNeural", label: "Aria (US Female)" },
                     { id: "en-US-JennyNeural", label: "Jenny (US Friendly)" },
                     { id: "en-US-GuyNeural", label: "Guy (US Male)" },
                     { id: "en-US-DavisNeural", label: "Davis (US Calm)" },
                     { id: "en-GB-SoniaNeural", label: "Sonia (UK Female)" },
-                    { id: "en-GB-RyanNeural", label: "Ryan (UK Male)" },
                     { id: "en-AU-NatashaNeural", label: "Natasha (AU Fem.)" },
                   ].map((v) => (
                     <button

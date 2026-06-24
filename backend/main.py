@@ -170,7 +170,7 @@ from pydantic import BaseModel
 
 class TTSRequest(BaseModel):
     text: str
-    voice: str = "en-US-AriaNeural"
+    voice: str = "en-GB-RyanNeural"
 
 @app.post("/api/tts")
 async def text_to_speech(req: TTSRequest):
@@ -178,15 +178,11 @@ async def text_to_speech(req: TTSRequest):
     import io, asyncio, re
 
     text = req.text
-    voice = req.voice or "en-US-AriaNeural"
+    voice = req.voice or "en-GB-RyanNeural"
 
-    # Build SSML with expressive style for more human-like speech
-    cheer_words = ["great", "nice", "awesome", "love", "amazing", "cool", "yes"]
-    sad_words = ["sorry", "sad", "unfortunate", "ugh", "oh no", "argh"]
-    style = "cheerful" if any(w in text.lower() for w in cheer_words) else "empathetic" if any(w in text.lower() for w in sad_words) else "chat"
-
+    # Build SSML for natural JARVIS delivery
     text_escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&apos;")
-    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts"><voice name="{voice}"><mstts:express-as style="{style}" styledegree="1.5">{text_escaped}</mstts:express-as></voice></speak>'
+    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts"><voice name="{voice}"><mstts:express-as style="calm" styledegree="1.0">{text_escaped}</mstts:express-as></voice></speak>'
 
     # Try edge_tts with SSML (expressive, much more human-like)
     try:
