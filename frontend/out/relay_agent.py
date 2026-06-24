@@ -17,6 +17,18 @@ import sys
 import time
 import urllib.request
 import urllib.error
+import ssl
+
+try:
+    import certifi
+    _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _SSL_CTX = ssl._create_unverified_context()
+
+def _urlopen(req_or_url, **kwargs):
+    kwargs.setdefault("context", _SSL_CTX)
+    kwargs.setdefault("timeout", 20)
+    return urllib.request.urlopen(req_or_url, **kwargs)
 
 HF_API = os.environ.get("HF_API_URL", "https://dgfhgjhj-my-actual-brain.hf.space").rstrip("/")
 

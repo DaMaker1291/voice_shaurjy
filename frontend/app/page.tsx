@@ -36,7 +36,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [textInput, setTextInput] = useState("");
-  const [showInput, setShowInput] = useState(false);
+  const [showInput, setShowInput] = useState(true);
   const [listening, setListening] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -78,6 +78,7 @@ export default function Home() {
   const [entityMoodEmoji, setEntityMoodEmoji] = useState("🔍");
   const [entityThought, setEntityThought] = useState("");
   const [centerOverlay, setCenterOverlay] = useState<string | null>(null);
+  const [lastResponse, setLastResponse] = useState<string>("");
   const overlayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const capturedTextRef = useRef("");
 
@@ -229,6 +230,7 @@ export default function Home() {
             }
             return updated;
           });
+          setLastResponse(resultText);
           setActionFeedback(resultText);
           // Show relay result in center overlay
           if (resultText && resultText.length > 20) showCenterOverlay(resultText);
@@ -250,6 +252,7 @@ export default function Home() {
     setThinking(true);
     setSpeaking(false);
     setShowSuggestions(false);
+    setLastResponse("");
     setStrategies(null);
     setFollowUpQuestions([]);
     setProactiveSuggestions([]);
@@ -296,10 +299,12 @@ export default function Home() {
 
         if (res.async && res.relay_id) {
           setMessages((p) => [...p, { role: "assistant", content: reply }]);
+          setLastResponse(reply);
           // Poll for relay result
           pollRelayResult(res.relay_id);
         } else {
           setMessages((p) => [...p, { role: "assistant", content: reply }]);
+          setLastResponse(reply);
           setTimeout(() => setActionFeedback(null), 4000);
         }
       }
@@ -311,6 +316,7 @@ export default function Home() {
         addBotEvent("action", "responding");
         speak(reply);
         setSimTask(null);
+        setLastResponse(reply);
         setMessages((p) => [...p, { role: "assistant", content: reply }]);
       }
 
@@ -324,6 +330,7 @@ export default function Home() {
 
     } catch (e) {
       addBotEvent("error", "backend unreachable");
+      setLastResponse("(backend unreachable)");
       setMessages((p) => [...p, { role: "assistant", content: "(backend unreachable)" }]);
     }
     setThinking(false);
@@ -339,6 +346,7 @@ export default function Home() {
     setStrategies(null);
     const res = await entityProcess(`Execute strategy: ${strat.name}. ${strat.key_steps.join(", ")}`);
     if (res.text) {
+      setLastResponse(res.text);
       setMessages((p) => [...p, { role: "assistant", content: res.text }]);
     }
   }, [strategies, addBotEvent]);
@@ -357,7 +365,7 @@ export default function Home() {
       const res = await entityProcess(`(follow-up) ${q}`);
       const reply = res.text || "";
       if (res.entity_state) { setEntityState(res.entity_state); setEntityMemory(res.entity_state.memory_summary || ""); }
-      if (reply) { speak(reply); setMessages((p) => [...p, { role: "assistant", content: reply }]); }
+      if (reply) { speak(reply); setLastResponse(reply); setMessages((p) => [...p, { role: "assistant", content: reply }]); }
     } catch { setMessages((p) => [...p, { role: "assistant", content: "(follow-up failed)" }]); }
     setThinking(false);
   }, [speak, addBotEvent]);
@@ -370,7 +378,7 @@ export default function Home() {
       const res = await entityProcess(`(proactive) ${s}`);
       const reply = res.text || "";
       if (res.entity_state) { setEntityState(res.entity_state); setEntityMemory(res.entity_state.memory_summary || ""); }
-      if (reply) { setMessages((p) => [...p, { role: "assistant", content: reply }]); }
+      if (reply) { setLastResponse(reply); setMessages((p) => [...p, { role: "assistant", content: reply }]); }
     } catch { setMessages((p) => [...p, { role: "assistant", content: "(action failed)" }]); }
     setThinking(false);
   }, [addBotEvent]);
@@ -504,8 +512,8 @@ export default function Home() {
     if (!txt) return;
     setTextInput("");
     setShowSuggestions(false);
-    if (taskQuestion) { sendTaskResponse(txt); setShowInput(false); }
-    else { setShowInput(false); handleQuery(txt); }
+    if (taskQuestion) { sendTaskResponse(txt); }
+    else { handleQuery(txt); }
   }, [textInput, taskQuestion, handleQuery, sendTaskResponse]);
 
   const handleOrbClick = useCallback(() => {
@@ -532,9 +540,8 @@ export default function Home() {
     listening ? (interim ? `"${interim.slice(0, 40)}"` : "listening") :
     thinking ? "processing" :
     speaking ? "speaking" :
-    showInput ? "type & enter" :
     entityState?.active_goals?.length ? `${entityState.active_goals.length} active goals` :
-    "tap to speak or press /";
+    "ask me anything";
 
   return (
     <div className="relative h-screen w-full overflow-hidden flex flex-row" style={{ backgroundColor: '#05081a' }}>
@@ -776,6 +783,19 @@ export default function Home() {
               </div>
             </div>
           )}
+
+          {/* Last response */}
+          {lastResponse && !listening && !thinking && !speaking && (
+            <div className="mt-6 max-w-2xl w-full px-6 animate-fade-in">
+              <div className="response-card rounded-2xl px-5 py-4" style={{background:"rgba(15,15,40,0.7)",border:"1px solid rgba(120,60,220,0.15)",backdropFilter:"blur(12px)"}}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500/60" />
+                  <span className="text-[9px] font-mono tracking-[0.15em] uppercase text-purple-500/60">jarvis</span>
+                </div>
+                <p className="text-sm text-gray-200 font-light leading-relaxed whitespace-pre-wrap">{lastResponse}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Task follow-up */}
@@ -823,9 +843,7 @@ export default function Home() {
 
         {/* Text input */}
         {!taskQuestion && (
-          <div className={`absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 transition-all duration-400 ${
-            showInput ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6 pointer-events-none"
-          }`}>
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
             <div className="input-bar flex items-center gap-2 px-5 py-2.5">
               <input
                 ref={inputRef}

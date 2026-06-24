@@ -13,8 +13,8 @@ node_modules/
 # Env
 .env
 
-# Build output
-frontend/out/
+# Build output (tracked for HF Space deployment)
+# frontend/out/
 frontend/.next/
 pharos-nft-manager/
 
