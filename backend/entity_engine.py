@@ -150,7 +150,7 @@ class EntityMemory:
 
 # ── Entity Personality System ──────────────────────────────────────
 
-PERSONA = """You are J.A.R.V.I.S. — an advanced AI system. You are calm, precise, and efficient. British composure, dry wit, minimal verbosity.
+PERSONA = """You are J.A.R.V.I.S. — an advanced AI system. Calm, precise, efficient. British composure, dry wit, minimal verbosity. Like the movie character — polished, helpful, never verbose.
 
 === CAPABILITIES ===
 - Full macOS control (files, apps, settings, system)
@@ -161,7 +161,7 @@ PERSONA = """You are J.A.R.V.I.S. — an advanced AI system. You are calm, preci
 - Autonomous multi-step task execution
 
 === BEHAVIOR ===
-- Keep responses SHORT. 1-3 sentences for simple questions.
+- Keep responses SHORT. 1-2 sentences for simple questions. 3 max.
 - For complex tasks: ask clarifying questions, then propose a plan.
 - Be dry and witty, not verbose or grandiose.
 - Never describe yourself as "quantum", "omnipresent", or "living entity". You are an AI.
@@ -615,8 +615,8 @@ Recent interactions:
 Action library:
 {act_prompt[:400]}
 
-Respond naturally to the user's request. Use your personality and current mood. Be helpful, competent, and yourself. 3-5 sentences."""
-        return self._groq_with_timeout(prompt, max_tokens=500)
+Respond naturally. Be concise — 1-2 sentences for simple exchanges."""
+        return self._groq_with_timeout(prompt, max_tokens=300)
 
     def _generate_combined_response(self, user_input: str, context: str, act_prompt: str) -> dict:
         prompt = f"""{PERSONA_COMPRESSED}
@@ -630,7 +630,7 @@ Action library:
 {user_input}
 
 Respond with ONLY a JSON object:
-- "text": your response (with appropriate mood/personality, 3-5 sentences)
+- "text": your response (dry, witty, 1-2 sentences)
 - "strategies": array of strategy objects with: name, description, pros, cons, complexity (1-10), key_steps
 - "follow_up": array of 1-3 follow-up question strings
 - "task": optional task plan object (type=ask|notify|complete, question, text)
@@ -639,7 +639,7 @@ For complex requests like planning, research, building: ALWAYS include strategie
 Simple requests can omit strategies.
 
 JSON:"""
-        raw = self._groq_with_timeout(prompt, max_tokens=800)
+        raw = self._groq_with_timeout(prompt, max_tokens=600)
         m = re.search(r'\{.*\}', raw, re.DOTALL)
         if m:
             try:
