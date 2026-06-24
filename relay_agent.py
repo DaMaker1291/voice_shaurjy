@@ -199,8 +199,16 @@ def _sh_control(params: str) -> str:
 
 def _net_scan_deep() -> str:
     """Deep network scan with robust subnet detection."""
-    ip = run("ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || ifconfig en0 2>/dev/null | grep 'inet ' | awk '{print $2}' || ifconfig en1 2>/dev/null | grep 'inet ' | awk '{print $2}'")
-    if not ip or "error" in ip.lower():
+    try:
+        import socket as _s
+        s = _s.socket(_s.AF_INET, _s.SOCK_DGRAM)
+        s.settimeout(2)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except:
+        ip = ""
+    if not ip:
         return "Could not determine local IP. Ensure Wi-Fi/Ethernet is connected."
     base = ".".join(ip.split(".")[:3]) + ".0/24"
     r = run(f"nmap -sn -T4 --max-retries 1 --host-timeout 5 {base} 2>/dev/null | grep -E 'Nmap|Host|MAC' | head -60", timeout=30)
