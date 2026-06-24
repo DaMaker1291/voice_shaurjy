@@ -528,13 +528,12 @@ export default function Home() {
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === "/" && !showInput && !listening) { e.preventDefault(); setShowInput(true); setTimeout(() => inputRef.current?.focus(), 100); }
-      if (e.key === "Escape") { setShowInput(false); if (listening) { stopListening(); } }
-      if (e.key === "Enter" && taskQuestion && !showInput) { sendTaskResponse(textInput); }
+      if (e.key === "Escape" && listening) { stopListening(); }
+      if (e.key === "Enter" && taskQuestion) { sendTaskResponse(textInput); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [showInput, listening, stopListening, taskQuestion, textInput, sendTaskResponse]);
+  }, [listening, stopListening, taskQuestion, textInput, sendTaskResponse]);
 
   const statusText = taskQuestion ? `answering step ${taskStep}/${taskTotal}` :
     listening ? (interim ? `"${interim.slice(0, 40)}"` : "listening") :
@@ -698,8 +697,7 @@ export default function Home() {
           {/* Subtle prompt below agents when idle */}
           {!listening && !thinking && !speaking && !taskQuestion && messages.length <= 1 && (
             <div className="mt-4 text-center animate-fade-in">
-              <p className="text-[10px] font-mono text-blue-400/50 tracking-[0.2em]">tap the orb to speak</p>
-              <p className="text-[8px] font-mono text-blue-600/40 mt-1.5 tracking-wider">press <span className="px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-500/50 text-[7px]">/</span> to type</p>
+              <p className="text-[10px] font-mono text-blue-400/50 tracking-[0.2em]">tap the orb or type below</p>
             </div>
           )}
 
