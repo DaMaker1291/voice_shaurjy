@@ -34,3 +34,6 @@ starlette>=0.36.0
 
 # TTS (optional on cloud)
 edge-tts>=7.0.0
+
+# Web automation (Playwright)
+playwright>=1.40.0
