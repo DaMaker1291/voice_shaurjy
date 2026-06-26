@@ -1,6 +1,6 @@
-"""Web Automation Engine — Playwright-based browser for web apps (WhatsApp, Teams, etc.).
-Manages persistent browser contexts so login sessions survive restarts.
-Provides: open page, screenshot, OCR, find/click text, type, read messages.
+"""Web Automation Engine — Playwright-based browser for cloud (HF Space).
+Runs headless, persists sessions in /data/.browser_profiles.
+Handles WhatsApp Web, Teams, Gmail, any website — no relay agent needed.
 """
 
 import os
@@ -11,24 +11,31 @@ import base64
 import subprocess
 from pathlib import Path
 
-BROWSER_DATA_DIR = os.path.join(os.path.dirname(__file__), ".browser_profiles")
-PAGE_TIMEOUT = 15000
+# Use /data on HF Space for persistence, fall back to local
+if os.path.isdir("/data"):
+    BROWSER_DATA_DIR = "/data/.browser_profiles"
+else:
+    BROWSER_DATA_DIR = os.path.join(os.path.dirname(__file__), ".browser_profiles")
+os.makedirs(BROWSER_DATA_DIR, exist_ok=True)
+
+PAGE_TIMEOUT = 20000
 
 _browser = None
 _context = None
 _page = None
 _current_app = None
+_playwright = None
 
 
 def _ensure_browser():
-    global _browser, _context, _page
+    global _browser, _context, _page, _playwright
     if _browser is None:
         from playwright.sync_api import sync_playwright
-        p = sync_playwright().start()
+        _playwright = sync_playwright().start()
         try:
-            _browser = p.chromium.launch_persistent_context(
+            _browser = _playwright.chromium.launch_persistent_context(
                 user_data_dir=BROWSER_DATA_DIR,
-                headless=False,
+                headless=True,
                 viewport={"width": 1280, "height": 900},
                 no_viewport=False,
                 args=["--disable-blink-features=AutomationControlled"],
@@ -37,13 +44,11 @@ def _ensure_browser():
             _page = _context.pages[0] if _context.pages else _context.new_page()
         except Exception as e:
             if "profile is already in use" in str(e).lower() or "existing browser session" in str(e).lower():
-                import subprocess as _sp
-                _sp.run(["pkill", "-f", "Google Chrome for Testing"], capture_output=True, timeout=5)
-                _sp.run(["pkill", "-f", "chrome.*playwright"], capture_output=True, timeout=5)
+                subprocess.run(["pkill", "-f", "chrome"], capture_output=True, timeout=5)
                 time.sleep(2)
-                _browser = p.chromium.launch_persistent_context(
+                _browser = _playwright.chromium.launch_persistent_context(
                     user_data_dir=BROWSER_DATA_DIR,
-                    headless=False,
+                    headless=True,
                     viewport={"width": 1280, "height": 900},
                     no_viewport=False,
                     args=["--disable-blink-features=AutomationControlled"],
@@ -72,16 +77,22 @@ def _ensure_page():
 
 
 def close():
-    global _browser, _context, _page, _current_app
+    global _browser, _context, _page, _current_app, _playwright
     try:
         if _browser:
             _browser.close()
+    except:
+        pass
+    try:
+        if _playwright:
+            _playwright.stop()
     except:
         pass
     _browser = None
     _context = None
     _page = None
     _current_app = None
+    _playwright = None
 
 
 def navigate(url: str, wait_until: str = "networkidle") -> str:
@@ -91,7 +102,13 @@ def navigate(url: str, wait_until: str = "networkidle") -> str:
         time.sleep(1.5)
         return f"Navigated to {url}"
     except Exception as e:
-        return f"Navigation error: {e}"
+        # Retry once
+        try:
+            p.goto(url, timeout=PAGE_TIMEOUT, wait_until=wait_until)
+            time.sleep(1)
+            return f"Navigated to {url}"
+        except Exception as e2:
+            return f"Navigation error: {e2}"
 
 
 def screenshot(path: str = None) -> str:
@@ -117,26 +134,15 @@ def screenshot_b64() -> str:
 def get_text() -> str:
     p = _ensure_page()
     try:
-        text = p.inner_text("body", timeout=3000)
-        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        text = p.evaluate("document.body.innerText")
+        lines = [l.strip() for l in (text or "").split("\n") if l.strip()]
         return "\n".join(lines[:200])
     except Exception as e:
         return f"Get text error: {e}"
 
 
 def get_visible_text() -> str:
-    p = _ensure_page()
-    try:
-        text = p.evaluate("""() => {
-            const el = document.body;
-            const style = getComputedStyle(el);
-            if (style.display === 'none' || style.visibility === 'hidden') return '';
-            return el.innerText;
-        }""")
-        lines = [l.strip() for l in (text or "").split("\n") if l.strip()]
-        return "\n".join(lines[:200])
-    except Exception as e:
-        return f"Visible text error: {e}"
+    return get_text()
 
 
 def find_text(text: str) -> dict:
@@ -153,22 +159,6 @@ def find_text(text: str) -> dict:
         return {}
 
 
-def find_text_all(text: str) -> list[dict]:
-    p = _ensure_page()
-    results = []
-    try:
-        locator = p.locator(f"text={text}")
-        for el in locator.all():
-            if el.is_visible(timeout=1000):
-                box = el.bounding_box()
-                if box:
-                    results.append({"text": el.inner_text()[:100], "x": box["x"], "y": box["y"],
-                                    "width": box["width"], "height": box["height"]})
-    except:
-        pass
-    return results
-
-
 def click_text(text: str) -> str:
     p = _ensure_page()
     try:
@@ -178,19 +168,6 @@ def click_text(text: str) -> str:
             time.sleep(0.5)
             return f"Clicked '{text}'"
         return f"'{text}' not visible"
-    except Exception as e:
-        return f"Click error: {e}"
-
-
-def click(selector: str) -> str:
-    p = _ensure_page()
-    try:
-        el = p.locator(selector).first
-        if el.is_visible(timeout=3000):
-            el.click(timeout=2000)
-            time.sleep(0.5)
-            return f"Clicked {selector}"
-        return f"{selector} not visible"
     except Exception as e:
         return f"Click error: {e}"
 
@@ -220,10 +197,6 @@ def press_key(key: str) -> str:
         return f"Key error: {e}"
 
 
-def wait(ms: int = 1000):
-    time.sleep(ms / 1000)
-
-
 def get_html() -> str:
     p = _ensure_page()
     try:
@@ -241,33 +214,66 @@ def execute_js(js: str) -> str:
         return f"JS error: {e}"
 
 
+def app_current() -> str:
+    p = _ensure_page()
+    try:
+        return f"Current page: {p.title()} ({p.url})"
+    except:
+        return "No page open"
+
+
+def app_read() -> str:
+    text = get_text()
+    if not text or text.startswith("Get text error"):
+        return "Could not read content"
+    lines = text.split("\n")[:30]
+    return "\n".join(lines)
+
+
+# ── QR Code Detection ──
+
+def check_qr_on_screen() -> str | None:
+    """Check if the current page has a WhatsApp QR code and return it as base64."""
+    p = _ensure_page()
+    try:
+        # Check if QR code element exists
+        qr = p.locator('[data-testid="qrcode"] canvas, [data-ref] canvas, [aria-label*="QR"]')
+        if qr.is_visible(timeout=2000):
+            b64 = p.screenshot(full_page=False, type="png")
+            return base64.b64encode(b64).decode()
+        # Check for the QR hint text
+        body = p.inner_text("body") if p else ""
+        if "scan" in body.lower() and "qr" in body.lower():
+            b64 = p.screenshot(full_page=False, type="png")
+            return base64.b64encode(b64).decode()
+        return None
+    except:
+        return None
+
+
 # ── High-level App Actions ──
 
 def app_whatsapp_open() -> str:
     global _current_app
-    # Try native WhatsApp.app first (already signed in)
-    native_path = "/Applications/WhatsApp.app"
-    if os.path.isdir(native_path):
-        r = subprocess.run(["open", "-a", native_path], capture_output=True, text=True, timeout=5)
-        if r.returncode == 0:
-            _current_app = "whatsapp"
-            return "Opened WhatsApp (native app)"
-    # Fall back to WhatsApp Web
     p = _ensure_page()
     navigate("https://web.whatsapp.com")
     _current_app = "whatsapp"
     time.sleep(3)
-    title = p.title() if p else ""
-    if "WhatsApp" in title:
-        return "WhatsApp Web opened in browser (QR scan needed)"
-    return "Navigated to web.whatsapp.com — scan QR code if not logged in"
+
+    # Check if we need to scan QR
+    qr_b64 = check_qr_on_screen()
+    if qr_b64:
+        return f"__QR__:{qr_b64}"
+    return "WhatsApp Web ready"
 
 
 def app_whatsapp_read(limit: int = 10, unread_only: bool = False) -> str:
     p = _ensure_page()
     try:
         if "web.whatsapp.com" not in p.url:
-            app_whatsapp_open()
+            r = app_whatsapp_open()
+            if r.startswith("__QR__"):
+                return r
             time.sleep(2)
 
         chats_data = p.evaluate(f"""() => {{
@@ -291,6 +297,13 @@ def app_whatsapp_read(limit: int = 10, unread_only: bool = False) -> str:
         if not chats:
             return "No conversations found"
 
+        if unread_only:
+            unread_chats = [c for c in chats if c.get("unread")]
+            lines = [f"{i}. {c['name']} — \"{c.get('msg','')[:120]}\"" for i, c in enumerate(unread_chats[:limit], 1)]
+            if lines:
+                return "Unread messages:\n" + "\n".join(lines)
+            return "No unread messages"
+
         lines = []
         for i, c in enumerate(chats[:limit], 1):
             unread_tag = " [NEW]" if c.get("unread") else ""
@@ -300,14 +313,6 @@ def app_whatsapp_read(limit: int = 10, unread_only: bool = False) -> str:
                 lines.append(f"   \"{c['msg'][:120]}\"")
             if ts:
                 lines.append(f"   {ts}")
-
-        if unread_only:
-            unread_chats = [c for c in chats if c.get("unread")]
-            unread_lines = [f"{i}. {c['name']} — \"{c.get('msg','')[:120]}\"" for i, c in enumerate(unread_chats[:limit], 1)]
-            if unread_lines:
-                return f"Unread messages:\n" + "\n".join(unread_lines)
-            return "No unread messages"
-
         return "Conversations:\n" + "\n".join(lines)
 
     except Exception as e:
@@ -318,7 +323,9 @@ def app_whatsapp_send(contact: str, message: str) -> str:
     p = _ensure_page()
     try:
         if "web.whatsapp.com" not in p.url:
-            app_whatsapp_open()
+            r = app_whatsapp_open()
+            if r.startswith("__QR__"):
+                return r
             time.sleep(2)
 
         search_box = p.locator('[data-testid="chat-list-search"]')
@@ -359,14 +366,6 @@ def app_whatsapp_send(contact: str, message: str) -> str:
 
 def app_teams_open() -> str:
     global _current_app
-    # Try native Microsoft Teams.app first (already signed in)
-    native_path = "/Applications/Microsoft Teams.app"
-    if os.path.isdir(native_path):
-        r = subprocess.run(["open", "-a", native_path], capture_output=True, text=True, timeout=5)
-        if r.returncode == 0:
-            _current_app = "teams"
-            return "Opened Microsoft Teams (native app)"
-    # Fall back to Teams Web
     navigate("https://teams.microsoft.com")
     _current_app = "teams"
     time.sleep(3)
@@ -379,17 +378,13 @@ def app_teams_assignments() -> str:
         if "teams" not in p.url.lower():
             app_teams_open()
             time.sleep(3)
-
-        text = get_visible_text()
+        text = get_text()
         lines = [l for l in text.split("\n") if l.strip()][:50]
-
         assignment_lines = [l for l in lines if any(
             kw in l.lower() for kw in ["assignment", "due", "submit", "grade", "task", "homework", "deadline"])]
-
         if assignment_lines:
             return "Assignments found:\n" + "\n".join(assignment_lines[:15])
         return "Teams opened. Current view:\n" + "\n".join(lines[:20])
-
     except Exception as e:
         return f"Teams error: {e}"
 
@@ -398,102 +393,45 @@ def app_open(name: str) -> str:
     global _current_app
     name = name.lower().strip()
 
-    NATIVE_APPS = {
-        "whatsapp": ("WhatsApp.app", "WhatsApp"),
-        "teams": ("Microsoft Teams.app", "Microsoft Teams"),
-        "outlook": ("Microsoft Outlook.app", "Microsoft Outlook"),
-        "mail": ("Mail.app", "Mail"),
-        "calendar": ("Calendar.app", "Calendar"),
-        "maps": ("Maps.app", "Maps"),
-        "messages": ("Messages.app", "Messages"),
-        "facetime": ("FaceTime.app", "FaceTime"),
-        "music": ("Music.app", "Music"),
-        "photos": ("Photos.app", "Photos"),
-        "notes": ("Notes.app", "Notes"),
-        "safari": ("Safari.app", "Safari"),
-        "chrome": ("Google Chrome.app", "Google Chrome"),
-        "firefox": ("Firefox.app", "Firefox"),
-        "spotify": ("Spotify.app", "Spotify"),
-        "terminal": ("Terminal.app", "Terminal"),
-        "vscode": ("Visual Studio Code.app", "Visual Studio Code"),
-        "code": ("Visual Studio Code.app", "Visual Studio Code"),
-        "finder": ("Finder.app", "Finder"),
-    }
-
+    # Web apps only (no native apps on HF Space)
     WEB_APPS = {
+        "whatsapp": ("https://web.whatsapp.com", "WhatsApp Web"),
+        "teams": ("https://teams.microsoft.com", "Microsoft Teams"),
         "gmail": ("https://mail.google.com", "Gmail"),
+        "outlook": ("https://outlook.live.com", "Outlook"),
+        "calendar": ("https://calendar.google.com", "Google Calendar"),
+        "maps": ("https://maps.google.com", "Google Maps"),
         "youtube": ("https://youtube.com", "YouTube"),
         "chatgpt": ("https://chat.openai.com", "ChatGPT"),
         "claude": ("https://claude.ai", "Claude"),
         "github": ("https://github.com", "GitHub"),
         "notion": ("https://notion.so", "Notion"),
-        "google maps": ("https://maps.google.com", "Google Maps"),
         "drive": ("https://drive.google.com", "Google Drive"),
         "docs": ("https://docs.google.com", "Google Docs"),
     }
-
-    # 1. Try native app first
-    app_file, app_label = NATIVE_APPS.get(name, (None, None))
-    if app_file:
-        paths_to_try = [
-            f"/Applications/{app_file}",
-            f"/Applications/Utilities/{app_file}",
-            os.path.expanduser(f"~/Applications/{app_file}"),
-        ]
-        for app_path in paths_to_try:
-            if os.path.isdir(app_path):
-                r = subprocess.run(["open", "-a", app_path], capture_output=True, text=True, timeout=5)
-                if r.returncode == 0:
-                    _current_app = name
-                    return f"Opened {app_label}"
-                break
-        # Fall through to web version if native not found
-
-    # 2. Try web app
     url, label = WEB_APPS.get(name, (None, None))
     if url:
         navigate(url)
         _current_app = name
-        return f"{label} opened"
-
-    # 3. Try as URL
+        result = label + " opened"
+        # Check for WhatsApp QR
+        if name == "whatsapp":
+            qr_b64 = check_qr_on_screen()
+            if qr_b64:
+                result = f"__QR__:{qr_b64}"
+        return result
     if "." in name:
         navigate(f"https://{name}")
         _current_app = name
         return f"Navigated to {name}"
-
-    known = list(NATIVE_APPS.keys()) + list(WEB_APPS.keys())
-    return f"Unknown app: {name}. Try: {', '.join(known[:15])}"
-
-
-def app_current() -> str:
-    p = _ensure_page()
-    try:
-        return f"Current page: {p.title()} ({p.url})"
-    except:
-        return "No page open"
-
-
-def app_read() -> str:
-    text = get_visible_text()
-    if not text or text.startswith("Get text error"):
-        return "Could not read content"
-    lines = text.split("\n")[:30]
-    return "\n".join(lines)
+    return f"Unknown app: {', '.join(list(WEB_APPS.keys())[:15])}"
 
 
 def message_filter(messages_text: str, context_cutoff_hours: int = 24) -> str:
     lines = messages_text.split("\n")
-    filtered = []
-    for line in lines:
-        if any(kw in line.lower() for kw in ["[new]", "[NEW]", "unread"]):
-            filtered.append(line)
-    if filtered:
-        return "\n".join(filtered)
-    return messages_text
+    filtered = [l for l in lines if any(kw in l.lower() for kw in ["[new]", "[NEW]", "unread"])]
+    return "\n".join(filtered) if filtered else messages_text
 
-
-# ── Cleanup ──
 
 def __getattr__(name):
     if name == "web_app_open":

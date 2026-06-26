@@ -6,6 +6,7 @@ import ChatBubble from "./ChatBubble";
 interface Message {
   role: string;
   content: string;
+  image?: string;
 }
 
 interface Props {
@@ -33,7 +34,14 @@ export default function ChatTranscript({ messages }: Props) {
   return (
     <div className="flex-1 overflow-y-auto space-y-3 py-4 scrollbar-thin">
       {messages.map((m, i) => (
-        <ChatBubble key={i} role={m.role} content={m.content} />
+        <div key={i}>
+          <ChatBubble role={m.role} content={m.content} />
+          {m.image && (
+            <div className="flex justify-start mt-1 mb-2">
+              <img src={m.image} alt="QR code" className="w-48 h-48 rounded-xl border border-gray-800/50" />
+            </div>
+          )}
+        </div>
       ))}
       <div ref={bottomRef} />
     </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-interface Message { role: string; content: string }
+interface Message { role: string; content: string; image?: string }
 
 interface Props {
   messages: Message[];
@@ -109,6 +109,9 @@ export default function Sidebar({ messages, open, onClose }: Props) {
                         ? "text-sm text-gray-200 font-normal"
                         : "text-sm text-gray-300 font-light"
                   }`}>{m.content}</p>
+                  {m.image && (
+                    <img src={m.image} alt="QR code" className="w-36 h-36 rounded-lg border border-gray-800/50 mt-2" />
+                  )}
                 </div>
               );
             })

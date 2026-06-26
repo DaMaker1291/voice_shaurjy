@@ -5,7 +5,7 @@ import BotSwarm from "@/components/BotSwarm";
 import Sidebar from "@/components/Sidebar";
 import { entityProcess } from "@/lib/api";
 
-interface Message { role: string; content: string }
+interface Message { role: string; content: string; image?: string }
 
 interface Strategy {
   name: string; description: string; pros: string[]; cons: string[];
@@ -286,6 +286,31 @@ export default function Home() {
         setActionFeedback(reply);
         setActionType(res.action_type || "action");
         setSimTask(null);
+
+        // Handle QR code image (WhatsApp Web pairing)
+        if (res.qr_image) {
+          setMessages((p) => [...p, {
+            role: "assistant",
+            content: reply,
+            image: `data:image/png;base64,${res.qr_image}`
+          }]);
+          setLastResponse(reply);
+          speak("Scan this QR code with your phone to link WhatsApp Web");
+          setTimeout(() => setActionFeedback(null), 4000);
+          return;
+        }
+
+        // Handle screenshot image
+        if (res.image) {
+          setMessages((p) => [...p, {
+            role: "assistant",
+            content: reply,
+            image: `data:image/png;base64,${res.image}`
+          }]);
+          setLastResponse(reply);
+          setTimeout(() => setActionFeedback(null), 4000);
+          return;
+        }
 
         // Extract main data part for center overlay (skip first line / label)
         const lines = reply.split("\n");

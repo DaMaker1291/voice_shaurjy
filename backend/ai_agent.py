@@ -22,6 +22,10 @@ def generate_response(user_id: str, user_text: str, tier: str = "free") -> dict:
                 parts = result.split(":", 2)
                 relay_id = parts[1] if len(parts) > 1 else ""
                 return {"text": response_text, "action": action, "async": True, "relay_id": relay_id}
+            if result.startswith("__QR__:"):
+                return {"text": "Scan this QR code with your phone to link WhatsApp Web:", "action": action, "qr_image": result[7:]}
+            if result.startswith("__SCREENSHOT__:"):
+                return {"text": "Screenshot captured:", "action": action, "image": result[15:]}
             return {"text": response_text, "action": action}
         return None
 
