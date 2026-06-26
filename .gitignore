@@ -54,3 +54,7 @@ backend/models/
 
 # HF Space clone
 hf-temp/
+backend/.browser_profiles/
+.scheduled_messages.json
+backend/.browser_profiles/
+.scheduled_messages.json

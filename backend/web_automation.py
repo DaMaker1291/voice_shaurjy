@@ -8,6 +8,7 @@ import re
 import json
 import time
 import base64
+import subprocess
 from pathlib import Path
 
 BROWSER_DATA_DIR = os.path.join(os.path.dirname(__file__), ".browser_profiles")
@@ -24,15 +25,33 @@ def _ensure_browser():
     if _browser is None:
         from playwright.sync_api import sync_playwright
         p = sync_playwright().start()
-        _browser = p.chromium.launch_persistent_context(
-            user_data_dir=BROWSER_DATA_DIR,
-            headless=False,
-            viewport={"width": 1280, "height": 900},
-            no_viewport=False,
-            args=["--disable-blink-features=AutomationControlled"],
-        )
-        _context = _browser
-        _page = _context.pages[0] if _context.pages else _context.new_page()
+        try:
+            _browser = p.chromium.launch_persistent_context(
+                user_data_dir=BROWSER_DATA_DIR,
+                headless=False,
+                viewport={"width": 1280, "height": 900},
+                no_viewport=False,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            _context = _browser
+            _page = _context.pages[0] if _context.pages else _context.new_page()
+        except Exception as e:
+            if "profile is already in use" in str(e).lower() or "existing browser session" in str(e).lower():
+                import subprocess as _sp
+                _sp.run(["pkill", "-f", "Google Chrome for Testing"], capture_output=True, timeout=5)
+                _sp.run(["pkill", "-f", "chrome.*playwright"], capture_output=True, timeout=5)
+                time.sleep(2)
+                _browser = p.chromium.launch_persistent_context(
+                    user_data_dir=BROWSER_DATA_DIR,
+                    headless=False,
+                    viewport={"width": 1280, "height": 900},
+                    no_viewport=False,
+                    args=["--disable-blink-features=AutomationControlled"],
+                )
+                _context = _browser
+                _page = _context.pages[0] if _context.pages else _context.new_page()
+            else:
+                raise
     return _page
 
 
@@ -40,10 +59,15 @@ def _ensure_page():
     global _page, _context
     if _page is None:
         _ensure_browser()
-    try:
-        _page.title(timeout=1000)
-    except:
+    if _page is None:
         _page = _context.new_page() if _context else _ensure_browser()
+    try:
+        _page.url
+    except Exception:
+        try:
+            _page = _context.new_page() if _context else _ensure_browser()
+        except Exception:
+            pass
     return _page
 
 
@@ -60,7 +84,7 @@ def close():
     _current_app = None
 
 
-def navigate(url: str, wait_until: str = "domcontentloaded") -> str:
+def navigate(url: str, wait_until: str = "networkidle") -> str:
     p = _ensure_page()
     try:
         p.goto(url, timeout=PAGE_TIMEOUT, wait_until=wait_until)
@@ -221,13 +245,21 @@ def execute_js(js: str) -> str:
 
 def app_whatsapp_open() -> str:
     global _current_app
+    # Try native WhatsApp.app first (already signed in)
+    native_path = "/Applications/WhatsApp.app"
+    if os.path.isdir(native_path):
+        r = subprocess.run(["open", "-a", native_path], capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            _current_app = "whatsapp"
+            return "Opened WhatsApp (native app)"
+    # Fall back to WhatsApp Web
     p = _ensure_page()
     navigate("https://web.whatsapp.com")
     _current_app = "whatsapp"
     time.sleep(3)
-    title = p.title()
+    title = p.title() if p else ""
     if "WhatsApp" in title:
-        return "WhatsApp Web opened"
+        return "WhatsApp Web opened in browser (QR scan needed)"
     return "Navigated to web.whatsapp.com — scan QR code if not logged in"
 
 
@@ -327,10 +359,18 @@ def app_whatsapp_send(contact: str, message: str) -> str:
 
 def app_teams_open() -> str:
     global _current_app
+    # Try native Microsoft Teams.app first (already signed in)
+    native_path = "/Applications/Microsoft Teams.app"
+    if os.path.isdir(native_path):
+        r = subprocess.run(["open", "-a", native_path], capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            _current_app = "teams"
+            return "Opened Microsoft Teams (native app)"
+    # Fall back to Teams Web
     navigate("https://teams.microsoft.com")
     _current_app = "teams"
     time.sleep(3)
-    return "Microsoft Teams opened"
+    return "Microsoft Teams opened in browser"
 
 
 def app_teams_assignments() -> str:
@@ -357,29 +397,73 @@ def app_teams_assignments() -> str:
 def app_open(name: str) -> str:
     global _current_app
     name = name.lower().strip()
-    apps = {
-        "whatsapp": ("https://web.whatsapp.com", "WhatsApp Web"),
-        "teams": ("https://teams.microsoft.com", "Microsoft Teams"),
+
+    NATIVE_APPS = {
+        "whatsapp": ("WhatsApp.app", "WhatsApp"),
+        "teams": ("Microsoft Teams.app", "Microsoft Teams"),
+        "outlook": ("Microsoft Outlook.app", "Microsoft Outlook"),
+        "mail": ("Mail.app", "Mail"),
+        "calendar": ("Calendar.app", "Calendar"),
+        "maps": ("Maps.app", "Maps"),
+        "messages": ("Messages.app", "Messages"),
+        "facetime": ("FaceTime.app", "FaceTime"),
+        "music": ("Music.app", "Music"),
+        "photos": ("Photos.app", "Photos"),
+        "notes": ("Notes.app", "Notes"),
+        "safari": ("Safari.app", "Safari"),
+        "chrome": ("Google Chrome.app", "Google Chrome"),
+        "firefox": ("Firefox.app", "Firefox"),
+        "spotify": ("Spotify.app", "Spotify"),
+        "terminal": ("Terminal.app", "Terminal"),
+        "vscode": ("Visual Studio Code.app", "Visual Studio Code"),
+        "code": ("Visual Studio Code.app", "Visual Studio Code"),
+        "finder": ("Finder.app", "Finder"),
+    }
+
+    WEB_APPS = {
         "gmail": ("https://mail.google.com", "Gmail"),
-        "outlook": ("https://outlook.live.com", "Outlook"),
-        "calendar": ("https://calendar.google.com", "Google Calendar"),
-        "maps": ("https://maps.google.com", "Google Maps"),
         "youtube": ("https://youtube.com", "YouTube"),
         "chatgpt": ("https://chat.openai.com", "ChatGPT"),
         "claude": ("https://claude.ai", "Claude"),
         "github": ("https://github.com", "GitHub"),
         "notion": ("https://notion.so", "Notion"),
+        "google maps": ("https://maps.google.com", "Google Maps"),
+        "drive": ("https://drive.google.com", "Google Drive"),
+        "docs": ("https://docs.google.com", "Google Docs"),
     }
-    url, label = apps.get(name, (None, None))
+
+    # 1. Try native app first
+    app_file, app_label = NATIVE_APPS.get(name, (None, None))
+    if app_file:
+        paths_to_try = [
+            f"/Applications/{app_file}",
+            f"/Applications/Utilities/{app_file}",
+            os.path.expanduser(f"~/Applications/{app_file}"),
+        ]
+        for app_path in paths_to_try:
+            if os.path.isdir(app_path):
+                r = subprocess.run(["open", "-a", app_path], capture_output=True, text=True, timeout=5)
+                if r.returncode == 0:
+                    _current_app = name
+                    return f"Opened {app_label}"
+                break
+        # Fall through to web version if native not found
+
+    # 2. Try web app
+    url, label = WEB_APPS.get(name, (None, None))
     if url:
         navigate(url)
         _current_app = name
         return f"{label} opened"
+
+    # 3. Try as URL
     if "." in name:
         navigate(f"https://{name}")
         _current_app = name
         return f"Navigated to {name}"
-    return f"Unknown app: {name}. Try: {', '.join(apps.keys())}"
+
+    known = list(NATIVE_APPS.keys()) + list(WEB_APPS.keys())
+    return f"Unknown app: {name}. Try: {', '.join(known[:15])}"
 
 
 def app_current() -> str:
