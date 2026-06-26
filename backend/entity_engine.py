@@ -425,10 +425,12 @@ class Entity:
                 return {"text": f"{label}\n⏳ Executing on your computer...", "action": action, "relay_id": relay_id, "async": True}
             if result.startswith("__QR__:"):
                 qr_b64 = result[7:]
-                return {"text": "Scan this QR code with your phone to link WhatsApp Web:", "action": action, "qr_image": qr_b64}
+                return {"text": "Scan this QR code with your phone to link WhatsApp Web:", "action": action, "qr_image": qr_b64, "wa_link": "https://wa.me/"}
             if result.startswith("__SCREENSHOT__:"):
                 img_b64 = result[15:]
                 return {"text": "Screenshot captured:", "action": action, "image": img_b64}
+            if action in ("whatsapp_open", "whatsapp_read", "whatsapp_unread", "whatsapp_send", "whatsapp_schedule"):
+                return {"text": f"{label}\n{result}", "action": action, "wa_link": "https://wa.me/"}
             return {"text": f"{label}\n{result}", "action": action}
 
         # Fallback: no specific action matched, but if query starts with an action verb,
@@ -564,6 +566,8 @@ Recent interactions:
                     result["qr_image"] = action_result["qr_image"]
                 if action_result.get("image"):
                     result["image"] = action_result["image"]
+                if action_result.get("wa_link"):
+                    result["wa_link"] = action_result["wa_link"]
                 self.memory.log_interaction(user_input, result["text"], action_result["action"])
                 return result
 
