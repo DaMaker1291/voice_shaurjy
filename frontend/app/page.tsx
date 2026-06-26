@@ -581,7 +581,7 @@ export default function Home() {
           )}
 
           {/* Centered BotSwarm agents — dim when overlay active */}
-          <div className={`w-[420px] h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl shadow-blue-900/30 cursor-pointer transition-all duration-500 ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
+          <div className={`w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[420px] md:h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl shadow-blue-900/30 cursor-pointer transition-all duration-500 ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
             <BotSwarm
               listening={listening}
               thinking={thinking}

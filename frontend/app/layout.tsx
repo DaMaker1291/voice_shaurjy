@@ -8,6 +8,13 @@ export const metadata: Metadata = {
   description: "Your sassy, voice-first second brain. Talk to your notes.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 const navLinks = [
   { href: "/", label: "Chat" },
   { href: "/dashboard", label: "Brain" },

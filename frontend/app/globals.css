@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
 body {
   background: #05081a;
@@ -310,6 +310,15 @@ body {
 @keyframes fade-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 .animate-fade-in { animation: fade-in 0.35s cubic-bezier(0.16,1,0.3,1) both; }
 
+/* ── Mobile responsive ─────────────────────────────────── */
+@media (max-width: 640px) {
+  .suggestion-btn { font-size: 10px; padding: 5px 12px; }
+  .center-overlay { padding: 14px 16px; margin: 0 12px; }
+  .center-overlay pre { font-size: 11px; }
+  .response-card { padding: 12px 14px !important; }
+  .response-card p { font-size: 13px !important; }
+}
+
 /* ═══════════════════════════════════════════════════════════
    BOT SWARM UI STYLES
    ═══════════════════════════════════════════════════════════ */
@@ -513,6 +522,11 @@ body {
   max-width: calc(100vw - 48px);
   transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
   box-shadow: 0 0 30px rgba(120,60,220,0.05);
+}
+
+@media (max-width: 640px) {
+  .input-bar { width: calc(100vw - 32px); max-width: none; }
+  .input-bar input { font-size: 16px; }
 }
 .input-bar:focus-within {
   border-color: rgba(168,85,247,0.25);

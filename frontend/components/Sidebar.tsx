@@ -37,7 +37,7 @@ export default function Sidebar({ messages, open, onClose }: Props) {
       {open && <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={onClose} />}
 
       <aside
-        className={`fixed top-0 right-0 h-full w-[26rem] max-w-[92vw] z-50 transition-all duration-400 ease-out ${
+        className={`fixed top-0 right-0 h-full w-full sm:w-[26rem] max-w-[92vw] z-50 transition-all duration-400 ease-out ${
           open ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"
         }`}
         style={{
