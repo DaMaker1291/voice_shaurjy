@@ -73,6 +73,7 @@ export default function Home() {
   const [entityThought, setEntityThought] = useState("");
   const [centerOverlay, setCenterOverlay] = useState<string | null>(null);
   const [lastResponse, setLastResponse] = useState<string>("");
+  const [showPageNav, setShowPageNav] = useState(false);
   const overlayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const capturedTextRef = useRef("");
 
@@ -546,12 +547,36 @@ export default function Home() {
           <span className="text-[9px] font-mono text-gray-500/70 tracking-wider">{scanning ? "scanning..." : thinking ? "processing" : speaking ? "speaking" : entityMoodEmoji ? `${entityMoodEmoji} ${entityMood}` : "idle"}</span>
         </div>
 
-        {/* Sidebar toggle — top right */}
-        <button onClick={() => setSidebarOpen((o) => !o)} className="absolute top-3 right-4 z-30 text-gray-600 hover:text-gray-300 transition-colors p-1 rounded">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
-          </svg>
-        </button>
+        {/* Page nav (replaces old layout nav) */}
+        <div className="absolute top-3 right-4 z-30 flex items-center gap-1">
+          <button onClick={() => setShowPageNav(o => !o)} className="text-gray-500 hover:text-purple-400 transition-colors p-1 rounded text-[11px] font-mono tracking-wider">
+            ☰
+          </button>
+          <button onClick={() => setSidebarOpen((o) => !o)} className="text-gray-500 hover:text-purple-400 transition-colors p-1 rounded">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+          </button>
+          {showPageNav && (
+            <div className="absolute top-8 right-0 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-2 shadow-2xl min-w-[140px] z-50 animate-fade-in" onClick={() => setShowPageNav(false)}>
+              {[
+                { href: "/app", label: "Chat" },
+                { href: "/app/dashboard", label: "Brain" },
+                { href: "/app/secretary", label: "Secretary" },
+                { href: "/app/life", label: "Life OS" },
+                { href: "/app/trading", label: "Trading" },
+                { href: "/app/marketplace", label: "Plugins" },
+                { href: "/app/smarthome", label: "Smart Home" },
+                { href: "/app/settings", label: "Settings" },
+              ].map(l => (
+                <a key={l.href} href={l.href}
+                  className="block text-[11px] font-mono text-gray-400 hover:text-purple-400 hover:bg-purple-900/10 px-3 py-1.5 rounded-lg transition-colors">
+                  {l.label}
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Task progress */}
         {taskTotal > 0 && taskStep > 0 && (
