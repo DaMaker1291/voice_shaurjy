@@ -3211,190 +3211,134 @@ def _teams_assignments(text):
 
 
 # ── Web Automation (runs directly on HF Space, no relay needed) ──
+from concurrent.futures import ThreadPoolExecutor
 
-def _web_import():
-    """Import web_automation module."""
-    import sys as _sys
-    _backend = os.path.dirname(os.path.abspath(__file__))
-    if _backend not in _sys.path:
-        _sys.path.insert(0, _backend)
-    import web_automation as _wa
-    return _wa
+_WEB_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+
+
+def _web_run(fn_name, *args, **kwargs):
+    """Run web automation function in a thread to avoid Playwright sync API issues with asyncio."""
+    try:
+        import sys as _sys
+        _backend = os.path.dirname(os.path.abspath(__file__))
+        if _backend not in _sys.path:
+            _sys.path.insert(0, _backend)
+        import web_automation as _wa
+        future = _WEB_EXECUTOR.submit(_wa._ensure_browser)
+        future.result(timeout=30)
+        fn = getattr(_wa, fn_name)
+        future = _WEB_EXECUTOR.submit(fn, *args, **kwargs)
+        return future.result(timeout=120)
+    except Exception as e:
+        return f"Web automation error: {e}"
 
 
 @register("whatsapp_open")
 def _whatsapp_open(text):
-    try:
-        wa = _web_import()
-        r = wa.app_whatsapp_open()
-        return r
-    except Exception as e:
-        return f"WhatsApp error: {e}. Make sure playwright is installed."
+    return _web_run("app_whatsapp_open")
 
 
 @register("whatsapp_read")
 def _whatsapp_read(text):
-    try:
-        wa = _web_import()
-        return wa.app_whatsapp_read()
-    except Exception as e:
-        return f"WhatsApp error: {e}"
+    return _web_run("app_whatsapp_read")
 
 
 @register("whatsapp_unread")
 def _whatsapp_unread(text):
-    try:
-        wa = _web_import()
-        return wa.app_whatsapp_read(unread_only=True)
-    except Exception as e:
-        return f"WhatsApp error: {e}"
+    return _web_run("app_whatsapp_read", unread_only=True)
 
 
 @register("whatsapp_send")
 def _whatsapp_send(text):
-    try:
-        contact = extract_param(text, r"(?:to|for)\s+'?\"?([a-zA-Z0-9_ ]+?)'?\"?\s*(?:saying|that|about|:|the|message|text)?") or ""
-        msg = extract_param(text, r"(?:saying|that|:)\s+'?\"?(.+?)'?\"?\s*$") or ""
-        if not contact:
-            parts = text.lower().split("whatsapp")[-1].split("to")
-            contact = parts[-1].strip().split()[0] if len(parts) > 1 else ""
-        if not msg:
-            msg = text.split("saying")[-1].strip() if "saying" in text.lower() else "Hi!"
-        wa = _web_import()
-        return wa.app_whatsapp_send(contact.strip()[:30], msg.strip()[:200])
-    except Exception as e:
-        return f"WhatsApp error: {e}"
+    contact = extract_param(text, r"(?:to|for)\s+'?\"?([a-zA-Z0-9_ ]+?)'?\"?\s*(?:saying|that|about|:|the|message|text)?") or ""
+    msg = extract_param(text, r"(?:saying|that|:)\s+'?\"?(.+?)'?\"?\s*$") or ""
+    if not contact:
+        parts = text.lower().split("whatsapp")[-1].split("to")
+        contact = parts[-1].strip().split()[0] if len(parts) > 1 else ""
+    if not msg:
+        msg = text.split("saying")[-1].strip() if "saying" in text.lower() else "Hi!"
+    return _web_run("app_whatsapp_send", contact.strip()[:30], msg.strip()[:200])
 
 
 @register("whatsapp_schedule")
 def _whatsapp_schedule(text):
     contact = extract_param(text, r"(?:to|for)\s+'?\"?([a-zA-Z0-9_ ]+?)'?\"?") or ""
     msg = extract_param(text, r"(?:saying|that|:)\s+'?\"?(.+?)'?\"?\s*(?:at|for|in)\s") or "Hi!"
-    time_str = extract_param(text, r"(?:at|for|in)\s+(.+?)$") or "in 10 minutes"
-    # Schedule is stored in relay agent's .scheduled_messages.json — for cloud, just send immediately
-    try:
-        wa = _web_import()
-        return wa.app_whatsapp_send(contact.strip()[:30], f"[SCHEDULED] {msg.strip()[:200]}")
-    except Exception as e:
-        return f"WhatsApp error: {e}"
+    return _web_run("app_whatsapp_send", contact.strip()[:30], f"[SCHEDULED] {msg.strip()[:200]}")
 
 
 @register("teams_open")
 @register("teams_status")
 def _teams_open(text):
-    try:
-        wa = _web_import()
-        return wa.app_teams_open()
-    except Exception as e:
-        return f"Teams error: {e}"
+    return _web_run("app_teams_open")
 
 
 @register("teams_assignments")
 def _teams_assignments_web(text):
-    try:
-        wa = _web_import()
-        return wa.app_teams_assignments()
-    except Exception as e:
-        return f"Teams error: {e}"
+    return _web_run("app_teams_assignments")
 
 
 @register("web_app_open")
 def _web_app_open(text):
-    try:
-        app = extract_param(text, r"(?:open|launch|start)\s+(?:the\s+)?(?:web\s+)?(?:app\s+)?(.+)") or "gmail"
-        wa = _web_import()
-        return wa.app_open(app.strip())
-    except Exception as e:
-        return f"Web app error: {e}"
+    app = extract_param(text, r"(?:open|launch|start)\s+(?:the\s+)?(?:web\s+)?(?:app\s+)?(.+)") or "gmail"
+    return _web_run("app_open", app.strip())
 
 
 @register("web_navigate")
 def _web_navigate(text):
-    try:
-        url = extract_param(text, r"(?:navigate|go\s+to|browse|open)\s+(https?://[^\s]+|(?:[a-z0-9.-]+\.[a-z]{2,}(?:/[^\s]*)?))")
-        if not url:
-            url = extract_param(text, r"(?:to|at)\s+(https?://[^\s]+)") or "google.com"
-        if url and not url.startswith("http"):
-            url = "https://" + url
-        wa = _web_import()
-        wa.navigate(url or "https://google.com")
-        return f"Navigated to {url}"
-    except Exception as e:
-        return f"Navigate error: {e}"
+    url = extract_param(text, r"(?:navigate|go\s+to|browse|open)\s+(https?://[^\s]+|(?:[a-z0-9.-]+\.[a-z]{2,}(?:/[^\s]*)?))")
+    if not url:
+        url = extract_param(text, r"(?:to|at)\s+(https?://[^\s]+)") or "google.com"
+    if url and not url.startswith("http"):
+        url = "https://" + url
+    _web_run("navigate", url or "https://google.com")
+    return f"Navigated to {url}"
 
 
 @register("web_page_read")
 def _web_page_read(text):
-    try:
-        wa = _web_import()
-        text = wa.get_text()
-        return text or "No readable content found"
-    except Exception as e:
-        return f"Read error: {e}"
+    result = _web_run("get_text")
+    return result or "No readable content found"
 
 
 @register("web_screenshot")
 def _web_screenshot(text):
-    try:
-        wa = _web_import()
-        b64 = wa.screenshot_b64()
-        if b64:
-            return f"__SCREENSHOT__:{b64}"
-        return "Screenshot failed"
-    except Exception as e:
-        return f"Screenshot error: {e}"
+    b64 = _web_run("screenshot_b64")
+    if b64:
+        return f"__SCREENSHOT__:{b64}"
+    return "Screenshot failed"
 
 
 @register("web_click_text")
 def _web_click_text(text):
-    try:
-        target = extract_param(text, r"(?:click|press|tap)\s+(?:on\s+)?(?:the\s+)?['\"]?(.+?)['\"]?\s*(?:button|link|text)?")
-        wa = _web_import()
-        return wa.click_text(target or text)
-    except Exception as e:
-        return f"Click error: {e}"
+    target = extract_param(text, r"(?:click|press|tap)\s+(?:on\s+)?(?:the\s+)?['\"]?(.+?)['\"]?\s*(?:button|link|text)?")
+    return _web_run("click_text", target or text)
 
 
 @register("web_type")
 def _web_type(text):
-    try:
-        content = extract_param(text, r"(?:type|enter|input|fill)\s+['\"]?(.+?)['\"]?\s*(?:into|in|on)") or text
-        wa = _web_import()
-        return wa.type_text(content.strip()[:300])
-    except Exception as e:
-        return f"Type error: {e}"
+    content = extract_param(text, r"(?:type|enter|input|fill)\s+['\"]?(.+?)['\"]?\s*(?:into|in|on)") or text
+    return _web_run("type_text", content.strip()[:300])
 
 
 @register("web_find")
 def _web_find(text):
-    try:
-        target = extract_param(text, r"(?:find|search|look\s+for)\s+(?:the\s+)?(?:text\s+)?['\"]?(.+?)['\"]?") or text
-        wa = _web_import()
-        found = wa.find_text(target.strip()[:100])
-        if found:
-            return f"Found '{found['text']}' at ({found['x']}, {found['y']})"
-        return f"'{target}' not found on page"
-    except Exception as e:
-        return f"Find error: {e}"
+    target = extract_param(text, r"(?:find|search|look\s+for)\s+(?:the\s+)?(?:text\s+)?['\"]?(.+?)['\"]?") or text
+    found = _web_run("find_text", target.strip()[:100])
+    if found:
+        return f"Found '{found['text']}' at ({found['x']}, {found['y']})"
+    return f"'{target}' not found on page"
 
 
 @register("web_current")
 def _web_current(text):
-    try:
-        wa = _web_import()
-        return wa.app_current()
-    except Exception as e:
-        return f"Current page error: {e}"
+    return _web_run("app_current")
 
 
 @register("web_close")
 def _web_close(text):
-    try:
-        wa = _web_import()
-        wa.close()
-        return "Browser closed"
-    except Exception as e:
-        return f"Close error: {e}"
+    _web_run("close")
+    return "Browser closed"
 
 
 @register("browser_tab_screenshot")
