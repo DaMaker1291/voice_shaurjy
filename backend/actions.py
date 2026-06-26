@@ -366,6 +366,15 @@ _KEYWORD_MAP: dict[str, str] = {
     "remaining assignments": "teams_assignments", "due assignments": "teams_assignments",
     "assignments on teams": "teams_assignments", "teams homework": "teams_assignments",
     "assignments on microsoft teams": "teams_assignments",
+
+    # WhatsApp Web
+    "whatsapp": "whatsapp_open", "web whatsapp": "whatsapp_open",
+    "whatsapp messages": "whatsapp_read", "read whatsapp": "whatsapp_read",
+    "check whatsapp": "whatsapp_unread", "unread messages": "whatsapp_unread",
+    "send whatsapp": "whatsapp_send", "whatsapp message": "whatsapp_send",
+    "schedule whatsapp": "whatsapp_schedule", "whatsapp later": "whatsapp_schedule",
+    "sms from": "whatsapp_read", "message from": "whatsapp_read",
+    "my sister": "whatsapp_read", "messages from": "whatsapp_read",
     "skyscanner": "search_flights", "kayak": "search_flights",
 
     # Computer use agent
@@ -805,6 +814,24 @@ _BROAD_PATTERNS = [
     (r"(?:do|complete|finish|handle|take\s+care\s+of)\s+(?:my\s+)?(.+?\b(?:homework|assignment|task|work|note|form|document|report)s?)", "ai_computer_task"),
     (r"(?:look\s+at|analyze|describe|what'?s\s+on|read)\s+(?:the\s+)?(?:screen|display|desktop)", "screen_analyze"),
     (r"(?:ai|computer|agent)\s+(?:see|look|watch|control|manage|do)\s+(?:the\s+)?(?:screen|computer|pc)", "ai_computer_task"),
+
+    # WhatsApp Web automation
+    (r"(?:open|launch|start)\s+(?:web\s+)?(?:whatsapp|wa)", "whatsapp_open"),
+    (r"(?:read|check|show|get|list|view)\s+(?:my\s+)?(?:whatsapp|wa)\s*(?:messages?)?", "whatsapp_read"),
+    (r"(?:what'?s\s+new|unread|new\s+messages?)\s+(?:on\s+)?(?:whatsapp|wa)", "whatsapp_unread"),
+    (r"(?:send|post)\s+(?:a\s+)?(?:whatsapp|wa)\s+(?:message\s+)?(?:to\s+)?(.+?)(?:\s+(?:saying|that|the|with|about))?\s*(.+)?", "whatsapp_send"),
+    (r"(?:schedule|plan|set)\s+(?:a\s+)?(?:whatsapp|wa)\s*(?:message)?\s*(?:to\s+)?(.+?)(?:\s+(?:saying|that|about|with))?\s*(.+?)(?:\s+(?:at|for|in)\s+(.+))?", "whatsapp_schedule"),
+    (r"(?:message|msg|text|sms)\s+(?:from|by)\s+(.+?)(?:\s+(?:on|in)\s+)?(?:whatsapp|wa)?", "whatsapp_read"),
+    (r"(?:tell|show|gimme)\s+(?:me\s+)?(?:about|my|the)\s*(?:sister|mom|brother|friend|family|contact)", "whatsapp_read"),
+
+    # Web automation
+    (r"(?:open|launch|start)\s+(?:the\s+)?(?:web\s+)?(?:app\s+)?(?:gmail|outlook|calendar|maps|youtube|github|notion|chatgpt|claude|drive|docs)", "web_app_open"),
+    (r"(?:navigate|go\s+to|browse|open)\s+(?:https?://)?([a-z0-9.-]+\.[a-z]{2,}(?:/[^\s]*)?)", "web_navigate"),
+    (r"(?:read|show|get|extract)\s+(?:the\s+)?(?:page|content|text|website|site)", "web_page_read"),
+    (r"(?:screenshot|screencap|capture)\s+(?:the\s+)?(?:page|web|browser|screen)", "web_screenshot"),
+    (r"(?:click|press|tap)\s+(?:on\s+)?(?:the\s+)?['\"]?(.+?)['\"]?\s+(?:button|link|text)?\s*(?:on\s+)?(?:the\s+)?(?:page|web)?", "web_click_text"),
+    (r"(?:type|enter|input|fill)\s+['\"]?(.+?)['\"]?\s*(?:into|in|on)\s+(?:the\s+)?(?:search|input|field|box|text)", "web_type"),
+    (r"(?:find|search|look\s+for)\s+(?:the\s+)?(?:text\s+)?['\"]?(.+?)['\"]?\s*(?:on\s+)?(?:the\s+)?(?:page|web)", "web_find"),
 ]
 
 _ACTION_LABELS = {
@@ -987,6 +1014,22 @@ _ACTION_LABELS = {
 
     # Persistent Notifications
     "notify_persistent": "📌 Persistent reminder...", "notify_center": "📌 Center notification...",
+
+    # Web Automation
+    "whatsapp_open": "💬 Opening WhatsApp Web...",
+    "whatsapp_read": "💬 Reading WhatsApp messages...",
+    "whatsapp_unread": "💬 Checking unread messages...",
+    "whatsapp_send": "💬 Sending WhatsApp message...",
+    "whatsapp_schedule": "⏰ Scheduling WhatsApp message...",
+    "web_navigate": "🌐 Navigating browser...",
+    "web_app_open": "🌐 Opening web app...",
+    "web_page_read": "📖 Reading page content...",
+    "web_screenshot": "📸 Capturing web page...",
+    "web_click_text": "🖱 Clicking text on page...",
+    "web_type": "⌨ Typing on page...",
+    "web_find": "🔎 Finding text on page...",
+    "web_current": "📄 Current page info",
+    "web_close": "❌ Closing browser...",
 }
 _ACTION_TIPS = {
     "memory_cleanup": "Kill memory-hogging apps and free RAM",
@@ -1014,6 +1057,22 @@ _ACTION_TIPS = {
     "send_keys": "Type text into active window",
     "disk_cleanup": "Run Windows disk cleanup",
     "defender_scan": "Run Windows Defender scan",
+
+    # Web Automation tips
+    "whatsapp_open": "Open WhatsApp Web in browser",
+    "whatsapp_read": "Read recent WhatsApp messages with context",
+    "whatsapp_unread": "Check for new unread WhatsApp messages only",
+    "whatsapp_send": 'Send a WhatsApp message, e.g. "send whatsapp to Mom|Coming home late"',
+    "whatsapp_schedule": 'Schedule a WhatsApp message, e.g. "schedule whatsapp to Sister|Good night|9pm"',
+    "web_navigate": "Navigate browser to a URL",
+    "web_app_open": 'Open a web app, e.g. "open gmail" or "open teams"',
+    "web_page_read": "Read text content from the current web page",
+    "web_screenshot": "Take screenshot of current web page",
+    "web_click_text": 'Click text on the page, e.g. "click_text Send"',
+    "web_type": 'Type text into a field on the page',
+    "web_find": 'Find text on the page, e.g. "find John"',
+    "web_current": "Show current web page URL and title",
+    "web_close": "Close the web browser",
 
     # Real-world task tips
     "search_flights": "Search and compare flight prices",
@@ -1103,6 +1162,10 @@ def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
 _CLOUD_SAFE_ACTIONS = {
     "weather", "public_ip", "math_eval", "timer", "alarm",
     "time", "timer_stop", "timer_remaining",
+
+    "whatsapp_open", "whatsapp_read", "whatsapp_unread", "whatsapp_send", "whatsapp_schedule",
+    "web_app_open", "web_navigate", "web_page_read", "web_screenshot", "web_click_text", "web_type", "web_find",
+    "web_current", "web_close", "teams_open", "teams_status", "teams_assignments",
 }
 
 
@@ -3145,6 +3208,77 @@ def _teams_assignments(text):
         return f"Partially completed after {result.steps} steps ({round(result.duration_sec, 1)}s):\n{result.summary}"
     else:
         return f"Teams agent: {result.summary}"
+
+
+# ── Web Automation (cross-network, relayed to macOS agent) ──
+
+@register("whatsapp_open")
+def _whatsapp_open(text):
+    return relay_action("whatsapp_open", "", user_id="local")
+
+@register("whatsapp_read")
+def _whatsapp_read(text):
+    return relay_action("whatsapp_read", "", user_id="local")
+
+@register("whatsapp_unread")
+def _whatsapp_unread(text):
+    return relay_action("whatsapp_unread", "", user_id="local")
+
+@register("whatsapp_send")
+def _whatsapp_send(text):
+    contact = extract_param(text, r"(?:to|for)\s+'?\"?([a-zA-Z0-9_ ]+?)'?\"?\s*(?:saying|that|about|:|the|message|text)?") or ""
+    msg = extract_param(text, r"(?:saying|that|:)\s+'?\"?(.+?)'?\"?\s*$") or ""
+    if not contact:
+        parts = text.lower().split("whatsapp")[-1].split("to")
+        contact = parts[-1].strip().split()[0] if len(parts) > 1 else ""
+    if not msg:
+        msg = text.split("saying")[-1].strip() if "saying" in text.lower() else "Hi!"
+    return relay_action("whatsapp_send", f"{contact.strip()[:30]}|{msg.strip()[:200]}", user_id="local")
+
+@register("whatsapp_schedule")
+def _whatsapp_schedule(text):
+    contact = extract_param(text, r"(?:to|for)\s+'?\"?([a-zA-Z0-9_ ]+?)'?\"?") or ""
+    msg = extract_param(text, r"(?:saying|that|:)\s+'?\"?(.+?)'?\"?\s*(?:at|for|in)\s") or "Hi!"
+    time_str = extract_param(text, r"(?:at|for|in)\s+(.+?)$") or "in 10 minutes"
+    return relay_action("whatsapp_schedule", f"{contact.strip()[:30]}|{msg.strip()[:200]}|{time_str.strip()}", user_id="local")
+
+@register("web_app_open")
+def _web_app_open(text):
+    app = extract_param(text, r"(?:open|launch|start)\s+(?:the\s+)?(?:web\s+)?(?:app\s+)?(.+)") or "gmail"
+    return relay_action("web_app_open", app.strip(), user_id="local")
+
+@register("web_navigate")
+def _web_navigate(text):
+    url = extract_param(text, r"(?:navigate|go\s+to|browse|open)\s+(https?://[^\s]+|(?:[a-z0-9.-]+\.[a-z]{2,}(?:/[^\s]*)?))")
+    if not url:
+        url = extract_param(text, r"(?:to|at)\s+(https?://[^\s]+)") or "google.com"
+    if url and not url.startswith("http"):
+        url = "https://" + url
+    return relay_action("web_navigate", url or "https://google.com", user_id="local")
+
+@register("web_page_read")
+def _web_page_read(text):
+    return relay_action("web_page_read", "", user_id="local")
+
+@register("web_screenshot")
+def _web_screenshot(text):
+    return relay_action("web_screenshot", "", user_id="local")
+
+@register("web_click_text")
+def _web_click_text(text):
+    target = extract_param(text, r"(?:click|press|tap)\s+(?:on\s+)?(?:the\s+)?['\"]?(.+?)['\"]?\s*(?:button|link|text)?")
+    return relay_action("web_click_text", target or text, user_id="local")
+
+@register("web_type")
+def _web_type(text):
+    content = extract_param(text, r"(?:type|enter|input|fill)\s+['\"]?(.+?)['\"]?\s*(?:into|in|on)") or text
+    return relay_action("web_type", content.strip()[:300], user_id="local")
+
+@register("web_find")
+def _web_find(text):
+    target = extract_param(text, r"(?:find|search|look\s+for)\s+(?:the\s+)?(?:text\s+)?['\"]?(.+?)['\"]?") or text
+    return relay_action("web_find", target.strip()[:100], user_id="local")
+
 
 @register("browser_tab_screenshot")
 def _browser_tab_screenshot(text):

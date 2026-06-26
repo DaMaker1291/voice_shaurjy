@@ -13,6 +13,7 @@ import platform
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import urllib.error
@@ -74,6 +75,8 @@ def macos_exec(action: str, params: str = "") -> str:
     p = platform.system()
     if p != "Darwin":
         return f"Not available on {p}"
+
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 
     actions: dict[str, callable] = {
         "screenshot": lambda: run("screencapture -x ~/Desktop/jarvis_screenshot.png 2>/dev/null; echo 'Saved to Desktop'"),
@@ -151,7 +154,41 @@ def macos_exec(action: str, params: str = "") -> str:
         # ── Cognitive Surveillance ──
         "cognitive_scan": lambda: _cognitive_scan(),
         "cognitive_insight": lambda: _cognitive_insight(),
+
+        # ── Web Automation (Playwright-based, cross-network apps) ──
+        "whatsapp_open": lambda: _web_wa("wa_open"),
+        "whatsapp_read": lambda: _web_wa("wa_read"),
+        "whatsapp_unread": lambda: _web_wa("wa_unread"),
+        "whatsapp_send": lambda: _web_wa(f"wa_send|{params}"),
+        "whatsapp_schedule": lambda: _scheduler_schedule(params),
+        "web_whatsapp_open": lambda: _web_wa("wa_open"),
+        "web_whatsapp_read": lambda: _web_wa("wa_read"),
+        "web_whatsapp_unread": lambda: _web_wa("wa_unread"),
+        "web_whatsapp_send": lambda: _web_wa(f"wa_send|{params}"),
+        "teams_open": lambda: _web_wa("teams_open"),
+        "teams_status": lambda: _web_wa("teams_open"),
+        "teams_assignments": lambda: _web_wa("teams_assignments"),
+        "web_teams_open": lambda: _web_wa("teams_open"),
+        "web_teams_assignments": lambda: _web_wa("teams_assignments"),
+        "web_navigate": lambda: _web_wa(f"navigate|{params}"),
+        "web_app_open": lambda: _web_wa(f"app_open|{params}"),
+        "web_page_read": lambda: _web_wa("page_read"),
+        "web_screenshot": lambda: _web_wa("screenshot"),
+        "web_screenshot_b64": lambda: _web_wa("screenshot_b64"),
+        "web_click_text": lambda: _web_wa(f"click_text|{params}"),
+        "web_type": lambda: _web_wa(f"type|{params}"),
+        "web_find": lambda: _web_wa(f"find|{params}"),
+        "web_current": lambda: _web_wa("current"),
+        "web_close": lambda: _web_wa("close"),
     }
+
+    fn = actions.get(action)
+    if fn:
+        try:
+            return str(fn())
+        except Exception as e:
+            return f"macOS action error: {e}"
+    return None
 
 def _send_wol(mac: str) -> str:
     import socket as _s, struct as _st
@@ -367,14 +404,6 @@ def _cognitive_insight() -> str:
     except:
         return "[INSIGHT] Environment scanned. All systems nominal."
 
-    fn = actions.get(action)
-    if fn:
-        try:
-            return str(fn())
-        except Exception as e:
-            return f"macOS action error: {e}"
-    return None
-
 
 def _mac_search(query: str, base_url: str) -> str:
     q = query.replace("search", "").replace("youtube", "").replace("wikipedia", "").strip()
@@ -400,6 +429,179 @@ def _mac_open_app(name: str) -> str:
     app_name = apps.get(name, name)
     r = run(f'open -a "{app_name}"', timeout=10)
     return f"Opened {app_name}" if r else f"Could not open {app_name}"
+
+
+def _web_wa(cmd: str) -> str:
+    """Web automation via Playwright. cmd format: 'action' or 'action|params'."""
+    try:
+        import web_automation as wa
+    except ImportError:
+        return "web_automation not available (run: pip install playwright && playwright install chromium)"
+    split = cmd.split("|", 1)
+    action = split[0]
+    params = split[1] if len(split) > 1 else ""
+
+    try:
+        if action == "wa_open":
+            return wa.app_whatsapp_open()
+        elif action == "wa_read":
+            return wa.app_whatsapp_read()
+        elif action == "wa_unread":
+            return wa.app_whatsapp_read(unread_only=True)
+        elif action == "wa_send":
+            parts2 = params.split("|", 1)
+            contact = parts2[0].strip() if len(parts2) > 0 else ""
+            msg = parts2[1].strip() if len(parts2) > 1 else ""
+            if not contact or not msg:
+                return "Usage: web_whatsapp_send <contact>|<message>"
+            return wa.app_whatsapp_send(contact, msg)
+        elif action == "teams_open":
+            return wa.app_teams_open()
+        elif action == "teams_assignments":
+            return wa.app_teams_assignments()
+        elif action == "navigate":
+            return wa.navigate(params)
+        elif action == "app_open":
+            return wa.app_open(params)
+        elif action == "page_read":
+            return wa.app_read()
+        elif action == "screenshot":
+            path = wa.screenshot()
+            return f"Screenshot: {path}"
+        elif action == "screenshot_b64":
+            b64 = wa.screenshot_b64()
+            return b64[:200] + "..." if len(b64) > 200 else b64
+        elif action == "click_text":
+            return wa.click_text(params)
+        elif action == "type":
+            parts2 = params.split("|", 1)
+            text = parts2[0]
+            selector = parts2[1] if len(parts2) > 1 else None
+            return wa.type_text(text, selector)
+        elif action == "find":
+            found = wa.find_text(params)
+            if found:
+                return f"Found '{found['text']}' at ({found['x']}, {found['y']})"
+            return f"'{params}' not found on page"
+        elif action == "current":
+            return wa.app_current()
+        elif action == "close":
+            wa.close()
+            return "Web browser closed"
+        else:
+            return f"Unknown web action: {action}"
+    except Exception as e:
+        return f"Web automation error: {e}"
+
+
+_SCHEDULER_FILE = os.path.join(os.path.dirname(__file__), ".scheduled_messages.json")
+_SCHEDULER_LOCK = threading.Lock()
+
+
+def _scheduler_schedule(params: str) -> str:
+    """Schedule a WhatsApp message. Format: 'contact|message|time'
+    time can be: 'in 10 minutes', 'at 9pm', '2 hours', 'tomorrow 8am'
+    """
+    parts = params.split("|", 2)
+    if len(parts) < 3:
+        return "Usage: whatsapp_schedule contact|message|time\nExamples:\n" \
+               '  schedule whatsapp to Mom|Coming home late|in 10 minutes\n' \
+               '  schedule whatsapp to Sister|Good night|9pm\n' \
+               '  schedule whatsapp to Boss|Report done|tomorrow 9am'
+    contact = parts[0].strip()
+    message = parts[1].strip()
+    time_str = parts[2].strip().lower()
+
+    import re, datetime
+
+    now = datetime.datetime.now()
+    run_at = None
+
+    # "in X minutes/hours"
+    m = re.match(r'in\s+(\d+)\s*(min|mins|minute|minutes|hour|hours|h|hr|hrs)?', time_str)
+    if m:
+        num = int(m.group(1))
+        unit = m.group(2) or "minutes"
+        if unit.startswith("h"):
+            run_at = now + datetime.timedelta(hours=num)
+        else:
+            run_at = now + datetime.timedelta(minutes=num)
+
+    # "at H:MMpm" or "at Hpm"
+    if not run_at:
+        m = re.match(r'(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?', time_str)
+        if m:
+            hour = int(m.group(1))
+            minute = int(m.group(2)) if m.group(2) else 0
+            ampm = m.group(3)
+            if ampm:
+                if ampm == "pm" and hour < 12:
+                    hour += 12
+                elif ampm == "am" and hour == 12:
+                    hour = 0
+            run_at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if run_at < now:
+                run_at += datetime.timedelta(days=1)
+
+    # "tomorrow H:MMam/pm" or "tomorrow X"
+    if not run_at and "tomorrow" in time_str:
+        parts = time_str.replace("tomorrow", "").strip()
+        m = re.match(r'(\d{1,2})(?::(\d{2}))?\s*(am|pm)?', parts)
+        if m:
+            hour = int(m.group(1))
+            minute = int(m.group(2)) if m.group(2) else 0
+            ampm = m.group(3)
+            if ampm:
+                if ampm == "pm" and hour < 12:
+                    hour += 12
+                elif ampm == "am" and hour == 12:
+                    hour = 0
+            run_at = (now + datetime.timedelta(days=1)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    if not run_at:
+        return f"Could not parse time: '{time_str}'. Try: 'in 10 minutes', 'at 9pm', 'tomorrow 8am'"
+
+    schedule = {"contact": contact, "message": message[:500], "run_at": run_at.timestamp(), "created": now.timestamp()}
+    with _SCHEDULER_LOCK:
+        items = []
+        if os.path.isfile(_SCHEDULER_FILE):
+            try:
+                with open(_SCHEDULER_FILE) as f:
+                    items = json.load(f)
+            except:
+                items = []
+        items.append(schedule)
+        with open(_SCHEDULER_FILE, "w") as f:
+            json.dump(items, f)
+
+    time_fmt = run_at.strftime("%I:%M %p").lstrip("0")
+    return f"✅ Scheduled: '{message[:50]}' to {contact} at {time_fmt}"
+
+
+def _scheduler_check():
+    """Check and execute due scheduled messages. Called from main loop."""
+    if not os.path.isfile(_SCHEDULER_FILE):
+        return
+    with _SCHEDULER_LOCK:
+        try:
+            with open(_SCHEDULER_FILE) as f:
+                items = json.load(f)
+        except:
+            return
+        now = time.time()
+        due = [i for i in items if i["run_at"] <= now]
+        items = [i for i in items if i["run_at"] > now]
+        with open(_SCHEDULER_FILE, "w") as f:
+            json.dump(items, f)
+    for item in due:
+        contact = item["contact"]
+        message = item["message"][:200]
+        print(f"[Scheduler] Executing scheduled message to {contact}: {message[:40]}...")
+        try:
+            result = _web_wa(f"wa_send|{contact}|{message}")
+            print(f"[Scheduler] Result: {result[:60]}")
+        except Exception as e:
+            print(f"[Scheduler] Error: {e}")
 
 
 def startup_scan(user_id: str) -> dict:
@@ -498,6 +700,7 @@ def main():
                 print(f"[Relay] Backend returned {e.code}: {e.reason}")
         except Exception as e:
             print(f"[Relay] Error: {e}")
+        _scheduler_check()
         time.sleep(0.5)
 
 
