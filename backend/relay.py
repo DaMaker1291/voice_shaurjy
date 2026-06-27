@@ -10,6 +10,23 @@ _pending: dict[str, dict] = {}
 _results: dict[str, dict] = {}
 _expiry = 120
 
+# Heartbeat tracking
+_last_heartbeat: dict[str, float] = {}
+_HEARTBEAT_TIMEOUT = 60  # seconds before relay is considered dead
+
+
+def record_heartbeat(user_id: str = "local"):
+    with _lock:
+        _last_heartbeat[user_id] = time.time()
+
+
+def is_relay_alive(user_id: str = "local") -> bool:
+    with _lock:
+        last = _last_heartbeat.get(user_id)
+        if last is None:
+            return False
+        return (time.time() - last) < _HEARTBEAT_TIMEOUT
+
 
 def queue_action(action: str, params: str = "", user_id: str = "local") -> str:
     rid = str(uuid.uuid4())[:8]

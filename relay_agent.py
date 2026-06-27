@@ -661,8 +661,17 @@ def main():
     # Poll for primary user_id AND fallback "local" (frontend hardcodes "local")
     poll_ids = list(dict.fromkeys([user_id, "local"]))  # dedup preserving order
     fallback_idx = 0
+    _hb_count = 0
     print(f"[Relay] Polling every 0.5s for user '{user_id}'...")
     while True:
+        # Send heartbeat every ~15 seconds
+        _hb_count += 1
+        if _hb_count >= 30:
+            _hb_count = 0
+            try:
+                post(f"{HF_API}/api/relay/heartbeat", {"user_id": user_id})
+            except:
+                pass
         try:
             uid = poll_ids[fallback_idx % len(poll_ids)]
             fallback_idx += 1

@@ -806,6 +806,7 @@ _relay_devices: dict[str, dict] = {}
 @app.post("/api/relay/register")
 async def relay_register(data: dict):
     """Called by relay agent on startup to register this device."""
+    from relay import record_heartbeat
     uid = data.get("user_id", "local")
     _relay_devices[uid] = {
         "hostname": data.get("hostname", "?"),
@@ -813,7 +814,16 @@ async def relay_register(data: dict):
         "info": data.get("info", {}),
         "last_seen": __import__("time").time(),
     }
+    record_heartbeat(uid)
     return {"status": "registered"}
+
+@app.post("/api/relay/heartbeat")
+async def relay_heartbeat(data: dict):
+    """Called periodically by relay agent to signal it's alive."""
+    from relay import record_heartbeat
+    uid = data.get("user_id", "local")
+    record_heartbeat(uid)
+    return {"status": "ok"}
 
 @app.get("/api/relay/devices")
 async def relay_devices(user_id: str = "local"):

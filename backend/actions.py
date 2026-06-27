@@ -3210,10 +3210,22 @@ def _teams_assignments(text):
         return f"Teams agent: {result.summary}"
 
 
-# ── Web Automation (runs directly on HF Space, no relay needed) ──
+# ── Web Automation (relay to desktop if alive, else run on HF Space) ──
 from concurrent.futures import ThreadPoolExecutor
 
 _WEB_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+
+
+def _web_or_relay(action_name, web_fn_name, text="", *args, **kwargs):
+    """Relay to desktop if relay agent is alive, else run web automation on HF Space."""
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action(action_name, text)
+    except Exception:
+        pass
+    # Fallback: run web automation
+    return _web_run(web_fn_name, *args, **kwargs)
 
 
 def _web_run(fn_name, *args, **kwargs):
@@ -3235,16 +3247,22 @@ def _web_run(fn_name, *args, **kwargs):
 
 @register("whatsapp_open")
 def _whatsapp_open(text):
-    return _web_run("app_whatsapp_open")
+    return _web_or_relay("whatsapp_open", "app_whatsapp_open", text)
 
 
 @register("whatsapp_read")
 def _whatsapp_read(text):
-    return _web_run("app_whatsapp_read")
+    return _web_or_relay("whatsapp_read", "app_whatsapp_read", text)
 
 
 @register("whatsapp_unread")
 def _whatsapp_unread(text):
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("whatsapp_unread", "", user_id="local")
+    except Exception:
+        pass
     return _web_run("app_whatsapp_read", unread_only=True)
 
 
@@ -3257,6 +3275,12 @@ def _whatsapp_send(text):
         contact = parts[-1].strip().split()[0] if len(parts) > 1 else ""
     if not msg:
         msg = text.split("saying")[-1].strip() if "saying" in text.lower() else "Hi!"
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("whatsapp_send", f"{contact.strip()[:30]}|{msg.strip()[:200]}", user_id="local")
+    except Exception:
+        pass
     return _web_run("app_whatsapp_send", contact.strip()[:30], msg.strip()[:200])
 
 
@@ -3264,23 +3288,48 @@ def _whatsapp_send(text):
 def _whatsapp_schedule(text):
     contact = extract_param(text, r"(?:to|for)\s+'?\"?([a-zA-Z0-9_ ]+?)'?\"?") or ""
     msg = extract_param(text, r"(?:saying|that|:)\s+'?\"?(.+?)'?\"?\s*(?:at|for|in)\s") or "Hi!"
+    time_str = extract_param(text, r"(?:at|for|in)\s+(.+?)$") or "in 10 minutes"
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("whatsapp_schedule", f"{contact.strip()[:30]}|{msg.strip()[:200]}|{time_str.strip()}", user_id="local")
+    except Exception:
+        pass
     return _web_run("app_whatsapp_send", contact.strip()[:30], f"[SCHEDULED] {msg.strip()[:200]}")
 
 
 @register("teams_open")
 @register("teams_status")
 def _teams_open(text):
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("teams_open", "", user_id="local")
+    except Exception:
+        pass
     return _web_run("app_teams_open")
 
 
 @register("teams_assignments")
 def _teams_assignments_web(text):
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("teams_assignments", "", user_id="local")
+    except Exception:
+        pass
     return _web_run("app_teams_assignments")
 
 
 @register("web_app_open")
 def _web_app_open(text):
     app = extract_param(text, r"(?:open|launch|start)\s+(?:the\s+)?(?:web\s+)?(?:app\s+)?(.+)") or "gmail"
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("web_app_open", app.strip(), user_id="local")
+    except Exception:
+        pass
     return _web_run("app_open", app.strip())
 
 
@@ -3291,18 +3340,36 @@ def _web_navigate(text):
         url = extract_param(text, r"(?:to|at)\s+(https?://[^\s]+)") or "google.com"
     if url and not url.startswith("http"):
         url = "https://" + url
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("web_navigate", url, user_id="local")
+    except Exception:
+        pass
     _web_run("navigate", url or "https://google.com")
     return f"Navigated to {url}"
 
 
 @register("web_page_read")
 def _web_page_read(text):
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("web_page_read", "", user_id="local")
+    except Exception:
+        pass
     result = _web_run("get_text")
     return result or "No readable content found"
 
 
 @register("web_screenshot")
 def _web_screenshot(text):
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("web_screenshot", "", user_id="local")
+    except Exception:
+        pass
     b64 = _web_run("screenshot_b64")
     if b64:
         return f"__SCREENSHOT__:{b64}"
@@ -3312,18 +3379,36 @@ def _web_screenshot(text):
 @register("web_click_text")
 def _web_click_text(text):
     target = extract_param(text, r"(?:click|press|tap)\s+(?:on\s+)?(?:the\s+)?['\"]?(.+?)['\"]?\s*(?:button|link|text)?")
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("web_click_text", target or text, user_id="local")
+    except Exception:
+        pass
     return _web_run("click_text", target or text)
 
 
 @register("web_type")
 def _web_type(text):
     content = extract_param(text, r"(?:type|enter|input|fill)\s+['\"]?(.+?)['\"]?\s*(?:into|in|on)") or text
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("web_type", content.strip()[:300], user_id="local")
+    except Exception:
+        pass
     return _web_run("type_text", content.strip()[:300])
 
 
 @register("web_find")
 def _web_find(text):
     target = extract_param(text, r"(?:find|search|look\s+for)\s+(?:the\s+)?(?:text\s+)?['\"]?(.+?)['\"]?") or text
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("web_find", target.strip()[:100], user_id="local")
+    except Exception:
+        pass
     found = _web_run("find_text", target.strip()[:100])
     if found:
         return f"Found '{found['text']}' at ({found['x']}, {found['y']})"
@@ -3332,11 +3417,23 @@ def _web_find(text):
 
 @register("web_current")
 def _web_current(text):
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("web_current", "", user_id="local")
+    except Exception:
+        pass
     return _web_run("app_current")
 
 
 @register("web_close")
 def _web_close(text):
+    try:
+        from relay import is_relay_alive
+        if is_relay_alive():
+            return relay_action("web_close", "", user_id="local")
+    except Exception:
+        pass
     _web_run("close")
     return "Browser closed"
 

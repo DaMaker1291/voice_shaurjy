@@ -260,6 +260,11 @@ def app_whatsapp_open() -> str:
     _current_app = "whatsapp"
     time.sleep(3)
 
+    # On macOS, also open native WhatsApp app for notifications/quick access
+    if os.path.isdir("/Applications/WhatsApp.app"):
+        import subprocess as _sp
+        _sp.run(["open", "-a", "WhatsApp"], capture_output=True, timeout=10)
+
     # Check if we need to scan QR
     qr_b64 = check_qr_on_screen()
     if qr_b64:
