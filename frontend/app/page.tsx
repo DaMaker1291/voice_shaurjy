@@ -301,7 +301,7 @@ export default function Home() {
           return;
         }
 
-        // Handle WhatsApp deep link
+        // Handle WhatsApp deep link — auto-open the app
         if (res.wa_link) {
           setMessages((p) => [...p, {
             role: "assistant",
@@ -310,6 +310,14 @@ export default function Home() {
           }]);
           setLastResponse(reply);
           setTimeout(() => setActionFeedback(null), 4000);
+          // Auto-open WhatsApp (opens in new tab on desktop, opens app on mobile)
+          try {
+            const a = document.createElement('a');
+            a.href = res.wa_link;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.click();
+          } catch {}
           return;
         }
 
