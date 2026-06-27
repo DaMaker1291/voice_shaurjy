@@ -591,20 +591,16 @@ Recent interactions:
             "complete", "do this", "handle", "take over"])
 
         if is_complex:
-            combined = self._generate_combined_response(user_input, context, act_prompt)
-            result["text"] = combined.get("text", "")
-            result["strategies"] = combined.get("strategies")
-            result["follow_up"] = combined.get("follow_up", [])
-            result["task"] = combined.get("task")
-            result["thought"] = f"Generated strategies for '{user_input[:40]}'..."
-
-            # Auto-launch workflow for clear task requests (not just questions)
-            if not result["strategies"] and not result["follow_up"]:
-                wf = self._auto_workflow(user_input)
-                if wf:
-                    result["task"] = wf
-                    result["text"] = wf.get("text", result["text"])
-                    result["follow_up"] = wf.get("follow_up", [])
+            wf = self._auto_workflow(user_input)
+            if wf:
+                result["task"] = wf
+                result["text"] = wf.get("text", result["text"])
+                result["thought"] = f"Working on: {user_input[:40]}..."
+            else:
+                combined = self._generate_combined_response(user_input, context, act_prompt)
+                result["text"] = combined.get("text", "")
+                result["task"] = combined.get("task")
+                result["thought"] = f"Processing: {user_input[:40]}..."
 
             self.memory.log_interaction(user_input, result["text"], "complex_response")
         else:
