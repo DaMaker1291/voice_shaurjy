@@ -310,14 +310,9 @@ export default function Home() {
           }]);
           setLastResponse(reply);
           setTimeout(() => setActionFeedback(null), 4000);
-          // Auto-open WhatsApp (opens in new tab on desktop, opens app on mobile)
-          try {
-            const a = document.createElement('a');
-            a.href = res.wa_link;
-            a.target = '_blank';
-            a.rel = 'noopener noreferrer';
-            a.click();
-          } catch {}
+          // Auto-open WhatsApp — navigates to wa.me universal link
+          // Opens native app if installed, falls back to browser tab if not
+          setTimeout(() => { window.location.href = res.wa_link; }, 300);
           return;
         }
 
