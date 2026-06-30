@@ -368,7 +368,7 @@ _KEYWORD_MAP: dict[str, str] = {
     "assignments on microsoft teams": "teams_assignments",
 
     # WhatsApp Web
-    "whatsapp": "whatsapp_open", "web whatsapp": "whatsapp_open",
+    "whatsapp": "whatsapp_open", "web whatsapp": "whatsapp_open", "open whatsapp": "whatsapp_open",
     "whatsapp messages": "whatsapp_read", "read whatsapp": "whatsapp_read",
     "check whatsapp": "whatsapp_unread", "unread messages": "whatsapp_unread",
     "send whatsapp": "whatsapp_send", "whatsapp message": "whatsapp_send",
