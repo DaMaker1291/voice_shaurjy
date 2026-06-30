@@ -579,13 +579,29 @@ export default function Home() {
       <div className="stars" />
       <div className="stars2" />
       <div className="stars3" />
+      <div className="aurora" />
+      <div className="scan-overlay" />
+      <div className="particle-field">
+        {Array.from({ length: 30 }, (_, i) => (
+          <div
+            key={i}
+            className="particle"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDuration: `${10 + Math.random() * 30}s`,
+              animationDelay: `${Math.random() * 20}s`,
+            }}
+          />
+        ))}
+      </div>
 
       <div className="relative z-10 flex-[3] min-w-0 flex flex-col px-4">
 
-        {/* Status bar — tiny unobtrusive */}
+        {/* Status bar — neon gradient text */}
         <div className="absolute top-3 left-4 z-30 flex items-center gap-2">
           <div className={`w-1.5 h-1.5 rounded-full ${listening ? "bg-green-400" : thinking ? "bg-purple-400" : speaking ? "bg-cyan-400" : "bg-gray-600"}`} />
-          <span className="text-[9px] font-mono text-gray-500/70 tracking-wider">{scanning ? "scanning..." : thinking ? "processing" : speaking ? "speaking" : entityMoodEmoji ? `${entityMoodEmoji} ${entityMood}` : "idle"}</span>
+          <span className="status-text">{scanning ? "scanning..." : thinking ? "processing" : speaking ? "speaking" : entityMoodEmoji ? `${entityMoodEmoji} ${entityMood}` : "idle"}</span>
         </div>
 
         {/* Page nav (replaces old layout nav) */}
@@ -599,7 +615,7 @@ export default function Home() {
             </svg>
           </button>
           {showPageNav && (
-            <div className="absolute top-8 right-0 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-2 shadow-2xl min-w-[140px] z-50 animate-fade-in" onClick={() => setShowPageNav(false)}>
+            <div className="absolute top-8 right-0 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-2 shadow-2xl min-w-[140px] z-50 animate-fade-in glow-purple" onClick={() => setShowPageNav(false)}>
               {[
                 { href: "/app", label: "Chat" },
                 { href: "/app/dashboard", label: "Brain" },
@@ -634,7 +650,7 @@ export default function Home() {
           {/* Center result overlay — flashes main data without sass */}
           {centerOverlay && (
             <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none" onClick={dismissOverlay}>
-              <div className="pointer-events-auto center-overlay max-w-xl w-full mx-6 max-h-[60vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="pointer-events-auto center-overlay max-w-xl w-full mx-6 max-h-[60vh] overflow-y-auto glow-card" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[9px] font-mono tracking-[0.25em] uppercase text-cyan-500/70">result</span>
                   <button onClick={dismissOverlay} className="text-gray-600 hover:text-gray-300 transition-colors text-[10px] font-mono tracking-wider">✕ dismiss</button>
@@ -647,7 +663,7 @@ export default function Home() {
           )}
 
           {/* Centered BotSwarm agents — dim when overlay active */}
-          <div className={`w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[420px] md:h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl shadow-blue-900/30 cursor-pointer transition-all duration-500 ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
+          <div className={`glow-card w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[420px] md:h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl shadow-blue-900/30 cursor-pointer transition-all duration-500 ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
             <BotSwarm
               listening={listening}
               thinking={thinking}
@@ -661,24 +677,26 @@ export default function Home() {
           {/* Subtle prompt below agents when idle */}
           {!listening && !thinking && !speaking && !taskQuestion && messages.length <= 1 && (
             <div className="mt-4 text-center animate-fade-in">
-              <p className="text-[10px] font-mono text-blue-400/50 tracking-[0.2em]">tap the orb or type below</p>
+              <p className="text-[10px] font-mono text-blue-400/50 tracking-[0.2em] text-glow-cyan">tap the orb or type below</p>
             </div>
           )}
 
           {/* Suggestions */}
           {showSuggestions && messages.length <= 1 && !listening && !thinking && !speaking && (
             <div className="mt-6 max-w-lg w-full px-6 animate-fade-in">
-              <div className="flex flex-wrap justify-center gap-2">
-                {SUGGESTIONS.map((s, i) => (
-                  <button
-                    key={s}
-                    onClick={() => pickSuggestion(s)}
-                    className="suggestion-btn"
-                    style={{ animationDelay: `${i * 50}ms` }}
-                  >
-                    {s}
-                  </button>
-                ))}
+              <div className="glass rounded-2xl p-4 glow-purple">
+                <div className="flex flex-wrap justify-center gap-2">
+                  {SUGGESTIONS.map((s, i) => (
+                    <button
+                      key={s}
+                      onClick={() => pickSuggestion(s)}
+                      className="suggestion-btn"
+                      style={{ animationDelay: `${i * 50}ms` }}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -748,11 +766,11 @@ export default function Home() {
 
           {/* Last response */}
           {lastResponse && !listening && !thinking && !speaking && (
-            <div className="mt-6 max-w-2xl w-full px-6 animate-fade-in">
-              <div className="response-card rounded-2xl px-5 py-4" style={{background:"rgba(15,15,40,0.7)",border:"1px solid rgba(120,60,220,0.15)",backdropFilter:"blur(12px)"}}>
+            <div className="mt-6 max-w-2xl w-full px-6 animate-fade-in message-enter">
+              <div className="holo-card glow-card glow-purple px-5 py-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-purple-500/60" />
-                  <span className="text-[9px] font-mono tracking-[0.15em] uppercase text-purple-500/60">jarvis</span>
+                  <span className="text-[9px] font-mono tracking-[0.15em] uppercase text-purple-500/60 text-glow">jarvis</span>
                 </div>
                 <p className="text-sm text-gray-200 font-light leading-relaxed whitespace-pre-wrap">{lastResponse}</p>
               </div>
@@ -763,7 +781,7 @@ export default function Home() {
         {/* Task follow-up */}
         {taskQuestion && (
           <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 animate-fade-in">
-            <div className="glass-card px-6 py-5">
+            <div className="glass-card px-6 py-5 glow-card">
               <p className="text-[10px] font-mono text-purple-400/80 tracking-[0.25em] uppercase mb-2">Jason needs to know</p>
               <p className="text-sm text-gray-200 mb-4 leading-relaxed">{taskQuestion}</p>
               <div className="flex gap-2.5">
@@ -786,7 +804,7 @@ export default function Home() {
         {/* Task result */}
         {taskResult && (
           <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 animate-fade-in">
-            <div className="glass-card px-6 py-5">
+            <div className="glass-card px-6 py-5 glow-card">
               <p className="text-[10px] font-mono text-green-400/80 tracking-[0.25em] uppercase mb-2">
                 <span className="inline-block mr-1.5">&#10003;</span> Task complete
               </p>
@@ -806,7 +824,7 @@ export default function Home() {
         {/* Text input */}
         {!taskQuestion && (
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
-            <div className="input-bar flex items-center gap-2 px-5 py-2.5">
+            <div className="input-bar flex items-center gap-2 px-5 py-2.5 glow-purple">
               <input
                 ref={inputRef}
                 type="text"
