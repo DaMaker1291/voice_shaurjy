@@ -3799,7 +3799,7 @@ if sys.platform == "darwin":
 
     @register("lock")
     def _mac_lock(_):
-        _mac_run("/System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend 2>/dev/null")
+        _mac_run("""osascript -e 'tell application "System Events" to keystroke "q" using {command down, control down}' 2>/dev/null || pmset displaysleepnow 2>/dev/null || /System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend 2>/dev/null""")
         return "Locking screen..."
 
     @register("disk_info")

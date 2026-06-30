@@ -70,6 +70,17 @@ def run(cmd: str, timeout=30) -> str:
         return f"Error: {e}"
 
 
+def _mac_speak(text: str) -> str:
+    """Speak text using macOS say command via subprocess (no shell)."""
+    if not text:
+        return ""
+    try:
+        import subprocess
+        subprocess.run(["say", "-v", "Samantha"], input=text[:200].encode("utf-8"), timeout=30)
+        return f'Speaking: "{text[:60]}..."'
+    except Exception as e:
+        return f"Speak error: {e}"
+
 def macos_exec(action: str, params: str = "") -> str:
     """Execute macOS-specific actions using osascript/open/shell."""
     p = platform.system()
@@ -98,11 +109,11 @@ def macos_exec(action: str, params: str = "") -> str:
         "process_list": lambda: run("ps aux --sort=-%cpu | head -20"),
         "wifi_list": lambda: run("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -s 2>/dev/null || echo 'airport not found'"),
         "network_info": lambda: run("ifconfig en0 2>/dev/null || ifconfig en1 2>/dev/null || networksetup -getinfo Wi-Fi"),
-        "speak": lambda: run(f"say '{params[:200].replace(chr(39), '')}'"),
+        "speak": lambda: _mac_speak(params[:200]),
         "notify": lambda: run(f"osascript -e 'display notification \"{params[:200].replace(chr(34), '')}\" with title \"J.A.R.V.I.S.\" 2>/dev/null'"),
         "notify_persistent": lambda: _notify_window(params),
         "notify_center": lambda: _notify_window(params),
-        "lock": lambda: run("/System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend 2>/dev/null || echo 'Lock not supported'"),
+        "lock": lambda: run("""osascript -e 'tell application "System Events" to keystroke "q" using {command down, control down}' 2>/dev/null || pmset displaysleepnow 2>/dev/null || /System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend 2>/dev/null || echo 'Lock not supported'"""),
         "volume_set": lambda: run(f"osascript -e 'set volume output volume {params}'"),
         "volume_up": lambda: run("osascript -e 'set volume output volume (output volume of (get volume settings) + 10)'"),
         "volume_down": lambda: run("osascript -e 'set volume output volume (output volume of (get volume settings) - 10)'"),
