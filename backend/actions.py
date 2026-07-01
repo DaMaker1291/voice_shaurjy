@@ -1149,9 +1149,11 @@ def execute_action(action: str, user_text: str = "") -> str:
 
 
 def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
-    """Queue a Windows action and return relay_id. Frontend polls for result."""
+    """Queue a desktop action and return relay_id. Frontend polls for result."""
     try:
-        from relay import queue_action
+        from relay import is_relay_alive, queue_action
+        if not is_relay_alive(user_id):
+            return "__NEEDS_RELAY__:" + f"Action '{action}' needs the relay agent on your computer. Open a terminal in the project folder and run:\n  macOS/Linux: ./run-relay.sh\n  Windows: run-relay.bat\nThen try again."
         relay_id = queue_action(action, params, user_id=user_id)
         return f"__RELAY__:{relay_id}:{action}"
     except Exception as e:
@@ -1166,6 +1168,7 @@ _CLOUD_SAFE_ACTIONS = {
     "whatsapp_open", "whatsapp_read", "whatsapp_unread", "whatsapp_send", "whatsapp_schedule",
     "web_app_open", "web_navigate", "web_page_read", "web_screenshot", "web_click_text", "web_type", "web_find",
     "web_current", "web_close", "teams_open", "teams_status", "teams_assignments",
+    "spotify",
 }
 
 
@@ -2386,7 +2389,12 @@ def _music(_): _ps('Start-Process "spotify:" 2>$null; if(-not$?){Start-Process "
 @register("music_lofi")
 def _music_lofi(_): _ps('Start-Process "https://www.youtube.com/results?search_query=lofi+study+beats"'); return "Lo-fi beats..."
 @register("spotify")
-def _spotify(_): _ps('Start-Process "spotify:" 2>$null; if(-not$?){Start-Process "https://open.spotify.com"}'); return "Opening Spotify..."
+def _spotify(_):
+    if os.name == "nt":
+        _ps('Start-Process "spotify:" 2>$null; if(-not$?){Start-Process "https://open.spotify.com"}')
+    else:
+        _web_run("web_navigate", "https://open.spotify.com")
+    return "Opening Spotify..."
 @register("media_next")
 def _media_next(_): _ps('Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("{MEDIA_NEXT}")'); return "Next track."
 @register("media_prev")

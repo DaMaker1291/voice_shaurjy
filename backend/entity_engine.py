@@ -419,6 +419,9 @@ class Entity:
             result = cloud_safe_execute(action, text, user_id=self.user_id)
             label = _ACTION_LABELS.get(action, "")
             self._set_mood("focused")
+            if result.startswith("__NEEDS_RELAY__:"):
+                msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
+                return {"text": f"{msg}", "action": None}
             if result.startswith("__RELAY__:"):
                 parts = result.split(":", 2)
                 relay_id = parts[1] if len(parts) > 1 else ""
@@ -460,6 +463,9 @@ class Entity:
             result = cloud_safe_execute("ai_computer_task", text, user_id=self.user_id)
             label = _ACTION_LABELS.get("ai_computer_task", "🤖 AI Computer Agent")
             self._set_mood("focused")
+            if result.startswith("__NEEDS_RELAY__:"):
+                msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
+                return {"text": f"{msg}", "action": None}
             if result.startswith("__RELAY__:"):
                 parts = result.split(":", 2)
                 relay_id = parts[1] if len(parts) > 1 else ""
