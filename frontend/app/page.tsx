@@ -287,6 +287,15 @@ export default function Home() {
         setActionType(res.action_type || "action");
         setSimTask(null);
 
+        // Handle "relay agent needed" — show instructions, don't pretend it's executing
+        if (res.action === "__needs_relay__") {
+          setMessages((p) => [...p, { role: "assistant", content: reply }]);
+          setLastResponse(reply);
+          setTimeout(() => setActionFeedback(null), 8000);
+          speak(reply);
+          return;
+        }
+
                 // Handle QR code image (WhatsApp Web pairing)
         if (res.qr_image) {
           setMessages((p) => [...p, {

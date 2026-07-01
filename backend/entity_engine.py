@@ -421,7 +421,7 @@ class Entity:
             self._set_mood("focused")
             if result.startswith("__NEEDS_RELAY__:"):
                 msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
-                return {"text": f"{msg}", "action": None}
+                return {"text": f"{msg}", "action": "__needs_relay__"}
             if result.startswith("__RELAY__:"):
                 parts = result.split(":", 2)
                 relay_id = parts[1] if len(parts) > 1 else ""
@@ -465,7 +465,7 @@ class Entity:
             self._set_mood("focused")
             if result.startswith("__NEEDS_RELAY__:"):
                 msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
-                return {"text": f"{msg}", "action": None}
+                return {"text": f"{msg}", "action": "__needs_relay__"}
             if result.startswith("__RELAY__:"):
                 parts = result.split(":", 2)
                 relay_id = parts[1] if len(parts) > 1 else ""
