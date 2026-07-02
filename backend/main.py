@@ -81,8 +81,28 @@ async def text_chat(query: TextQuery):
 
 @app.post("/api/task/respond")
 async def task_respond(req: TaskRespond):
-    from backend.orchestrator import continue_task
+    # Handle launch preference questions (app vs browser)
+    if req.session_id.startswith("launch_"):
+        from actions import cloud_safe_execute, _ACTION_LABELS
+        from entity_engine import get_entity
+        action_name = req.session_id[7:]  # remove "launch_" prefix
+        ans = req.response.strip().lower()
+        if ans in ("app", "native", "desktop", "native app", "in the app", "in app"):
+            entity = get_entity(req.user_id or "local")
+            entity.memory.add_preference(f"launch_{action_name}", "app")
+            # Try executing via relay
+            result = cloud_safe_execute(action_name, req.response, user_id=req.user_id or "local")
+            if result.startswith("__NEEDS_RELAY__:"):
+                return {"type": "ask", "question": "The relay agent isn't running. Start it with:\n  macOS: ./run-relay.sh\n  Windows: run-relay.bat\nThen try again.", "session_id": req.session_id}
+            return {"type": "complete", "text": f"Saved! I'll use the app for that next time. Executing now...\n{result}"}
+        else:
+            # Browser — save preference and run on server
+            entity = get_entity(req.user_id or "local")
+            entity.memory.add_preference(f"launch_{action_name}", "browser")
+            result = cloud_safe_execute(action_name, req.response, user_id=req.user_id or "local")
+            return {"type": "complete", "text": f"Opening in your browser...\n{result}"}
 
+    from backend.orchestrator import continue_task
     result = continue_task(req.session_id, req.response)
     return result
 

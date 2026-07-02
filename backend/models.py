@@ -26,6 +26,7 @@ class LiveKitTokenRequest(BaseModel):
 class TaskRespond(BaseModel):
     session_id: str
     response: str
+    user_id: str = "local"
 
 
 class ReminderCreate(BaseModel):

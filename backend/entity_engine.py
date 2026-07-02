@@ -421,6 +421,18 @@ class Entity:
 
         action = detect_action(text)
         if action:
+            # Check launch preference for launchable actions
+            LAUNCHABLE_ACTIONS = {"spotify", "whatsapp_open", "web_app_open", "teams_open"}
+            if action in LAUNCHABLE_ACTIONS:
+                pref = self.memory.get_preference(f"launch_{action}")
+                if not pref:
+                    return {
+                        "action": "ask_launch",
+                        "launch_action": action,
+                        "question": f"Should I open that in the app (requires relay) or in your browser?",
+                        "text": f"App or browser?",
+                    }
+
             result = cloud_safe_execute(action, text, user_id=self.user_id)
             label = _ACTION_LABELS.get(action, "")
             self._set_mood("focused")
@@ -566,6 +578,20 @@ Recent interactions:
         if not skip_actions:
             action_result = self._route_action(user_input)
             if action_result and action_result.get("action"):
+                # Handle launch preference question — show as ask task
+                if action_result["action"] == "ask_launch":
+                    result["task"] = {
+                        "type": "ask",
+                        "question": action_result.get("question", "App or browser?"),
+                        "session_id": f"launch_{action_result['launch_action']}",
+                        "step": 1, "total": 1,
+                        "text": f"❓ {action_result.get('question', 'App or browser?')}",
+                        "launch_action": action_result["launch_action"],
+                    }
+                    result["text"] = action_result.get("question", "App or browser?")
+                    self.memory.log_interaction(user_input, result["text"], "ask_launch")
+                    return result
+
                 result["action"] = action_result["action"]
                 result["text"] = action_result.get("text", "")
                 result["thought"] = f"Executing {action_result['action']}..."
