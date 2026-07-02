@@ -3565,8 +3565,12 @@ def _ai_computer_task(text):
     if result.success:
         return f"✅ Done: {result.summary}"
     elif result.steps > 0:
+        if result.summary.startswith("ASK:"):
+            return f"__ASK__:{result.summary[4:].strip()}"
         return f"Partially done after {result.steps} steps ({round(result.duration_sec, 1)}s): {result.summary}"
     else:
+        if result.summary.startswith("ASK:"):
+            return f"__ASK__:{result.summary[4:].strip()}"
         return f"Screen agent: {result.summary}"
 
 

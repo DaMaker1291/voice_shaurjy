@@ -669,6 +669,58 @@ def main():
         sys.path.insert(0, backend_dir)
         has_actions = True
 
+    # ── Overlay management ──────────────────────────────────────
+    _overlay_proc = None
+    _STATUS_FILE = "/tmp/jarvis_overlay_status.txt"
+
+    def _overlay_status(text: str):
+        try:
+            with open(_STATUS_FILE, "w") as f:
+                f.write(text[:200])
+        except Exception:
+            pass
+
+    def _show_overlay(text: str):
+        nonlocal _overlay_proc
+        _hide_overlay()
+        _overlay_status(text)
+        overlay_script = os.path.join(os.path.dirname(__file__), "backend", "overlay.py")
+        if os.path.isfile(overlay_script):
+            try:
+                _overlay_proc = subprocess.Popen(
+                    [sys.executable, overlay_script, "--status", text[:200]],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                print(f"[Relay] Mesh overlay shown (pid={_overlay_proc.pid})")
+            except Exception as e:
+                print(f"[Relay] Overlay spawn error: {e}")
+
+    def _hide_overlay():
+        nonlocal _overlay_proc
+        if _overlay_proc:
+            try:
+                _overlay_proc.terminate()
+                _overlay_proc.wait(timeout=3)
+            except Exception:
+                try:
+                    _overlay_proc.kill()
+                except Exception:
+                    pass
+            _overlay_proc = None
+            print("[Relay] Mesh overlay hidden")
+        try:
+            if os.path.isfile(_STATUS_FILE):
+                os.remove(_STATUS_FILE)
+        except Exception:
+            pass
+
+    def _overlay_alive() -> bool:
+        nonlocal _overlay_proc
+        if _overlay_proc is None:
+            return False
+        return _overlay_proc.poll() is None
+
     # Poll for primary user_id AND fallback "local" (frontend hardcodes "local")
     poll_ids = list(dict.fromkeys([user_id, "local"]))  # dedup preserving order
     fallback_idx = 0
@@ -691,16 +743,32 @@ def main():
                 rid, act, params = a["relay_id"], a["action"], a.get("params", "")
                 print(f"[Relay] Executing: {act} ({params[:50] if params else ''})")
 
+                # Show overlay before executing
+                label = f"J.A.R.V.I.S. is executing: {act}"
+                if params:
+                    label += f" ({params[:80]})"
+                _show_overlay(label)
+
                 result = None
+                cancelled = False
+
+                # Check if overlay was dismissed (user typed "stop")
+                time.sleep(0.3)
+                if not _overlay_alive():
+                    result = "Cancelled by user (typed 'stop')"
+                    cancelled = True
+                    _hide_overlay()
 
                 # 1. Try macOS native executors first
-                if platform.system() == "Darwin":
+                if result is None and platform.system() == "Darwin":
+                    _overlay_status(f"Running macOS action: {act}")
                     result = macos_exec(act, params)
 
                 # 2. Try backend actions (import from actions.py)
                 if result is None and has_actions:
                     try:
                         from actions import execute_action
+                        _overlay_status(f"Running: {act}")
                         result = execute_action(act, params or act)
                     except Exception as e:
                         result = f"Action error: {e}"
@@ -708,9 +776,14 @@ def main():
                 # 3. Fallback: try shell
                 if result is None:
                     if platform.system() == "Darwin":
+                        _overlay_status(f"Opening: {act}")
                         result = run(f"open '{params}'") if params else f"Unknown action: {act}"
                     else:
                         result = f"Unknown action: {act}"
+
+                # Hide overlay after done (unless already dismissed)
+                if not cancelled:
+                    _hide_overlay()
 
                 post(f"{HF_API}/api/relay/result",
                      {"relay_id": rid, "result": str(result)[:2000], "success": True})

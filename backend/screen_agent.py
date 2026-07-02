@@ -87,9 +87,14 @@ def capture_screen() -> Optional[bytes]:
 
 # ── Vision analysis ────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are a computer-use AI. You see the screen and control the mouse and keyboard.
+SYSTEM_PROMPT = """You are a computer-use AI. You see the screen and control the mouse and keyboard. You can do ANYTHING a human can do on a computer — navigate any app, fill any form, use any website.
 
 Your task: break down the user's request into small steps and output ONE action at a time as JSON.
+
+IMPORTANT RULES:
+• If you're not sure what to do next (e.g., you can't find what you're looking for), output: {"action": "ask", "text": "your question here"} — this pauses and asks the user for guidance.
+• Never guess coordinates blindly. If you can't see the element, ask for help or try a different approach.
+• You can open apps, use websites, fill forms — anything a human can do.
 
 COMMON UI PATTERNS:
 • Address bar top of browser: click it, type URL, press enter
@@ -118,6 +123,7 @@ AVAILABLE ACTIONS (output ONLY valid JSON):
 {"action": "hotkey", "keys": ["ctrl", "c"]} — key combination
 {"action": "scroll", "amount": int}          — negative = down, positive = up
 {"action": "wait", "seconds": 0.5}
+{"action": "ask", "text": "your question here"}      — pauses and asks the user for guidance
 {"action": "done", "result": "summary of what was accomplished"}
 {"action": "fail", "reason": "why the task cannot be completed"}
 
@@ -385,6 +391,9 @@ def execute_vision_action(action: dict) -> str:
             time.sleep(float(action.get("seconds", 0.5)))
             return f"Waited {action.get('seconds', 0.5)}s"
 
+        elif act == "ask":
+            return f"ASK: {action.get('text', '')}"
+
         elif act == "done":
             return f"DONE: {action.get('result', 'Task complete')}"
 
@@ -464,6 +473,8 @@ def run_task(task_description: str, max_iter: int = MAX_ITERATIONS) -> TaskResul
                 return TaskResult(True, result[5:].strip(), step, time.time() - start, log)
             if result.startswith("FAIL:"):
                 return TaskResult(False, result[5:].strip(), step, time.time() - start, log)
+            if result.startswith("ASK:"):
+                return TaskResult(False, result, step, time.time() - start, log)
 
     except Exception as e:
         return TaskResult(False, f"Error: {e}", 0, time.time() - start, log)
