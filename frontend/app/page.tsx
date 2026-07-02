@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import BotSwarm from "@/components/BotSwarm";
 import Sidebar from "@/components/Sidebar";
+import Link from "next/link";
 import { entityProcess } from "@/lib/api";
 
 interface Message { role: string; content: string; image?: string; link?: string }
@@ -626,19 +627,19 @@ export default function Home() {
           {showPageNav && (
             <div className="absolute top-8 right-0 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-2 shadow-2xl min-w-[140px] z-50 animate-fade-in glow-purple" onClick={() => setShowPageNav(false)}>
               {[
-                { href: "/app", label: "Chat" },
-                { href: "/app/dashboard", label: "Brain" },
-                { href: "/app/secretary", label: "Secretary" },
-                { href: "/app/life", label: "Life OS" },
-                { href: "/app/trading", label: "Trading" },
-                { href: "/app/marketplace", label: "Plugins" },
-                { href: "/app/smarthome", label: "Smart Home" },
-                { href: "/app/settings", label: "Settings" },
+                { href: "/", label: "Chat" },
+                { href: "/dashboard", label: "Brain" },
+                { href: "/secretary", label: "Secretary" },
+                { href: "/life", label: "Life OS" },
+                { href: "/trading", label: "Trading" },
+                { href: "/marketplace", label: "Plugins" },
+                { href: "/smarthome", label: "Smart Home" },
+                { href: "/settings", label: "Settings" },
               ].map(l => (
-                <a key={l.href} href={l.href}
+                <Link key={l.href} href={l.href}
                   className="block text-[11px] font-mono text-gray-400 hover:text-purple-400 hover:bg-purple-900/10 px-3 py-1.5 rounded-lg transition-colors">
                   {l.label}
-                </a>
+                </Link>
               ))}
             </div>
           )}

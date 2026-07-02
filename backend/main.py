@@ -977,6 +977,11 @@ async def serve_frontend(req, exc):
             if os.path.isfile(fp_html):
                 from fastapi.responses import FileResponse
                 return FileResponse(fp_html)
+            # Check for directory/index.html (Next.js static export pattern)
+            fp_index = os.path.join(_frontend_dir, path, "index.html")
+            if os.path.isfile(fp_index):
+                from fastapi.responses import FileResponse
+                return FileResponse(fp_index)
         fp = os.path.join(_frontend_dir, path)
         if not os.path.isfile(fp):
             fp = os.path.join(_frontend_dir, "index.html")
