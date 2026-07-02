@@ -1160,15 +1160,10 @@ def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
         return f"Cannot execute '{action}' on this server and relay unavailable: {e}"
 
 
-# Cloud-safe actions — ones that work on Linux without Windows-specific APIs
+# Cloud-safe actions — ones that work on Linux without needing a relay agent
 _CLOUD_SAFE_ACTIONS = {
     "weather", "public_ip", "math_eval", "timer", "alarm",
     "time", "timer_stop", "timer_remaining",
-
-    "whatsapp_open", "whatsapp_read", "whatsapp_unread", "whatsapp_send", "whatsapp_schedule",
-    "web_app_open", "web_navigate", "web_page_read", "web_screenshot", "web_click_text", "web_type", "web_find",
-    "web_current", "web_close", "teams_open", "teams_status", "teams_assignments",
-    "spotify",
 }
 
 
