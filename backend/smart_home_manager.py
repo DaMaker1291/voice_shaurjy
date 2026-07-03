@@ -42,19 +42,19 @@ DEVICE_CAPABILITIES = {
         "label": "💡 Light",
         "icon": "💡",
         "controls": ["on", "off", "toggle", "brightness", "color", "temperature"],
-        "discovery": ["hue", "wled", "tasmota", "tuya", "esp", "matter", "mqtt"],
+        "discovery": ["hue", "wled", "tasmota", "tuya", "esp", "matter", "mqtt", "eufy"],
     },
     "switch": {
         "label": "🔌 Switch/Plug",
         "icon": "🔌",
         "controls": ["on", "off", "toggle", "power_consumption"],
-        "discovery": ["kasa", "shelly", "sonoff", "tasmota", "tuya", "mqtt", "matter"],
+        "discovery": ["kasa", "shelly", "sonoff", "tasmota", "tuya", "mqtt", "matter", "eufy"],
     },
     "sensor": {
         "label": "📡 Sensor",
         "icon": "📡",
         "controls": ["read", "battery"],
-        "discovery": ["esp", "mqtt", "zigbee", "matter"],
+        "discovery": ["esp", "mqtt", "zigbee", "matter", "eufy"],
     },
     "thermostat": {
         "label": "🌡 Thermostat",
@@ -66,7 +66,7 @@ DEVICE_CAPABILITIES = {
         "label": "🔒 Lock",
         "icon": "🔒",
         "controls": ["lock", "unlock", "status", "battery"],
-        "discovery": ["matter", "mqtt", "ha", "tuya"],
+        "discovery": ["matter", "mqtt", "ha", "tuya", "eufy"],
     },
     "cover": {
         "label": "🪟 Cover/Blind",
@@ -78,13 +78,13 @@ DEVICE_CAPABILITIES = {
         "label": "📷 Camera/Doorbell",
         "icon": "📷",
         "controls": ["snapshot", "stream", "record", "two_way_audio", "motion_detect"],
-        "discovery": ["rtsp", "onvif", "ha", "mqtt"],
+        "discovery": ["rtsp", "onvif", "ha", "mqtt", "eufy"],
     },
     "vacuum": {
         "label": "🤖 Robot Vacuum",
         "icon": "🤖",
         "controls": ["start", "stop", "pause", "dock", "status", "schedule", "find"],
-        "discovery": ["miio", "mqtt", "ha", "tuya"],
+        "discovery": ["miio", "mqtt", "ha", "tuya", "eufy"],
     },
     "climate": {
         "label": "❄️ Climate (AC/Fan)",
@@ -102,7 +102,7 @@ DEVICE_CAPABILITIES = {
         "label": "🏠 Hub/Bridge",
         "icon": "🏠",
         "controls": ["status", "pair", "remove"],
-        "discovery": ["hue", "ha", "mqtt", "zigbee", "matter"],
+        "discovery": ["hue", "ha", "mqtt", "zigbee", "matter", "eufy"],
     },
     "alexa": {
         "label": "🔊 Alexa/Echo",
@@ -115,6 +115,12 @@ DEVICE_CAPABILITIES = {
         "icon": "🔊",
         "controls": ["volume", "play", "pause", "next", "speak"],
         "discovery": ["upnp", "ha", "airplay", "dlna"],
+    },
+    "doorbell": {
+        "label": "🔔 Doorbell",
+        "icon": "🔔",
+        "controls": ["snapshot", "stream", "motion_detect", "record", "speak"],
+        "discovery": ["eufy", "ring", "nest", "onvif", "rtsp"],
     },
 }
 
@@ -327,7 +333,8 @@ def discover_mdns(timeout=3) -> list[dict]:
         "_googlecast._tcp.local.", "_roku._tcp.local.", "_sonos._tcp.local.",
         "_ewelink._tcp.local.", "_tplink._tcp.local.", "_mqtt._tcp.local.",
         "_esphomelib._tcp.local.", "_wled._tcp.local.", "_matter._tcp.local.",
-        "_matterd._tcp.local.",
+        "_matterd._tcp.local.", "_eufy._tcp.local.", "_eufylife._tcp.local.",
+        "_eufycam._tcp.local.", "_eufy._udp.local.",
     ]
     try:
         zc = _zc.Zeroconf()
@@ -515,6 +522,45 @@ def discover_tuya(ips: list[str]) -> list[dict]:
     return found
 
 
+def discover_eufy(ips: list[str]) -> list[dict]:
+    """Discover Eufy cameras, doorbells, locks, vacuums, lights."""
+    found = []
+    for ip in ips:
+        # Probe common Eufy HTTP API ports
+        for port in [5000, 8883, 8443, 80, 443]:
+            body = _curl(f"http://{ip}:{port}/", timeout=2)
+            if body:
+                body_lower = body.lower()
+                if "eufy" in body_lower or "eufylife" in body_lower or "anka" in body_lower:
+                    dtype = "camera"
+                    if "lock" in body_lower or "smart lock" in body_lower:
+                        dtype = "lock"
+                    elif "vacuum" in body_lower or "clean" in body_lower:
+                        dtype = "vacuum"
+                    elif "light" in body_lower or "lamp" in body_lower or "bulb" in body_lower:
+                        dtype = "light"
+                    elif "doorbell" in body_lower or "door bell" in body_lower:
+                        dtype = "doorbell"
+                    elif "hub" in body_lower or "homebase" in body_lower:
+                        dtype = "hub"
+                    found.append({"ip": ip, "port": port, "protocol": "eufy", "type": dtype})
+                    break
+        # Probe RTSP port for Eufy cameras
+        r = _run(f"timeout 2 bash -c 'echo -n > /dev/tcp/{ip}/554' 2>/dev/null && echo open", timeout=3)
+        if "open" in r:
+            # Could be Eufy camera, check if not already found
+            already = any(f["ip"] == ip for f in found)
+            if not already:
+                found.append({"ip": ip, "port": 554, "protocol": "eufy", "type": "camera"})
+        # Probe Eufy HomeBase port
+        r = _run(f"timeout 2 bash -c 'echo -n > /dev/tcp/{ip}/5000' 2>/dev/null && echo open", timeout=3)
+        if "open" in r:
+            already = any(f["ip"] == ip for f in found)
+            if not already:
+                found.append({"ip": ip, "port": 5000, "protocol": "eufy", "type": "hub"})
+    return found
+
+
 def _probe_device_type(ip: str, port: int, body: str) -> str:
     """Heuristic device type classification."""
     body_lower = body.lower()
@@ -652,6 +698,16 @@ def discover_all(full_scan=True) -> list[SmartDevice]:
         wleds = discover_wled(lan_ips)
         for w in wleds:
             _add(w["ip"], w.get("name", "WLED"), "light", "wled", model=w.get("model", ""))
+    except:
+        pass
+
+    # Eufy cameras, doorbells, locks, vacuums, lights
+    try:
+        eufy_devices = discover_eufy(lan_ips)
+        for e in eufy_devices:
+            dtype = e.get("type", "camera")
+            name = f"Eufy {DEVICE_CAPABILITIES.get(dtype, {}).get('label', 'Device')} at {e['ip']}"
+            _add(e["ip"], name, dtype, "eufy", port=e.get("port", 5000))
     except:
         pass
 
@@ -970,6 +1026,57 @@ def _execute_control(dev: SmartDevice, action: str, params: str = "") -> str:
             results.append(f"Alexa volume: {pct}%")
         else:
             results.append(f"Alexa {action}")
+
+    # ── Eufy ──
+    elif proto == "eufy":
+        if dev.type == "camera" or dev.type == "doorbell":
+            if action == "snapshot":
+                r = _curl(f"http://{ip}:{port}/cgi-bin/snapshot.cgi", timeout=3)
+                results.append("Eufy snapshot captured" if r else "Eufy snapshot attempted")
+            elif action == "stream":
+                results.append(f"Eufy stream: rtsp://{ip}:554/live0")
+            elif action == "motion_detect":
+                results.append(f"Eufy motion detection: {action}")
+            elif action == "speak" and params:
+                results.append(f"Eufy speak: {params[:50]}")
+        elif dev.type == "lock":
+            if action == "lock":
+                _curl(f"http://{ip}:{port}/lock", timeout=2)
+                results.append("Eufy lock engaged")
+            elif action == "unlock":
+                _curl(f"http://{ip}:{port}/unlock", timeout=2)
+                results.append("Eufy lock released")
+            elif action == "status":
+                st = _curl(f"http://{ip}:{port}/status", timeout=2)
+                results.append(st[:200] if st else "Eufy lock status unknown")
+        elif dev.type == "vacuum":
+            if action == "start":
+                _curl(f"http://{ip}:{port}/clean", timeout=2)
+                results.append("Eufy vacuum started")
+            elif action == "stop":
+                _curl(f"http://{ip}:{port}/stop", timeout=2)
+                results.append("Eufy vacuum stopped")
+            elif action == "dock":
+                _curl(f"http://{ip}:{port}/dock", timeout=2)
+                results.append("Eufy vacuum returning to dock")
+            elif action == "status":
+                st = _curl(f"http://{ip}:{port}/status", timeout=2)
+                results.append(st[:200] if st else "Eufy vacuum status unknown")
+        elif dev.type == "light":
+            if action in ("on", "off"):
+                state = "true" if action == "on" else "false"
+                _curl(f"http://{ip}:{port}/state", f'{{"on":{state}}}', timeout=2)
+                results.append(f"Eufy light {action}")
+            elif action == "brightness":
+                bri = min(100, max(0, int(params))) if params.isdigit() else 50
+                _curl(f"http://{ip}:{port}/state", f'{{"bri":{bri}}}', timeout=2)
+                results.append(f"Eufy brightness: {bri}%")
+        elif dev.type == "hub":
+            if action == "status":
+                st = _curl(f"http://{ip}:{port}/status", timeout=2)
+                results.append(st[:200] if st else "Eufy HomeBase status unknown")
+        else:
+            results.append(f"Eufy device {action} sent to {ip}")
 
     # ── Vacuum (Roomba, Xiaomi, etc.) ──
     elif proto == "miio" or dev.type == "vacuum":
