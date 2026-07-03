@@ -3960,6 +3960,16 @@ if sys.platform == "darwin":
     @register("smart_home_discover")
     def _mac_sh_discover(_):
         """Probe for known smart home devices on the LAN."""
+        try:
+            from smart_home_manager import run_discovery
+            devices = run_discovery()
+            lines = [f"🏠 Smart Home: {len(devices)} devices found"]
+            for d in devices[:40]:
+                status = "🟢" if d.get("status") == "online" else "⚪"
+                lines.append(f"{status} {d.get('name','?')} ({d.get('type','?')}) @ {d.get('ip','?')} [{d.get('protocol','?')}]")
+            return "\n".join(lines)
+        except Exception:
+            pass
         ips = _mac_run("arp -a 2>/dev/null | grep -oE '\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b' | head -20").split()
         found = []
         for ip in ips:
@@ -3985,10 +3995,20 @@ if sys.platform == "darwin":
         """
         parts = text.split()
         if len(parts) < 2: return "Usage: smart_home_control <ip> <on|off|toggle|status>"
-        ip = parts[0]
+        target = parts[0]
         action = parts[1].lower()
         rest = " ".join(parts[2:])
 
+        try:
+            from smart_home_manager import control_device, control_by_ip
+            r = control_device(target, action, rest)
+            if "not found" in r:
+                r = control_by_ip(target, action, rest)
+            return r
+        except Exception:
+            pass
+
+        ip = target
         results = []
 
         # Try Philips Hue (bridge sends to all lights)

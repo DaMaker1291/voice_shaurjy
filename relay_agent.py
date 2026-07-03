@@ -215,6 +215,18 @@ def _send_wol(mac: str) -> str:
         return f"WoL error: {e}"
 
 def _sh_discover() -> str:
+    """Discover smart home devices using smart_home_manager or fallback."""
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
+        from smart_home_manager import run_discovery
+        devices = run_discovery()
+        lines = [f"🏠 Smart Home: {len(devices)} devices found"]
+        for d in devices[:30]:
+            status = "🟢" if d.get("status") == "online" else "⚪"
+            lines.append(f"{status} {d.get('name','?')} ({d.get('type','?')}) @ {d.get('ip','?')} [{d.get('protocol','?')}]")
+        return "\n".join(lines)
+    except Exception as e:
+        pass
     ips = run("arp -a | grep -oE '\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b' | head -20")
     if not ips: return "No devices on LAN"
     found = []
@@ -228,6 +240,23 @@ def _sh_discover() -> str:
     return f"Scanned {len(ips.split())} hosts. No smart services found.\n{ips}"
 
 def _sh_control(params: str) -> str:
+    """Control a smart home device by IP or device_id."""
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
+        from smart_home_manager import control_by_ip, control_device
+        parts = params.split()
+        if len(parts) < 2:
+            return "Usage: ip/device_id on|off|toggle|status|brightness <val>|temperature_set <val>"
+        target = parts[0]
+        action = parts[1].lower()
+        rest = " ".join(parts[2:])
+        # Try as device_id first, then IP
+        result = control_device(target, action, rest)
+        if "not found" in result:
+            result = control_by_ip(target, action, rest)
+        return result
+    except Exception as e:
+        pass
     parts = params.split()
     if len(parts) < 2: return "Usage: ip on|off|toggle|status"
     ip, action = parts[0], parts[1].lower()

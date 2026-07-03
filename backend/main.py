@@ -823,6 +823,83 @@ async def jarvis_command_post(data: dict):
 
 _relay_devices: dict[str, dict] = {}
 
+
+# ── Smart Home API ──────────────────────────────────────────────
+
+@app.get("/api/smarthome/devices")
+async def smarthome_devices():
+    from smart_home_manager import get_all_devices
+    return {"devices": [d.to_dict() for d in get_all_devices()]}
+
+@app.get("/api/smarthome/dashboard")
+async def smarthome_dashboard():
+    from smart_home_manager import get_dashboard
+    return get_dashboard()
+
+@app.post("/api/smarthome/discover")
+async def smarthome_discover():
+    from smart_home_manager import run_discovery
+    devices = run_discovery()
+    return {"devices": devices, "count": len(devices)}
+
+@app.post("/api/smarthome/control")
+async def smarthome_control(data: dict):
+    from smart_home_manager import control_device, control_by_ip
+    device_id = data.get("device_id", "")
+    ip = data.get("ip", "")
+    action = data.get("action", "on")
+    params = data.get("params", "")
+    if device_id:
+        result = control_device(device_id, action, params)
+    elif ip:
+        result = control_by_ip(ip, action, params)
+    else:
+        return {"error": "Provide device_id or ip"}
+    return {"result": result}
+
+@app.get("/api/smarthome/scenes")
+async def smarthome_scenes():
+    from smart_home_manager import get_scenes
+    return {"scenes": get_scenes()}
+
+@app.post("/api/smarthome/scenes/activate")
+async def smarthome_scene_activate(data: dict):
+    from smart_home_manager import activate_scene
+    name = data.get("name", "")
+    result = activate_scene(name)
+    return {"result": result}
+
+@app.post("/api/smarthome/scenes/create")
+async def smarthome_scene_create(data: dict):
+    from smart_home_manager import create_scene
+    name = data.get("name", "")
+    devices = data.get("devices", [])
+    scene = create_scene(name, devices)
+    return {"scene": scene}
+
+@app.post("/api/smarthome/device/rename")
+async def smarthome_device_rename(data: dict):
+    from smart_home_manager import get_device, update_device
+    device_id = data.get("device_id", "")
+    new_name = data.get("name", "")
+    room = data.get("room", "")
+    dev = get_device(device_id)
+    if not dev:
+        return {"error": "Device not found"}
+    if new_name:
+        dev.name = new_name
+    if room:
+        dev.room = room
+    update_device(dev)
+    return {"device": dev.to_dict()}
+
+@app.post("/api/smarthome/device/delete")
+async def smarthome_device_delete(data: dict):
+    from smart_home_manager import delete_device
+    device_id = data.get("device_id", "")
+    delete_device(device_id)
+    return {"deleted": True}
+
 @app.post("/api/relay/register")
 async def relay_register(data: dict):
     """Called by relay agent on startup to register this device."""
