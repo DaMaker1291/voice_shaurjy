@@ -22,6 +22,13 @@ interface EntityState {
 
 interface BotEvent { type: string; label: string; timestamp: number }
 
+interface SystemStats {
+  cpu?: { percent: number; count: number };
+  memory?: { percent: number; used_gb: number; total_gb: number };
+  battery?: { percent: number; charging: boolean; present: boolean };
+  uptime_h?: number;
+}
+
 const BASE = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
   ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
   : "https://dgfhgjhj-jarvis-ai-brain.hf.space";
@@ -31,6 +38,46 @@ const SUGGESTIONS = [
   "volume to 50", "lock my PC", "take a screenshot",
   "open Spotify", "battery status",
 ];
+
+const NAV_ITEMS = [
+  { href: "/", label: "Chat", icon: "💬" },
+  { href: "/acc", label: "ACC", icon: "🎮" },
+  { href: "/dashboard", label: "Brain", icon: "🧠" },
+  { href: "/smarthome", label: "Home", icon: "🏠" },
+  { href: "/settings", label: "Settings", icon: "⚙" },
+];
+
+function SystemStatsWidget({ stats }: { stats: SystemStats | null }) {
+  if (!stats) return null;
+  return (
+    <div className="flex items-center gap-4 text-[9px] font-mono">
+      {stats.cpu && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-900/50 border border-gray-800/30">
+          <span className="text-gray-600">CPU</span>
+          <span className={stats.cpu.percent > 80 ? "text-red-400" : stats.cpu.percent > 50 ? "text-yellow-400" : "text-green-400"}>
+            {stats.cpu.percent}%
+          </span>
+        </div>
+      )}
+      {stats.memory && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-900/50 border border-gray-800/30">
+          <span className="text-gray-600">RAM</span>
+          <span className={stats.memory.percent > 80 ? "text-red-400" : stats.memory.percent > 50 ? "text-yellow-400" : "text-green-400"}>
+            {stats.memory.used_gb.toFixed(1)}/{stats.memory.total_gb.toFixed(0)}GB
+          </span>
+        </div>
+      )}
+      {stats.battery?.present && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-900/50 border border-gray-800/30">
+          <span className="text-gray-600">BAT</span>
+          <span className={stats.battery.percent < 20 ? "text-red-400" : stats.battery.charging ? "text-green-400" : "text-yellow-400"}>
+            {stats.battery.percent}%{stats.battery.charging ? " ⚡" : ""}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ParticleBg() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -83,7 +130,6 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [textInput, setTextInput] = useState("");
-  const [showInput, setShowInput] = useState(true);
   const [listening, setListening] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -107,7 +153,6 @@ export default function Home() {
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const taskInputRef = useRef<HTMLInputElement>(null);
   const retryCountRef = useRef(0);
-  const [simTask, setSimTask] = useState<string | null>(null);
   const [strategies, setStrategies] = useState<Strategy[] | null>(null);
   const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
   const [proactiveSuggestions, setProactiveSuggestions] = useState<string[]>([]);
@@ -121,9 +166,10 @@ export default function Home() {
   const [entityThought, setEntityThought] = useState("");
   const [centerOverlay, setCenterOverlay] = useState<string | null>(null);
   const [lastResponse, setLastResponse] = useState<string>("");
-  const [showPageNav, setShowPageNav] = useState(false);
+  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+  const [accDeviceCount, setAccDeviceCount] = useState(0);
+  const [accOnlineCount, setAccOnlineCount] = useState(0);
   const overlayTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const capturedTextRef = useRef("");
 
   const showCenterOverlay = useCallback((content: string) => {
     setCenterOverlay(content);
@@ -142,7 +188,31 @@ export default function Home() {
 
   useEffect(() => { synthRef.current = window.speechSynthesis; }, []);
 
-  // Poll entity state for mood/thought
+  // Poll system stats
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [sysRes, accRes] = await Promise.allSettled([
+          fetch(`${BASE}/api/system/stats`),
+          fetch(`${BASE}/api/acc/devices`),
+        ]);
+        if (sysRes.status === "fulfilled") {
+          const data = await sysRes.value.json();
+          setSystemStats({ cpu: data.cpu, memory: data.memory, battery: data.battery, uptime_h: data.uptime_h });
+        }
+        if (accRes.status === "fulfilled") {
+          const data = await accRes.value.json();
+          setAccDeviceCount(data.total || 0);
+          setAccOnlineCount(data.online || 0);
+        }
+      } catch {}
+    };
+    fetchStats();
+    const i = setInterval(fetchStats, 10000);
+    return () => clearInterval(i);
+  }, []);
+
+  // Poll entity state
   useEffect(() => {
     const i = setInterval(async () => {
       try {
@@ -156,14 +226,12 @@ export default function Home() {
     return () => clearInterval(i);
   }, []);
 
-  // Scan device on startup
+  // Initial scan
   useEffect(() => {
     (async () => {
       setScanning(true);
       addBotEvent("action", "scanning device");
-      // Fire-and-forget device scan (relay on cloud, direct on local)
       fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" }).catch(() => {});
-      // Get whatever profile data exists (may be empty on first run)
       try {
         const res = await fetch(`${BASE}/api/profile?user_id=local`);
         const data = await res.json();
@@ -172,12 +240,10 @@ export default function Home() {
       } catch {}
       setScanning(false);
       addBotEvent("action", "scan complete");
-      // Show generic welcome — not stale "0 apps" message
       setMessages((p) => [...p, {
         role: "assistant",
         content: "Welcome back. I'm ready — ask me anything, or tap the orb to speak."
       }]);
-      // Retry profile fetch after 5s (gives relay scan time on cloud)
       setTimeout(async () => {
         try {
           const res = await fetch(`${BASE}/api/profile?user_id=local`);
@@ -268,22 +334,17 @@ export default function Home() {
           setMessages((p) => {
             const updated = [...p];
             const last = updated[updated.length - 1];
-            if (last && last.role === "assistant") {
-              last.content = resultText;
-            }
+            if (last && last.role === "assistant") last.content = resultText;
             return updated;
           });
           setLastResponse(resultText);
           setActionFeedback(resultText);
-          // Show relay result in center overlay
           if (resultText && resultText.length > 20) showCenterOverlay(resultText);
           setTimeout(() => setActionFeedback(null), 5000);
           return;
         }
         setTimeout(poll, 1000);
-      } catch {
-        setTimeout(poll, 2000);
-      }
+      } catch { setTimeout(poll, 2000); }
     };
     poll();
   }, [showCenterOverlay]);
@@ -303,10 +364,6 @@ export default function Home() {
     setActivityIntensity(1);
     addBotEvent("thinking", "processing query");
 
-    const complexTriggers = ["essay","document","report","write","type","compose","explain","analyze","holiday","vacation","trip","plan","research","investigate","create","make","build","set up","configure","scan","network scan","install","business","trading","homework","team page","workflow"];
-    const lower = text.toLowerCase();
-    const isComplex = complexTriggers.some(t => lower.includes(t)) && lower.split(" ").length >= 3;
-
     try {
       const res = await entityProcess(text);
       const reply = res.text || "";
@@ -321,21 +378,14 @@ export default function Home() {
         }]);
       }
 
-      if (res.follow_up?.length > 0) {
-        setFollowUpQuestions(res.follow_up);
-      }
-
-      if (res.proactive?.length > 0) {
-        setProactiveSuggestions(res.proactive);
-      }
+      if (res.follow_up?.length > 0) setFollowUpQuestions(res.follow_up);
+      if (res.proactive?.length > 0) setProactiveSuggestions(res.proactive);
 
       if (res.action) {
         addBotEvent("action", reply.slice(0, 60));
         setActionFeedback(reply);
         setActionType(res.action_type || "action");
-        setSimTask(null);
 
-        // Handle "relay agent needed" — show instructions, don't pretend it's executing
         if (res.action === "__needs_relay__") {
           setMessages((p) => [...p, { role: "assistant", content: reply }]);
           setLastResponse(reply);
@@ -344,60 +394,37 @@ export default function Home() {
           return;
         }
 
-                // Handle QR code image (WhatsApp Web pairing)
         if (res.qr_image) {
-          setMessages((p) => [...p, {
-            role: "assistant",
-            content: reply,
-            image: `data:image/png;base64,${res.qr_image}`,
-            link: res.wa_link || "https://wa.me/"
-          }]);
+          setMessages((p) => [...p, { role: "assistant", content: reply, image: `data:image/png;base64,${res.qr_image}`, link: res.wa_link || "https://wa.me/" }]);
           setLastResponse(reply);
-          speak("Scan this QR code with your phone to link WhatsApp Web, or tap the WhatsApp button to open the app");
+          speak("Scan this QR code with your phone to link WhatsApp Web");
           setTimeout(() => setActionFeedback(null), 4000);
           return;
         }
 
-        // Handle WhatsApp deep link — auto-open the app
         if (res.wa_link) {
-          setMessages((p) => [...p, {
-            role: "assistant",
-            content: reply,
-            link: res.wa_link
-          }]);
+          setMessages((p) => [...p, { role: "assistant", content: reply, link: res.wa_link }]);
           setLastResponse(reply);
           setTimeout(() => setActionFeedback(null), 4000);
-          // Auto-open WhatsApp
           setTimeout(() => { window.location.href = res.wa_link; }, 300);
           return;
         }
 
-        // Handle generic URL link — auto-open in browser
         if (res.link) {
-          setMessages((p) => [...p, {
-            role: "assistant",
-            content: reply,
-            link: res.link
-          }]);
+          setMessages((p) => [...p, { role: "assistant", content: reply, link: res.link }]);
           setLastResponse(reply);
           setTimeout(() => setActionFeedback(null), 4000);
           setTimeout(() => { window.location.href = res.link; }, 300);
           return;
         }
 
-        // Handle screenshot image
         if (res.image) {
-          setMessages((p) => [...p, {
-            role: "assistant",
-            content: reply,
-            image: `data:image/png;base64,${res.image}`
-          }]);
+          setMessages((p) => [...p, { role: "assistant", content: reply, image: `data:image/png;base64,${res.image}` }]);
           setLastResponse(reply);
           setTimeout(() => setActionFeedback(null), 4000);
           return;
         }
 
-        // Extract main data part for center overlay (skip first line / label)
         const lines = reply.split("\n");
         const mainPart = lines.slice(1).join("\n").trim();
         if (mainPart && mainPart.length > 20) showCenterOverlay(mainPart);
@@ -405,22 +432,18 @@ export default function Home() {
         if (res.async && res.relay_id) {
           setMessages((p) => [...p, { role: "assistant", content: reply }]);
           setLastResponse(reply);
-          // Poll for relay result
           pollRelayResult(res.relay_id);
         } else {
           setMessages((p) => [...p, { role: "assistant", content: reply }]);
           setLastResponse(reply);
           setTimeout(() => setActionFeedback(null), 4000);
         }
-      }
-      else if (res.task) {
+      } else if (res.task) {
         addBotEvent("workflow", "task started");
         _handleTaskResponse(res.task);
-      }
-      else if (reply) {
+      } else if (reply) {
         addBotEvent("action", "responding");
         speak(reply);
-        setSimTask(null);
         setLastResponse(reply);
         setMessages((p) => [...p, { role: "assistant", content: reply }]);
       }
@@ -432,7 +455,6 @@ export default function Home() {
       if (res.mood) setEntityMood(res.mood);
       if (res.mood_emoji) setEntityMoodEmoji(res.mood_emoji);
       if (res.thought) setEntityThought(res.thought);
-
     } catch (e) {
       addBotEvent("error", "backend unreachable");
       setLastResponse("(backend unreachable)");
@@ -457,7 +479,6 @@ export default function Home() {
   }, [strategies, addBotEvent]);
 
   const handleFollowUp = useCallback(async (q: string) => {
-    // Wrap follow-up so it's not treated as a new command (avoids accidental action triggers like "play", "search")
     setMessages((p) => [...p, { role: "user", content: q }]);
     if (messages.length === 0) setSidebarOpen(true);
     setThinking(true);
@@ -514,25 +535,16 @@ export default function Home() {
       setCollectedInfo(data.collected || {});
       const msgLink = data.link || data.wa_link || "";
       setMessages((p) => [...p, { role: "assistant", content: `✅ ${data.text}`, link: msgLink }]);
-      if (msgLink) {
-        setTimeout(() => { window.location.href = msgLink; }, 500);
-      }
+      if (msgLink) setTimeout(() => { window.location.href = msgLink; }, 500);
       speak("Task complete!");
     } else if (data.type === "workflow") {
       addBotEvent("workflow", data.text);
       setMessages((p) => [...p, { role: "assistant", content: `🔄 ${data.text}` }]);
     } else if (data?.workflow_result?.results) {
       for (const r of data.workflow_result.results) {
-        if (r.type === "ask") {
-          _handleTaskResponse({ type: "ask", question: r.question, session_id: data.execution_id });
-        } else if (r.type === "notify") {
-          setActionFeedback(r.text);
-          setActionType("workflow");
-          setTimeout(() => setActionFeedback(null), 2000);
-        } else if (r.type === "complete") {
-          addBotEvent("action", "workflow complete");
-          setMessages((p) => [...p, { role: "assistant", content: `✅ ${r.text}` }]);
-        }
+        if (r.type === "ask") _handleTaskResponse({ type: "ask", question: r.question, session_id: data.execution_id });
+        else if (r.type === "notify") { setActionFeedback(r.text); setTimeout(() => setActionFeedback(null), 2000); }
+        else if (r.type === "complete") { addBotEvent("action", "workflow complete"); setMessages((p) => [...p, { role: "assistant", content: `✅ ${r.text}` }]); }
       }
     } else if (data.type === "error") {
       addBotEvent("error", data.text);
@@ -542,11 +554,10 @@ export default function Home() {
     }
   }, [taskSession, speak, addBotEvent]);
 
-  // ── Speech ─────────────────────────────────────────────────
   const startListening = useCallback(() => {
     if (typeof window === "undefined") return;
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { setShowInput(true); setTimeout(() => inputRef.current?.focus(), 100); return; }
+    if (!SR) { setTimeout(() => inputRef.current?.focus(), 100); return; }
     const r = new SR();
     r.lang = "en-US";
     r.interimResults = true;
@@ -560,17 +571,12 @@ export default function Home() {
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const result = e.results[i];
         const transcript = result[0].transcript;
-        if (result.isFinal) {
-          final += (final ? " " : "") + transcript;
-          bestConfidence = Math.max(bestConfidence, result[0].confidence);
-        } else {
-          bestInterim += (bestInterim ? " " : "") + transcript;
-          bestConfidence = Math.max(bestConfidence, result[0].confidence);
-        }
+        if (result.isFinal) { final += (final ? " " : "") + transcript; bestConfidence = Math.max(bestConfidence, result[0].confidence); }
+        else { bestInterim += (bestInterim ? " " : "") + transcript; bestConfidence = Math.max(bestConfidence, result[0].confidence); }
       }
       const displayText = bestInterim || final;
       setInterim(displayText);
-      capturedTextRef.current = displayText;
+      (r as any)._capturedText = displayText;
       setConfidence(Math.round(bestConfidence * 100));
       if (final) {
         clearTimeout((r as any)._silenceTimer);
@@ -607,7 +613,7 @@ export default function Home() {
     clearTimeout((recognitionRef.current as any)?._silenceTimer);
     recognitionRef.current?.stop();
     setListening(false);
-    const t = capturedTextRef.current.trim();
+    const t = ((recognitionRef.current as any)?._capturedText || "").trim();
     setInterim("");
     if (t) {
       setShowSuggestions(false);
@@ -644,349 +650,329 @@ export default function Home() {
     return () => window.removeEventListener("keydown", h);
   }, [listening, stopListening, taskQuestion, textInput, sendTaskResponse]);
 
+  const orbState = listening ? "listening" : thinking ? "thinking" : speaking ? "speaking" : "idle";
 
   return (
-    <div className="relative h-screen w-full overflow-hidden flex flex-row" style={{ backgroundColor: '#05081a' }}>
+    <div className="relative h-screen w-full overflow-hidden flex flex-col" style={{ backgroundColor: '#05081a' }}>
       <div className="gradient-bg" />
       <div className="grid-overlay" />
       <div className="stars" />
       <div className="stars2" />
       <div className="stars3" />
       <div className="aurora" />
-      <div className="scan-overlay" />
-      <div className="particle-field">
-        {Array.from({ length: 40 }, (_, i) => (
-          <div
-            key={i}
-            className="particle"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDuration: `${10 + Math.random() * 30}s`,
-              animationDelay: `${Math.random() * 20}s`,
-            }}
-          />
-        ))}
-      </div>
       <ParticleBg />
 
-      {/* Floating orb decorations */}
-      <div className="floating-orb w-96 h-96 bg-purple-700/10 top-[-10%] left-[-5%]" style={{ animation: 'float-orb 8s ease-in-out infinite' }} />
-      <div className="floating-orb w-80 h-80 bg-cyan-700/8 bottom-[-5%] right-[-5%]" style={{ animation: 'float-orb 10s ease-in-out infinite 2s' }} />
-      <div className="floating-orb w-64 h-64 bg-blue-700/6 top-[40%] right-[-8%]" style={{ animation: 'float-orb 12s ease-in-out infinite 4s' }} />
-
-      <div className="relative z-10 flex-[3] min-w-0 flex flex-col px-4">
-
-        {/* Glass hero header */}
-        <div className="absolute top-0 left-0 right-0 z-30">
-          <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a1e]/80 via-[#0a0a1e]/40 to-transparent pointer-events-none" />
-          <div className="relative flex items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${
-                listening ? "bg-green-400 shadow-[0_0_12px_rgba(34,197,94,0.6)]" :
-                thinking ? "bg-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.6)]" :
-                speaking ? "bg-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.6)]" :
-                "bg-gray-600"
-              }`} />
-              <div className="flex items-baseline gap-2">
-                <span className="text-[11px] font-mono tracking-[0.25em] uppercase bg-gradient-to-r from-purple-300 to-cyan-300 bg-clip-text text-transparent font-semibold">
-                  {scanning ? "scanning" : thinking ? "processing" : speaking ? "speaking" : entityMood}
-                </span>
-                <span className="text-[10px] font-mono text-gray-600/50">{entityMoodEmoji}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <button onClick={() => setShowPageNav(o => !o)} className="text-gray-500 hover:text-purple-400 transition-colors p-1.5 rounded-lg hover:bg-purple-900/10 text-[11px] font-mono tracking-wider">
-                ☰
-              </button>
-              <button onClick={() => setSidebarOpen((o) => !o)} className="text-gray-500 hover:text-purple-400 transition-colors p-1.5 rounded-lg hover:bg-purple-900/10">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
-                </svg>
-              </button>
-              {showPageNav && (
-                <div className="absolute top-10 right-0 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-2 shadow-2xl min-w-[150px] z-50 animate-fade-in glow-purple" onClick={() => setShowPageNav(false)}>
-                  {[
-                    { href: "/", label: "Chat" },
-                    { href: "/acc", label: "ACC" },
-                    { href: "/dashboard", label: "Brain" },
-                    { href: "/secretary", label: "Secretary" },
-                    { href: "/life", label: "Life OS" },
-                    { href: "/trading", label: "Trading" },
-                    { href: "/marketplace", label: "Plugins" },
-                    { href: "/smarthome", label: "Smart Home" },
-                    { href: "/settings", label: "Settings" },
-                  ].map(l => (
-                    <Link key={l.href} href={l.href}
-                      className="block text-[11px] font-mono text-gray-400 hover:text-purple-400 hover:bg-purple-900/10 px-3 py-1.5 rounded-lg transition-colors">
-                      {l.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
+      {/* ── Top Navigation Bar ─────────────────────────────────── */}
+      <header className="relative z-30 flex items-center justify-between px-4 md:px-6 py-2.5 border-b border-purple-900/20 bg-[#05081a]/70 backdrop-blur-xl">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 shadow-lg ${
+              listening ? "bg-green-400 shadow-green-500/50" :
+              thinking ? "bg-purple-400 shadow-purple-500/50" :
+              speaking ? "bg-cyan-400 shadow-cyan-500/50" :
+              "bg-gray-600"
+            }`} />
+            <span className="text-sm font-bold bg-gradient-to-r from-purple-300 via-cyan-300 to-purple-300 bg-clip-text text-transparent">
+              J.A.R.V.I.S.
+            </span>
+            <span className="text-[9px] font-mono text-gray-600 tracking-[0.2em] hidden sm:inline">
+              {orbState === "listening" ? "LISTENING" : orbState === "thinking" ? "PROCESSING" : orbState === "speaking" ? "SPEAKING" : entityMood.toUpperCase()}
+            </span>
           </div>
+          <SystemStatsWidget stats={systemStats} />
         </div>
+        <nav className="flex items-center gap-1">
+          {NAV_ITEMS.map(item => (
+            <Link key={item.href} href={item.href}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-mono text-gray-500 hover:text-purple-400 hover:bg-purple-900/10 rounded-lg transition-all duration-200">
+              <span>{item.icon}</span>
+              <span className="hidden md:inline">{item.label}</span>
+            </Link>
+          ))}
+          <button onClick={() => setSidebarOpen(o => !o)}
+            className="ml-1 p-1.5 text-gray-600 hover:text-purple-400 hover:bg-purple-900/10 rounded-lg transition-all duration-200">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+          </button>
+        </nav>
+      </header>
 
-        {/* Task progress */}
-        {taskTotal > 0 && taskStep > 0 && (
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-10 w-72 animate-fade-in">
-            <div className="task-progress-bar">
-              <div className="task-progress-fill" style={{ width: `${(taskStep / taskTotal) * 100}%` }} />
-            </div>
-            <p className="text-[9px] font-mono text-gray-600/60 text-center mt-1 tracking-wider">step {taskStep} / {taskTotal}</p>
-          </div>
-        )}
+      {/* ── Main Content ──────────────────────────────────────── */}
+      <div className="relative z-10 flex-1 flex min-h-0">
+        <div className="flex-1 flex flex-col min-w-0">
 
-        {/* Center content */}
-        <div className="flex-1 flex flex-col items-center justify-center relative">
-          {/* Center result overlay — flashes main data without sass */}
-          {centerOverlay && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none" onClick={dismissOverlay}>
-              <div className="pointer-events-auto center-overlay max-w-xl w-full mx-6 max-h-[60vh] overflow-y-auto glow-card" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[9px] font-mono tracking-[0.25em] uppercase text-cyan-500/70">result</span>
-                  <button onClick={dismissOverlay} className="text-gray-600 hover:text-gray-300 transition-colors text-[10px] font-mono tracking-wider">✕ dismiss</button>
-                </div>
-                <pre className="text-sm text-gray-200 font-mono leading-relaxed whitespace-pre-wrap">{centerOverlay}</pre>
-              </div>
-              {/* Click backdrop to dismiss */}
-              <div className="absolute inset-0 -z-10" onClick={dismissOverlay} />
-            </div>
-          )}
-
-          {/* Ambient glow rings behind orb */}
-          <div className={`absolute w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] md:w-[550px] md:h-[550px] rounded-full -z-10 transition-all duration-700 ${
-            listening ? 'ambient-glow-listening' : thinking ? 'ambient-glow-thinking' : speaking ? 'ambient-glow-speaking' : 'ambient-glow-idle'
-          }`} style={{ marginTop: taskQuestion ? -80 : -40 }} />
-
-          {/* Expanding status rings */}
-          {(listening || thinking || speaking) && (
-            <div className={`absolute w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[420px] md:h-[420px] rounded-full ${
-              listening ? 'status-ring-listening' : thinking ? 'status-ring-thinking' : 'status-ring-speaking'
-            }`} style={{ marginTop: taskQuestion ? -80 : -40 }} />
-          )}
-
-          {/* Centered BotSwarm agents — dim when overlay active */}
-          <div className={`w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[420px] md:h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl cursor-pointer transition-all duration-500 ${
-            listening ? 'shadow-[0_0_60px_rgba(34,197,94,0.15)]' :
-            thinking ? 'shadow-[0_0_60px_rgba(168,85,247,0.2)]' :
-            speaking ? 'shadow-[0_0_60px_rgba(6,182,212,0.15)]' :
-            'shadow-blue-900/30'
-          } ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
-            <BotSwarm
-              listening={listening}
-              thinking={thinking}
-              speaking={speaking}
-              activity={activityIntensity}
-              botEvents={botEvents}
-              centered
-            />
-          </div>
-
-          {/* Subtle prompt below agents when idle */}
-          {!listening && !thinking && !speaking && !taskQuestion && messages.length <= 1 && (
-            <div className="mt-4 text-center animate-fade-in">
-              <p className="text-[10px] font-mono text-blue-400/50 tracking-[0.2em] text-glow-cyan">tap the orb or type below</p>
-            </div>
-          )}
-
-          {/* Suggestions */}
-          {showSuggestions && messages.length <= 1 && !listening && !thinking && !speaking && (
-            <div className="mt-6 max-w-lg w-full px-6 animate-fade-in">
-              <div className="glass-card rounded-2xl p-5 glow-purple relative">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-1 h-1 rounded-full bg-purple-500/40" />
-                  <span className="text-[8px] font-mono text-gray-700 tracking-[0.2em] uppercase">quick actions</span>
-                  <div className="flex-1 h-px bg-gradient-to-r from-purple-800/20 to-transparent" />
-                </div>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {SUGGESTIONS.map((s, i) => (
-                    <button
-                      key={s}
-                      onClick={() => pickSuggestion(s)}
-                      className="suggestion-btn"
-                      style={{ animationDelay: `${i * 50}ms` }}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Strategies */}
-          {strategies && strategies.length > 0 && (
-            <div className="mt-6 max-w-lg w-full px-4 animate-fade-in">
-              <div className="space-y-2.5">
-                {strategies.map((s, i) => (
-                  <button
-                    key={i}
-                    onClick={() => pickStrategy(i)}
-                    className={`strategy-card w-full text-left p-4 ${selectedStrategy === i ? "selected" : ""}`}
-                    style={{ animationDelay: `${i * 80}ms` }}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="strategy-name">{s.name}</span>
-                      <span className="strategy-complexity">CX {s.complexity}/10</span>
-                    </div>
-                    <p className="strategy-desc mb-2">{s.description}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {s.pros.slice(0, 2).map((p, pi) => (
-                        <span key={pi} className="strategy-pro">+ {p}</span>
-                      ))}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Follow-up questions */}
-          {followUpQuestions.length > 0 && !strategies && (
-            <div className="mt-6 max-w-lg w-full px-4 animate-fade-in">
-              <div className="flex flex-wrap justify-center gap-2">
-                {followUpQuestions.map((q, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleFollowUp(q)}
-                    className="followup-btn"
-                    style={{ animationDelay: `${i * 60}ms` }}
-                  >
-                    {q.length > 50 ? q.slice(0, 50) + "..." : q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Proactive suggestions */}
-          {proactiveSuggestions.length > 0 && !strategies && (
-            <div className="mt-4 max-w-lg w-full px-4 animate-fade-in">
-              <div className="flex flex-wrap justify-center gap-2">
-                {proactiveSuggestions.map((s, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleProactive(s)}
-                    className="proactive-btn"
-                    style={{ animationDelay: `${i * 60}ms` }}
-                  >
-                    {s.length > 45 ? s.slice(0, 45) + "..." : s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Last response */}
-          {lastResponse && !listening && !thinking && !speaking && (
-            <div className="mt-6 max-w-2xl w-full px-6 animate-fade-in message-enter">
-              <div className="holo-card glow-card px-5 py-4 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-purple-500/40 to-cyan-500/40" />
-                <div className="flex items-center gap-2 mb-2.5">
-                  <div className="w-2 h-2 rounded-full bg-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.3)]" />
-                  <span className="text-[9px] font-mono tracking-[0.2em] uppercase bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent font-semibold">jarvis</span>
-                  <div className="flex-1 h-px bg-gradient-to-r from-purple-800/20 to-transparent" />
-                </div>
-                <p className="text-sm text-gray-200 font-light leading-relaxed whitespace-pre-wrap">{lastResponse}</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Task follow-up */}
-        {taskQuestion && (
-          <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 animate-fade-in">
-            <div className="glass-card px-6 py-5 glow-card">
-              <p className="text-[10px] font-mono text-purple-400/80 tracking-[0.25em] uppercase mb-2">Jason needs to know</p>
-              <p className="text-sm text-gray-200 mb-4 leading-relaxed">{taskQuestion}</p>
-              <div className="flex gap-2.5">
-                <input
-                  ref={taskInputRef}
-                  type="text"
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
-                  placeholder="Type your answer..."
-                  className="task-input flex-1"
-                  autoFocus
-                />
-                <button onClick={sendText} className="task-send-btn">Send</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Task result */}
-        {taskResult && (
-          <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 animate-fade-in">
-            <div className="glass-card px-6 py-5 glow-card">
-              <p className="text-[10px] font-mono text-green-400/80 tracking-[0.25em] uppercase mb-2">
-                <span className="inline-block mr-1.5">&#10003;</span> Task complete
-              </p>
-              <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{taskResult}</p>
-              {Object.keys(collectedInfo).length > 0 && (
-                <div className="mt-4 pt-4 border-t border-gray-800/30 space-y-1.5">
-                  {Object.entries(collectedInfo).map(([k, v]) => (
-                    <p key={k} className="text-xs text-gray-500"><span className="text-purple-400/70">{k}:</span> <span className="text-gray-400">{v}</span></p>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => setTaskResult(null)} className="mt-3 text-[9px] text-gray-700/50 hover:text-gray-400 font-mono tracking-[0.15em] uppercase transition-colors">dismiss</button>
-            </div>
-          </div>
-        )}
-
-        {/* Text input */}
-        {!taskQuestion && (
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
-            <div className="relative group">
-              <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-r from-purple-600/20 via-cyan-500/20 to-purple-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-sm" />
-              <div className="input-bar relative flex items-center gap-2 px-5 py-3 glow-purple bg-[#0d0d24]/80">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
-                  placeholder="Ask Jason anything..."
-                  className="bg-transparent text-sm text-gray-200 placeholder-gray-700/50 outline-none flex-1 font-mono"
-                />
-                <button onClick={sendText} className="send-btn p-2 rounded-full transition-all duration-200 hover:bg-purple-900/20">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" /></svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Live transcript */}
-        {listening && interim && (
-          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 animate-fade-in pointer-events-none">
-            <div className="glass-card px-5 py-3 text-center">
-              <p className="text-sm text-cyan-300/80 font-mono cursor-blink">{interim}</p>
-              {confidence > 0 && (
-                <div className="mt-2 flex items-center gap-2 justify-center">
-                  <div className="w-24 h-1 rounded-full bg-gray-800/50 overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-300" style={{ width: `${confidence}%` }} />
+          {/* Dashboard / Suggestions area */}
+          {showSuggestions && messages.length <= 1 && !listening && !thinking && !speaking && !taskQuestion && (
+            <div className="flex-1 flex flex-col items-center justify-center px-4">
+              <div className="animate-fade-in text-center space-y-8 max-w-2xl w-full">
+                {/* Dashboard widgets */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-xl mx-auto">
+                  <div className="glass-card rounded-2xl p-4 text-center">
+                    <div className="text-2xl mb-1">{accOnlineCount > 0 ? "🟢" : "⚪"}</div>
+                    <div className="text-lg font-bold text-gray-200 font-mono">{accDeviceCount}</div>
+                    <div className="text-[8px] font-mono text-gray-600 tracking-widest uppercase mt-0.5">Devices</div>
                   </div>
-                  <span className="text-[9px] font-mono text-gray-500">{confidence}%</span>
+                  <div className="glass-card rounded-2xl p-4 text-center">
+                    <div className="text-2xl mb-1">🧠</div>
+                    <div className="text-lg font-bold text-gray-200 font-mono">{messages.length}</div>
+                    <div className="text-[8px] font-mono text-gray-600 tracking-widest uppercase mt-0.5">Messages</div>
+                  </div>
+                  <div className="glass-card rounded-2xl p-4 text-center">
+                    <div className="text-2xl mb-1">
+                      {systemStats?.battery?.present
+                        ? (systemStats.battery.charging ? "⚡" : systemStats.battery.percent < 20 ? "🔴" : "🔋")
+                        : "💻"}
+                    </div>
+                    <div className="text-lg font-bold text-gray-200 font-mono">
+                      {systemStats?.memory ? `${systemStats.memory.percent}%` : "--"}
+                    </div>
+                    <div className="text-[8px] font-mono text-gray-600 tracking-widest uppercase mt-0.5">RAM</div>
+                  </div>
+                  <div className="glass-card rounded-2xl p-4 text-center">
+                    <div className="text-2xl mb-1">🔗</div>
+                    <div className="text-lg font-bold text-gray-200 font-mono">
+                      {systemStats?.cpu ? `${systemStats.cpu.percent}%` : "--"}
+                    </div>
+                    <div className="text-[8px] font-mono text-gray-600 tracking-widest uppercase mt-0.5">CPU</div>
+                  </div>
+                </div>
+
+                {/* Suggestions */}
+                <div className="glass-card rounded-2xl p-5 max-w-lg mx-auto relative">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-1 h-1 rounded-full bg-purple-500/40" />
+                    <span className="text-[8px] font-mono text-gray-700 tracking-[0.2em] uppercase">quick actions</span>
+                    <div className="flex-1 h-px bg-gradient-to-r from-purple-800/20 to-transparent" />
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {SUGGESTIONS.map((s, i) => (
+                      <button key={s} onClick={() => pickSuggestion(s)}
+                        className="suggestion-btn" style={{ animationDelay: `${i * 50}ms` }}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Chat / Interaction area */}
+          {(!showSuggestions || messages.length > 1 || listening || thinking || speaking || taskQuestion) && (
+            <div className="flex-1 flex flex-col items-center justify-center relative px-4">
+              {/* Center overlay */}
+              {centerOverlay && (
+                <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none" onClick={dismissOverlay}>
+                  <div className="pointer-events-auto center-overlay max-w-xl w-full mx-6 max-h-[60vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[9px] font-mono tracking-[0.25em] uppercase text-cyan-500/70">result</span>
+                      <button onClick={dismissOverlay} className="text-gray-600 hover:text-gray-300 transition-colors text-[10px] font-mono tracking-wider">✕ dismiss</button>
+                    </div>
+                    <pre className="text-sm text-gray-200 font-mono leading-relaxed whitespace-pre-wrap">{centerOverlay}</pre>
+                  </div>
+                  <div className="absolute inset-0 -z-10" onClick={dismissOverlay} />
+                </div>
+              )}
+
+              {/* Ambient glow */}
+              <div className={`absolute w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] rounded-full -z-10 transition-all duration-700 ${
+                listening ? 'ambient-glow-listening' : thinking ? 'ambient-glow-thinking' : speaking ? 'ambient-glow-speaking' : 'ambient-glow-idle'
+              }`} style={{ marginTop: taskQuestion ? -80 : -40 }} />
+
+              {/* Status ring */}
+              {(listening || thinking || speaking) && (
+                <div className={`absolute w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] rounded-full ${
+                  listening ? 'status-ring-listening' : thinking ? 'status-ring-thinking' : 'status-ring-speaking'
+                }`} style={{ marginTop: taskQuestion ? -80 : -40 }} />
+              )}
+
+              {/* BotSwarm orb */}
+              <div className={`w-[180px] h-[180px] sm:w-[260px] sm:h-[260px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl cursor-pointer transition-all duration-500 ${
+                listening ? 'shadow-[0_0_60px_rgba(34,197,94,0.15)]' :
+                thinking ? 'shadow-[0_0_60px_rgba(168,85,247,0.2)]' :
+                speaking ? 'shadow-[0_0_60px_rgba(6,182,212,0.15)]' :
+                'shadow-blue-900/30'
+              } ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
+                <BotSwarm listening={listening} thinking={thinking} speaking={speaking} activity={activityIntensity} botEvents={botEvents} centered />
+              </div>
+
+              {!listening && !thinking && !speaking && !taskQuestion && messages.length <= 1 && (
+                <div className="mt-3 text-center animate-fade-in">
+                  <p className="text-[10px] font-mono text-blue-400/50 tracking-[0.2em]">tap the orb or type below</p>
+                </div>
+              )}
+
+              {/* Strategies */}
+              {strategies && strategies.length > 0 && (
+                <div className="mt-6 max-w-lg w-full px-4">
+                  <div className="space-y-2.5">
+                    {strategies.map((s, i) => (
+                      <button key={i} onClick={() => pickStrategy(i)}
+                        className={`strategy-card w-full text-left p-4 ${selectedStrategy === i ? "selected" : ""}`}
+                        style={{ animationDelay: `${i * 80}ms` }}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="strategy-name">{s.name}</span>
+                          <span className="strategy-complexity">CX {s.complexity}/10</span>
+                        </div>
+                        <p className="strategy-desc mb-2">{s.description}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {s.pros.slice(0, 2).map((p, pi) => (
+                            <span key={pi} className="strategy-pro">+ {p}</span>
+                          ))}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Follow-up questions */}
+              {followUpQuestions.length > 0 && !strategies && (
+                <div className="mt-6 max-w-lg w-full px-4">
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {followUpQuestions.map((q, i) => (
+                      <button key={i} onClick={() => handleFollowUp(q)}
+                        className="followup-btn" style={{ animationDelay: `${i * 60}ms` }}>
+                        {q.length > 50 ? q.slice(0, 50) + "..." : q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Proactive suggestions */}
+              {proactiveSuggestions.length > 0 && !strategies && (
+                <div className="mt-4 max-w-lg w-full px-4">
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {proactiveSuggestions.map((s, i) => (
+                      <button key={i} onClick={() => handleProactive(s)}
+                        className="proactive-btn" style={{ animationDelay: `${i * 60}ms` }}>
+                        {s.length > 45 ? s.slice(0, 45) + "..." : s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Last response card */}
+              {lastResponse && !listening && !thinking && !speaking && (
+                <div className="mt-6 max-w-2xl w-full px-6 message-enter">
+                  <div className="holo-card glow-card px-5 py-4 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-purple-500/40 to-cyan-500/40" />
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <div className="w-2 h-2 rounded-full bg-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.3)]" />
+                      <span className="text-[9px] font-mono tracking-[0.2em] uppercase bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent font-semibold">jarvis</span>
+                      <div className="flex-1 h-px bg-gradient-to-r from-purple-800/20 to-transparent" />
+                    </div>
+                    <p className="text-sm text-gray-200 font-light leading-relaxed whitespace-pre-wrap">{lastResponse}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Task progress */}
+              {taskTotal > 0 && taskStep > 0 && (
+                <div className="mt-4 w-72">
+                  <div className="task-progress-bar">
+                    <div className="task-progress-fill" style={{ width: `${(taskStep / taskTotal) * 100}%` }} />
+                  </div>
+                  <p className="text-[9px] font-mono text-gray-600/60 text-center mt-1 tracking-wider">step {taskStep} / {taskTotal}</p>
                 </div>
               )}
             </div>
-          </div>
-        )}
-      </div>
+          )}
 
-      <Sidebar
-        messages={messages}
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        summary={profileSummary}
-        interests={profileInterests}
-      />
+          {/* ── Bottom Input Bar ────────────────────────────────── */}
+          {!taskQuestion ? (
+            <div className="relative z-20 px-4 pb-4 pt-2">
+              <div className="max-w-lg mx-auto relative group">
+                <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-r from-purple-600/20 via-cyan-500/20 to-purple-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-sm" />
+                <div className="input-bar relative flex items-center gap-2 px-5 py-3">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
+                    placeholder="Ask Jason anything..."
+                    className="bg-transparent text-sm text-gray-200 placeholder-gray-700/50 outline-none flex-1 font-mono"
+                  />
+                  <button onClick={handleOrbClick}
+                    className={`p-2 rounded-full transition-all duration-300 ${
+                      listening
+                        ? "bg-green-500/20 text-green-400 shadow-[0_0_12px_rgba(34,197,94,0.3)]"
+                        : "text-gray-500 hover:text-purple-400 hover:bg-purple-900/20"
+                    }`}>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m-4 0h8" />
+                    </svg>
+                  </button>
+                  <button onClick={sendText} className="send-btn p-2 rounded-full transition-all duration-200 hover:bg-purple-900/20">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Task question input */
+            <div className="relative z-20 px-4 pb-4 pt-2">
+              <div className="max-w-lg mx-auto glass-card px-6 py-5">
+                <p className="text-[10px] font-mono text-purple-400/80 tracking-[0.25em] uppercase mb-2">Jason needs to know</p>
+                <p className="text-sm text-gray-200 mb-4 leading-relaxed">{taskQuestion}</p>
+                <div className="flex gap-2.5">
+                  <input ref={taskInputRef} type="text" value={textInput} onChange={(e) => setTextInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") sendText(); }} placeholder="Type your answer..."
+                    className="task-input flex-1" autoFocus />
+                  <button onClick={sendText} className="task-send-btn">Send</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Task result */}
+          {taskResult && (
+            <div className="relative z-20 px-4 pb-4">
+              <div className="max-w-lg mx-auto glass-card px-6 py-5">
+                <p className="text-[10px] font-mono text-green-400/80 tracking-[0.25em] uppercase mb-2">
+                  <span className="inline-block mr-1.5">✓</span> Task complete
+                </p>
+                <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{taskResult}</p>
+                {Object.keys(collectedInfo).length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-800/30 space-y-1.5">
+                    {Object.entries(collectedInfo).map(([k, v]) => (
+                      <p key={k} className="text-xs text-gray-500"><span className="text-purple-400/70">{k}:</span> <span className="text-gray-400">{v}</span></p>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => setTaskResult(null)} className="mt-3 text-[9px] text-gray-700/50 hover:text-gray-400 font-mono tracking-[0.15em] uppercase transition-colors">dismiss</button>
+              </div>
+            </div>
+          )}
+
+          {/* Live transcript */}
+          {listening && interim && (
+            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 pointer-events-none">
+              <div className="glass-card px-5 py-3 text-center">
+                <p className="text-sm text-cyan-300/80 font-mono cursor-blink">{interim}</p>
+                {confidence > 0 && (
+                  <div className="mt-2 flex items-center gap-2 justify-center">
+                    <div className="w-24 h-1 rounded-full bg-gray-800/50 overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-300" style={{ width: `${confidence}%` }} />
+                    </div>
+                    <span className="text-[9px] font-mono text-gray-500">{confidence}%</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <Sidebar messages={messages} open={sidebarOpen} onClose={() => setSidebarOpen(false)}
+          summary={profileSummary} interests={profileInterests} />
+      </div>
     </div>
   );
 }
