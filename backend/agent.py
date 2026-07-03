@@ -111,7 +111,7 @@ async def _process_audio(track: rtc.Track, room: rtc.Room):
         await _send(room, {"type": "status", "state": "speaking"})
         reply = generate_response("lk-user", text, "premium")
         reply_text = reply["text"] if isinstance(reply, dict) else str(reply)
-        logger.info("Jason: %s", reply_text)
+        logger.info("JARVIS: %s", reply_text)
         await _send(room, {"type": "transcript", "role": "assistant", "text": reply_text})
 
         audio = tts_speak(reply_text)

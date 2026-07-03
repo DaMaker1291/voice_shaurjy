@@ -2756,12 +2756,12 @@ def _remote_desktop(_): _ps('Start-Process "mstsc.exe"'); return "Opening Remote
 @register("send_notification")
 def _send_notification(text):
     msg = extract_param(text, r"(?:send|show)\s+(?:a\s+)?(?:notification|toast|alert|message)\s+(.+?)$")
-    if not msg: msg = "Hello from Jason!"
+    if not msg: msg = "Hello from JARVIS!"
     _ps(f'''
         $t=[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime];
         $d=New-Object Windows.Data.Xml.Dom.XmlDocument;
         $d.LoadXml("<toast><visual><binding template='ToastText01'><text id='1'>{msg}</text></binding></visual></toast>");
-        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Jason").Show($d)
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("JARVIS").Show($d)
     ''')
     return f"Notification sent."
 

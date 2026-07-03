@@ -54,7 +54,7 @@ export default function Reminders() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-purple-400">Reminders</h1>
-          <p className="text-sm text-gray-500 mt-1">Jason remembers so you don&apos;t have to.</p>
+          <p className="text-sm text-gray-500 mt-1">JARVIS remembers so you don&apos;t have to.</p>
         </div>
         <div className="text-xs font-mono text-gray-600">{active.length} active</div>
       </div>
@@ -66,7 +66,7 @@ export default function Reminders() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            placeholder="What should Jason remind you about?"
+            placeholder="What should JARVIS remind you about?"
             className="bg-gray-800/80 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-purple-500/50"
           />
           <div className="flex gap-2">

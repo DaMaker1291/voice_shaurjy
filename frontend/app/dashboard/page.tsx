@@ -61,14 +61,34 @@ export default function Dashboard() {
   const totalDocs = docs.length + (hasDocs ? 1 : 0);
 
   const HF_API = "https://dgfhgjhj-jarvis-ai-brain.hf.space";
-  const psCmd = `powershell -c "& { curl.exe -sL '${HF_API}/relay_agent' -o \"$env:TEMP\\relay_agent.py\"; python \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"`;
+
+  function platformCmd(): string {
+    if (typeof window === "undefined") return "";
+    const p = navigator.platform?.toLowerCase() || "";
+    if (p.includes("win"))
+      return `powershell -c "curl.exe -sL '${HF_API}/relay' -o \\$env:TEMP\\relay.py; python \\$env:TEMP\\relay.py --user \\$env:USERNAME"`;
+    if (p.includes("mac"))
+      return `curl -sL '${HF_API}/relay' -o ~/relay.py && python3 ~/relay.py --user $(whoami)`;
+    return `curl -sL '${HF_API}/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user $(whoami)`;
+  }
+
+  function platformLabel(): string {
+    if (typeof window === "undefined") return "Windows";
+    const p = navigator.platform?.toLowerCase() || "";
+    if (p.includes("win")) return "Windows";
+    if (p.includes("mac")) return "macOS";
+    return "Linux";
+  }
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-purple-400">Your Brain</h1>
-          <p className="text-sm text-gray-500 mt-1">Upload notes, PDFs, or type ideas. Jason remembers everything.</p>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-1 h-5 rounded-full bg-gradient-to-b from-purple-500 to-cyan-500" />
+            <h1 className="text-xl font-bold bg-gradient-to-r from-purple-300 to-cyan-300 bg-clip-text text-transparent tracking-tight">Your Brain</h1>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">Upload notes, PDFs, or type ideas. JARVIS remembers everything.</p>
         </div>
         <div className="text-right text-xs font-mono text-gray-600">
           <div>{chunkCount} chunks indexed</div>
@@ -76,25 +96,31 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <section className="bg-gradient-to-r from-purple-900/30 to-gray-900/60 border border-purple-700/30 rounded-xl p-5 space-y-3">
+      <section className="bg-gradient-to-br from-purple-900/25 via-gray-900/50 to-gray-900/60 border border-purple-700/25 rounded-xl p-5 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-mono text-purple-300 uppercase tracking-wider">Windows Agent</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Let Jason control your PC &mdash; install on any Windows machine</p>
+            <div className="flex items-center gap-2 mb-0.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-400/70 shadow-[0_0_8px_rgba(34,197,94,0.3)]" />
+              <h2 className="text-sm font-mono text-purple-300 uppercase tracking-wider">Desktop Agent</h2>
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">Let JARVIS control your {platformLabel().toLowerCase()} machine</p>
           </div>
-          <Link href="/settings" className="text-xs text-purple-400 hover:text-purple-300 underline">Settings &rarr;</Link>
+          <Link href="/settings" className="text-xs text-purple-400 hover:text-purple-300 underline transition-all">Settings &rarr;</Link>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <a
-            href={`${HF_API}/relay_agent`}
+            href={`${HF_API}/relay`}
             download
-            className="inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs px-3.5 py-2 rounded-lg font-medium transition-all"
+            className="download-btn-pulse inline-flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white text-xs px-3.5 py-2 rounded-lg font-medium transition-all shadow-lg shadow-purple-900/20"
           >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
             Download Agent
           </a>
           <span className="text-xs text-gray-600 font-mono">or run:</span>
-          <code className="text-[10px] bg-gray-950 text-gray-400 px-2.5 py-1.5 rounded select-all break-all max-w-md">
-            {psCmd}
+          <code className="text-[10px] bg-gray-950/80 text-gray-400 px-2.5 py-1.5 rounded select-all break-all max-w-md border border-purple-900/10">
+            {platformCmd()}
           </code>
         </div>
       </section>

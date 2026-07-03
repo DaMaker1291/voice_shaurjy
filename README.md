@@ -1,13 +1,13 @@
 ---
-title: Second Brain API
-emoji: 🧠
-colorFrom: blue
-colorTo: purple
+title: JARVIS
+emoji: 🌌
+colorFrom: purple
+colorTo: blue
 sdk: docker
-pinned: false
+pinned: true
 ---
 
-# 🌌 JARVIS (The System Engine)
+# 🌌 JARVIS — The System Engine
 
 ### The Autonomous Ecosystem Orchestrator
 
@@ -73,7 +73,6 @@ JARVIS is fully equipped to interact with the world outside your home as an inde
 │ REAL-TIME TEXT/UI COCKPIT                              │
 │ - Re-renders layout, alerts user, presents controls    │
 └────────────────────────────────────────────────────────┘
-
 ```
 
 JARVIS bridges the gap between software automation, physical computing, and daily life, putting a fully realized, responsive digital entity at the wheel of your technological world.

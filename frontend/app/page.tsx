@@ -387,15 +387,23 @@ export default function Home() {
         setActionType(res.action_type || "action");
 
         if (res.action === "__needs_relay__") {
-          const relayLink = "https://dgfhgjhj-jarvis-ai-brain.hf.space/relay";
+          const isWin = navigator.platform?.toLowerCase().includes("win");
+          const isMac = navigator.platform?.toLowerCase().includes("mac");
+          const downloadCmd = isWin
+            ? `powershell -c "curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user $env:USERNAME"`
+            : isMac
+              ? `curl -sL https://dgfhgjhj-jarvis-ai-brain.hf.space/relay -o ~/relay.py && python3 ~/relay.py --user $(whoami)`
+              : `curl -sL https://dgfhgjhj-jarvis-ai-brain.hf.space/relay -o /tmp/relay.py && python3 /tmp/relay.py --user $(whoami)`;
+          const platformLabel = isWin ? "Windows" : isMac ? "macOS" : "Linux";
+          const settingsLink = typeof window !== "undefined" ? `${window.location.origin}/settings` : "/settings";
           setMessages((p) => [...p, {
             role: "assistant",
-            content: reply,
-            link: relayLink,
+            content: `⚠️ The relay agent is required for this action.\n\n**${platformLabel} one-liner:**\n\`\`\`\n${downloadCmd}\n\`\`\`\n\nPaste that in a terminal to connect this machine.`,
+            link: settingsLink,
           }]);
-          setLastResponse(reply);
+          setLastResponse(`Relay agent needed — open Settings to download.`);
           setTimeout(() => setActionFeedback(null), 8000);
-          speak("This action needs the relay agent. Download it from the settings page.");
+          speak("This action needs the relay agent. Open settings or paste the command shown to install.");
           return;
         }
 
@@ -658,17 +666,19 @@ export default function Home() {
   const orbState = listening ? "listening" : thinking ? "thinking" : speaking ? "speaking" : "idle";
 
   return (
-    <div className="relative h-screen w-full overflow-hidden flex flex-col" style={{ backgroundColor: '#05081a' }}>
+    <div className="relative h-screen w-full overflow-hidden flex flex-col" style={{ backgroundColor: '#030512' }}>
       <div className="gradient-bg" />
       <div className="grid-overlay" />
       <div className="stars" />
       <div className="stars2" />
       <div className="stars3" />
       <div className="aurora" />
+      <div className="corner-glow-tl" />
+      <div className="corner-glow-br" />
       <ParticleBg />
 
       {/* ── Top Navigation Bar ─────────────────────────────────── */}
-      <header className="relative z-30 flex items-center justify-between px-4 md:px-6 py-2.5 border-b border-purple-900/20 bg-[#05081a]/70 backdrop-blur-xl">
+      <header className="relative z-30 flex items-center justify-between px-4 md:px-6 py-2.5 border-b border-purple-900/15 bg-[#030512]/70 backdrop-blur-xl">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
             <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 shadow-lg ${
@@ -689,7 +699,7 @@ export default function Home() {
         <nav className="flex items-center gap-1">
           {NAV_ITEMS.map(item => (
             <Link key={item.href} href={item.href}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-mono text-gray-500 hover:text-purple-400 hover:bg-purple-900/10 rounded-lg transition-all duration-200">
+              className="nav-link flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-mono text-gray-500 hover:text-purple-400 hover:bg-purple-900/10 rounded-lg transition-all duration-200">
               <span>{item.icon}</span>
               <span className="hidden md:inline">{item.label}</span>
             </Link>
@@ -713,18 +723,18 @@ export default function Home() {
               <div className="animate-fade-in text-center space-y-8 max-w-2xl w-full">
                 {/* Dashboard widgets */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-xl mx-auto">
-                  <div className="glass-card rounded-2xl p-4 text-center">
-                    <div className="text-2xl mb-1">{accOnlineCount > 0 ? "🟢" : "⚪"}</div>
+                  <div className="glass-card rounded-2xl p-4 text-center glow-card-sm">
+                    <div className="text-xl mb-1">{accOnlineCount > 0 ? "🟢" : "⚪"}</div>
                     <div className="text-lg font-bold text-gray-200 font-mono">{accDeviceCount}</div>
-                    <div className="text-[8px] font-mono text-gray-600 tracking-widest uppercase mt-0.5">Devices</div>
+                    <div className="text-[7px] font-mono text-gray-600 tracking-[0.2em] uppercase mt-0.5">Devices</div>
                   </div>
-                  <div className="glass-card rounded-2xl p-4 text-center">
-                    <div className="text-2xl mb-1">🧠</div>
+                  <div className="glass-card rounded-2xl p-4 text-center glow-card-sm">
+                    <div className="text-xl mb-1">🧠</div>
                     <div className="text-lg font-bold text-gray-200 font-mono">{messages.length}</div>
-                    <div className="text-[8px] font-mono text-gray-600 tracking-widest uppercase mt-0.5">Messages</div>
+                    <div className="text-[7px] font-mono text-gray-600 tracking-[0.2em] uppercase mt-0.5">Messages</div>
                   </div>
-                  <div className="glass-card rounded-2xl p-4 text-center">
-                    <div className="text-2xl mb-1">
+                  <div className="glass-card rounded-2xl p-4 text-center glow-card-sm">
+                    <div className="text-xl mb-1">
                       {systemStats?.battery?.present
                         ? (systemStats.battery.charging ? "⚡" : systemStats.battery.percent < 20 ? "🔴" : "🔋")
                         : "💻"}
@@ -732,14 +742,14 @@ export default function Home() {
                     <div className="text-lg font-bold text-gray-200 font-mono">
                       {systemStats?.memory ? `${systemStats.memory.percent}%` : "--"}
                     </div>
-                    <div className="text-[8px] font-mono text-gray-600 tracking-widest uppercase mt-0.5">RAM</div>
+                    <div className="text-[7px] font-mono text-gray-600 tracking-[0.2em] uppercase mt-0.5">RAM</div>
                   </div>
-                  <div className="glass-card rounded-2xl p-4 text-center">
-                    <div className="text-2xl mb-1">🔗</div>
+                  <div className="glass-card rounded-2xl p-4 text-center glow-card-sm">
+                    <div className="text-xl mb-1">🔗</div>
                     <div className="text-lg font-bold text-gray-200 font-mono">
                       {systemStats?.cpu ? `${systemStats.cpu.percent}%` : "--"}
                     </div>
-                    <div className="text-[8px] font-mono text-gray-600 tracking-widest uppercase mt-0.5">CPU</div>
+                    <div className="text-[7px] font-mono text-gray-600 tracking-[0.2em] uppercase mt-0.5">CPU</div>
                   </div>
                 </div>
 
@@ -793,18 +803,22 @@ export default function Home() {
               )}
 
               {/* BotSwarm orb */}
-              <div className={`w-[180px] h-[180px] sm:w-[260px] sm:h-[260px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl cursor-pointer transition-all duration-500 ${
-                listening ? 'shadow-[0_0_60px_rgba(34,197,94,0.15)]' :
-                thinking ? 'shadow-[0_0_60px_rgba(168,85,247,0.2)]' :
-                speaking ? 'shadow-[0_0_60px_rgba(6,182,212,0.15)]' :
-                'shadow-blue-900/30'
+              <div className={`w-[180px] h-[180px] sm:w-[260px] sm:h-[260px] rounded-full overflow-hidden border border-blue-800/15 shadow-2xl cursor-pointer transition-all duration-700 ease-out ${
+                listening ? 'shadow-[0_0_60px_rgba(34,197,94,0.15)] border-green-800/20' :
+                thinking ? 'shadow-[0_0_70px_rgba(168,85,247,0.2)] border-purple-800/20' :
+                speaking ? 'shadow-[0_0_60px_rgba(6,182,212,0.15)] border-cyan-800/20' :
+                'shadow-blue-900/20 hover:shadow-[0_0_40px_rgba(120,60,220,0.08)]'
               } ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
                 <BotSwarm listening={listening} thinking={thinking} speaking={speaking} activity={activityIntensity} botEvents={botEvents} centered />
               </div>
 
               {!listening && !thinking && !speaking && !taskQuestion && messages.length <= 1 && (
-                <div className="mt-3 text-center animate-fade-in">
-                  <p className="text-[10px] font-mono text-blue-400/50 tracking-[0.2em]">tap the orb or type below</p>
+                <div className="mt-4 text-center animate-fade-in">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-purple-500/30 animate-ping" style={{ animationDuration: '2s' }} />
+                    <span className="text-[9px] font-mono text-purple-400/40 tracking-[0.25em] uppercase">tap the orb or type below</span>
+                    <span className="w-1 h-1 rounded-full bg-purple-500/30 animate-ping" style={{ animationDuration: '2s' }} />
+                  </div>
                 </div>
               )}
 
@@ -899,7 +913,7 @@ export default function Home() {
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
-                    placeholder="Ask Jason anything..."
+                    placeholder="Ask JARVIS anything..."
                     className="bg-transparent text-sm text-gray-200 placeholder-gray-700/50 outline-none flex-1 font-mono"
                   />
                   <button onClick={handleOrbClick}
@@ -924,7 +938,7 @@ export default function Home() {
             /* Task question input */
             <div className="relative z-20 px-4 pb-4 pt-2">
               <div className="max-w-lg mx-auto glass-card px-6 py-5">
-                <p className="text-[10px] font-mono text-purple-400/80 tracking-[0.25em] uppercase mb-2">Jason needs to know</p>
+                <p className="text-[10px] font-mono text-purple-400/80 tracking-[0.25em] uppercase mb-2">JARVIS needs to know</p>
                 <p className="text-sm text-gray-200 mb-4 leading-relaxed">{taskQuestion}</p>
                 <div className="flex gap-2.5">
                   <input ref={taskInputRef} type="text" value={textInput} onChange={(e) => setTextInput(e.target.value)}

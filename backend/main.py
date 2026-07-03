@@ -1,4 +1,8 @@
-"""FastAPI — document uploads, text chat, LiveKit tokens, system health."""
+"""JARVIS — The System Engine.
+
+Hugging Face Space: Autonomous ecosystem orchestrator with voice-first AI,
+system control, smart home, and web automation.
+"""
 
 import os
 import sys
@@ -18,7 +22,7 @@ from ai_agent import generate_response
 
 load_dotenv()
 
-app = FastAPI(title="Second Brain API", version="2.0.0")
+app = FastAPI(title="JARVIS — The System Engine", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,7 +56,7 @@ async def health():
     livekit_url = os.getenv("LIVEKIT_URL", "")
     return {
         "status": "ok",
-        "assistant": "jason",
+        "assistant": "jarvis",
         "tier": get_tier(),
         "livekit": bool(livekit_url),
         "livekit_url": livekit_url,
@@ -199,8 +203,8 @@ async def livekit_token(req: LiveKitTokenRequest):
         raise HTTPException(400, "LiveKit not configured on server")
 
     token = AccessToken(api_key, api_secret)
-    token.identity = req.identity or "second-brain-user"
-    token.add_grant(VideoGrants(room_join=True, room=req.room_name or "second-brain"))
+    token.identity = req.identity or "jarvis-user"
+    token.add_grant(VideoGrants(room_join=True, room=req.room_name or "jarvis"))
     return {"token": token.jwt, "url": os.getenv("LIVEKIT_URL")}
 
 
@@ -535,7 +539,7 @@ async def media_nowplaying():
 
 
 @ app.post("/api/notify")
-async def send_notification(title: str = "Jason", message: str = ""):
+async def send_notification(title: str = "JARVIS", message: str = ""):
     """Send Windows toast notification."""
     from actions import execute_action
     result = execute_action("send_notification", f"send notification {message}")
@@ -577,7 +581,7 @@ async def action_search(q: str = ""):
 async def take_screenshot():
     """Take screenshot and return as base64."""
     import base64, os, time
-    path = os.path.expanduser("~/Desktop/_jason_screenshot.png")
+    path = os.path.expanduser("~/Desktop/_jarvis_screenshot.png")
     from actions import execute_action
     result = execute_action("screenshot", "")
     if not os.path.exists(path):

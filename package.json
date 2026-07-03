@@ -1,12 +1,11 @@
 {
-  "name": "second-brain",
+  "name": "jarvis",
   "version": "1.0.0",
   "private": true,
-  "description": "Sassy voice-first second brain assistant with RAG",
+  "description": "JARVIS — The System Engine. Autonomous ecosystem orchestrator.",
   "scripts": {
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && uvicorn main:app --reload",
-    "install:frontend": "cd frontend && npm install",
-    "install:backend": "cd backend && pip install -r requirements.txt"
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && uvicorn main:app --reload"
   }
 }

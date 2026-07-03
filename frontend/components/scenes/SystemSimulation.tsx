@@ -63,7 +63,7 @@ export default function SystemSimulation({ data, progress }: { data?: SceneData;
           <div className="w-2 h-2 rounded-full bg-red-500/50" />
           <div className="w-2 h-2 rounded-full bg-yellow-500/50" />
           <div className="w-2 h-2 rounded-full bg-green-500/50" />
-          <span className="text-[9px] text-white/30 ml-2">jason@system:~</span>
+          <span className="text-[9px] text-white/30 ml-2">jarvis@system:~</span>
         </div>
         {/* Output */}
         <div className="p-2.5 max-h-[250px] overflow-y-auto space-y-0.5">

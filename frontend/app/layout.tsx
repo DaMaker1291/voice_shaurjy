@@ -3,8 +3,8 @@ import ClientLayout from "@/components/ClientLayout";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "J.A.R.V.I.S. — Sovereign Digital Entity",
-  description: "Your omnipresent AI. Voice-first OS, smart home, and web automation.",
+  title: "JARVIS — The System Engine",
+  description: "The Autonomous Ecosystem Orchestrator. Voice-first sovereign AI with system control, smart home, and web automation.",
 };
 
 export const viewport = {

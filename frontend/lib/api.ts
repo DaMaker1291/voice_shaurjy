@@ -170,7 +170,7 @@ export async function getMediaNowPlaying() {
   return res.json();
 }
 
-export async function sendNotification(message: string, title = "Jason") {
+export async function sendNotification(message: string, title = "JARVIS") {
   const res = await fetch(`${BASE}/api/notify?title=${encodeURIComponent(title)}&message=${encodeURIComponent(message)}`, { method: "POST" });
   return res.json();
 }

@@ -548,7 +548,7 @@ class Entity:
     def _build_context(self, text: str) -> str:
         ctx = _gather_system_context()
         history = self.memory._data.get("interactions", [])
-        recent = "\n".join(f"User: {h['query']}\nJason: {h['response'][:100]}" for h in history[-8:])
+        recent = "\n".join(f"User: {h['query']}\nJARVIS: {h['response'][:100]}" for h in history[-8:])
         goals = self.memory.get_active_goals()
         goal_str = "; ".join(f"{g['goal']}({g['progress']}%)" for g in goals[:3]) if goals else ""
         prefs = self.memory._data.get("preferences", {})
