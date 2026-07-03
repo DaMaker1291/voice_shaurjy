@@ -2485,9 +2485,8 @@ def _music_lofi(_): _ps('Start-Process "https://www.youtube.com/results?search_q
 def _spotify(_):
     if os.name == "nt":
         _ps('Start-Process "spotify:" 2>$null; if(-not$?){Start-Process "https://open.spotify.com"}')
-    else:
-        _web_run("web_navigate", "https://open.spotify.com")
-    return "Opening Spotify..."
+        return "Opening Spotify..."
+    return "Opening Spotify Web Player at https://open.spotify.com"
 @register("media_next")
 def _media_next(_): _ps('Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("{MEDIA_NEXT}")'); return "Next track."
 @register("media_prev")

@@ -500,7 +500,11 @@ export default function Home() {
       setTaskQuestion(null);
       setTaskResult(data.text);
       setCollectedInfo(data.collected || {});
-      setMessages((p) => [...p, { role: "assistant", content: `✅ ${data.text}` }]);
+      const msgLink = data.link || data.wa_link || "";
+      setMessages((p) => [...p, { role: "assistant", content: `✅ ${data.text}`, link: msgLink }]);
+      if (msgLink) {
+        setTimeout(() => { window.location.href = msgLink; }, 500);
+      }
       speak("Task complete!");
     } else if (data.type === "workflow") {
       addBotEvent("workflow", data.text);

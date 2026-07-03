@@ -106,9 +106,19 @@ async def task_respond(req: TaskRespond):
                 return {"type": "complete", "text": f"Saved! I'll use the app for that next time. Queued on your computer...", "async": True, "relay_id": relay_id}
             return {"type": "complete", "text": f"Saved! I'll use the app for that next time.\n{result}\n\n(If it didn't open, the relay agent may need to be started on your machine.)"}
         else:
-            # Browser — save preference and run on server
+            # Browser — save preference and return a link the user can open
             entity = get_entity(req.user_id or "local")
             entity.memory.add_preference(f"launch_{action_name}", "browser")
+            BROWSER_URLS = {
+                "spotify": "https://open.spotify.com",
+                "whatsapp_open": "https://web.whatsapp.com",
+                "web_app_open": "https://",
+                "teams_open": "https://teams.microsoft.com",
+            }
+            url = BROWSER_URLS.get(action_name, "")
+            if url:
+                return {"type": "complete", "text": f"Opening {action_name} in your browser...", "link": url}
+            # Fallback: try server-side execution
             result = cloud_safe_execute(action_name, req.response, user_id=req.user_id or "local")
             return {"type": "complete", "text": f"Opening in your browser...\n{result}"}
 
