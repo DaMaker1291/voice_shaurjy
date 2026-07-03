@@ -132,7 +132,7 @@ async def task_respond(req: TaskRespond):
             # App requires relay — force relay check (bypass cloud-safe)
             result = relay_action(action_name, req.response, user_id=req.user_id or "local")
             if "__NEEDS_RELAY__" in result:
-                return {"type": "ask", "question": "Relay agent is offline. Start J.A.R.V.I.S. Relay on your desktop:\n  curl -O https://dgfhgjhj-jarvis-ai-brain.hf.space/relay\n  python3 relay --user yourname\nRun that on your machine, then ask me again.", "session_id": req.session_id}
+                return {"type": "ask", "question": "Relay agent is offline. Start J.A.R.V.I.S. Relay on your desktop:\n\n**Mac/Linux:**\n```bash\ncurl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user $USER\n```\n\n**Windows (PowerShell):**\n```powershell\npowershell -c \"curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\\\\relay.py; python $env:TEMP\\\\relay.py --user $env:USERNAME\"\n```\n\nRun that on your machine, then ask me again.", "session_id": req.session_id}
             if result.startswith("__RELAY__:"):
                 parts = result.split(":", 2)
                 relay_id = parts[1] if len(parts) > 1 else ""

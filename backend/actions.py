@@ -1157,9 +1157,17 @@ def execute_action(action: str, user_text: str = "") -> str:
 
 RELAY_INSTRUCTIONS = """J.A.R.V.I.S. Relay Agent is not running on your computer.
 
-Open PowerShell and paste this one command:
+To run J.A.R.V.I.S locally, execute the following command in your terminal:
 
-  powershell -c "curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\relay.py; python $env:TEMP\relay.py --user $env:USERNAME"
+**Mac/Linux:**
+```bash
+curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user $USER
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -c "curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user $env:USERNAME"
+```
 
 Keep that window open. Then ask me again!"""
 

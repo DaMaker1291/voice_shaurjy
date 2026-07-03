@@ -170,10 +170,14 @@ export default function AgentRouter({ routingData, isDispatching, userText }: Ag
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        background: "rgba(3,5,18,0.7)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: "12px",
+        background: "rgba(12,12,30,0.55)",
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
+        border: "1px solid rgba(168,85,247,0.15)",
+        borderRadius: "16px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.5), inset 0 0 32px rgba(168,85,247,0.05)",
         overflow: "hidden",
+        transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
       }}
     >
       {/* Header */}

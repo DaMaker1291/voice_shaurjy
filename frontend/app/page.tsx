@@ -366,8 +366,10 @@ export default function Home() {
         <div
           style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "8px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)",
-            background: "rgba(3,5,18,0.9)", backdropFilter: "blur(16px)",
+            padding: "12px 24px", borderBottom: "1px solid rgba(52,211,153,0.15)",
+            background: "rgba(10,12,25,0.65)", backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+            boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
             flexShrink: 0, zIndex: 20,
           }}
         >
@@ -448,12 +450,15 @@ export default function Home() {
               flexShrink: 0,
               display: "flex",
               flexDirection: "column",
-              borderRight: "1px solid rgba(255,255,255,0.05)",
-              background: "rgba(3,5,18,0.6)",
-              backdropFilter: "blur(8px)",
-              transition: "width 0.3s ease, min-width 0.3s ease",
+              borderRight: "1px solid rgba(52,211,153,0.1)",
+              background: "rgba(5,8,20,0.55)",
+              backdropFilter: "blur(24px)",
+              WebkitBackdropFilter: "blur(24px)",
+              boxShadow: "12px 0 32px rgba(0,0,0,0.4)",
+              transition: "width 0.4s cubic-bezier(0.16,1,0.3,1), min-width 0.4s cubic-bezier(0.16,1,0.3,1)",
               position: "relative",
               overflow: "hidden",
+              zIndex: 15,
             }}
           >
             {/* Collapse toggle */}

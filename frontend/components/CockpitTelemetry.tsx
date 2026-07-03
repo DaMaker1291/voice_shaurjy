@@ -145,10 +145,13 @@ function DeviceCard({ device, onAction }: { device: DeviceNode; onAction?: (id: 
   return (
     <div
       style={{
-        borderRadius: "8px",
-        border: `1px solid ${isOnline ? "rgba(255,255,255,0.06)" : "rgba(239,68,68,0.15)"}`,
-        background: isOnline ? "rgba(255,255,255,0.02)" : "rgba(239,68,68,0.03)",
-        transition: "all 0.2s",
+        borderRadius: "12px",
+        border: `1px solid ${isOnline ? "rgba(255,255,255,0.1)" : "rgba(239,68,68,0.25)"}`,
+        background: isOnline ? "rgba(255,255,255,0.05)" : "rgba(239,68,68,0.08)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+        transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
         overflow: "hidden",
       }}
     >
@@ -359,10 +362,13 @@ export default function CockpitTelemetry({
       {/* Relay status banner */}
       <div
         style={{
-          padding: "8px 12px",
-          borderRadius: "8px",
-          border: `1px solid ${relayOnline ? "rgba(52,211,153,0.2)" : "rgba(239,68,68,0.25)"}`,
-          background: relayOnline ? "rgba(52,211,153,0.04)" : "rgba(239,68,68,0.05)",
+          padding: "12px 16px",
+          borderRadius: "12px",
+          border: `1px solid ${relayOnline ? "rgba(52,211,153,0.3)" : "rgba(239,68,68,0.4)"}`,
+          background: relayOnline ? "rgba(52,211,153,0.08)" : "rgba(239,68,68,0.1)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          boxShadow: relayOnline ? "0 4px 20px rgba(52,211,153,0.1)" : "0 4px 20px rgba(239,68,68,0.15)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -435,10 +441,13 @@ export default function CockpitTelemetry({
           style={{
             display: "flex",
             justifyContent: "space-around",
-            padding: "10px 8px",
-            background: "rgba(0,0,0,0.25)",
-            borderRadius: "8px",
-            border: "1px solid rgba(255,255,255,0.04)",
+            padding: "14px 10px",
+            background: "rgba(10,12,25,0.6)",
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+            borderRadius: "12px",
+            border: "1px solid rgba(255,255,255,0.08)",
+            boxShadow: "inset 0 0 20px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.3)",
             flexShrink: 0,
           }}
         >
