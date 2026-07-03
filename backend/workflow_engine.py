@@ -158,15 +158,33 @@ Format:
   ]
 }}"""
 
-    raw = groq_generate(prompt + " _RESPOND_ONLY_JSON", max_tokens=400)
+    raw = groq_generate(prompt + "\n\nONLY return valid JSON. No markdown, no code fences, no explanation.", max_tokens=1000)
+    raw = raw.strip()
+    # Strip markdown code fences if present
+    raw = re.sub(r'^```(?:json)?\s*', '', raw)
+    raw = re.sub(r'\s*```$', '', raw)
     m = re.search(r'\{.*\}', raw, re.DOTALL)
+    if not m:
+        # Retry once with simpler prompt
+        raw2 = groq_generate(f"Return ONLY a JSON workflow for: {user_input}\n\nFormat: {{\"workflow_name\":\"...\",\"description\":\"...\",\"steps\":[{{\"id\":\"step_1\",\"action\":\"ask\",\"params\":{{\"question\":\"...\",\"field\":\"info\"}},\"depends_on\":[],\"label\":\"...\",\"retry_count\":2}}]}}", max_tokens=1000)
+        raw2 = raw2.strip()
+        raw2 = re.sub(r'^```(?:json)?\s*', '', raw2)
+        raw2 = re.sub(r'\s*```$', '', raw2)
+        m = re.search(r'\{.*\}', raw2, re.DOTALL)
     if not m:
         raise ValueError("AI failed to generate a valid workflow")
 
     try:
         data = json.loads(m.group())
     except json.JSONDecodeError:
-        raise ValueError("AI generated invalid JSON for workflow")
+        # Try to repair common JSON issues
+        broken = m.group()
+        broken = re.sub(r',\s*}', '}', broken)
+        broken = re.sub(r',\s*]', ']', broken)
+        try:
+            data = json.loads(broken)
+        except json.JSONDecodeError:
+            raise ValueError("AI generated invalid JSON for workflow")
 
     steps = []
     for s in data.get("steps", []):

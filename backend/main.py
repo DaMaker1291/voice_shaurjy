@@ -220,14 +220,19 @@ async def text_to_speech(req: TTSRequest):
     text = req.text
     voice = req.voice or "en-GB-RyanNeural"
 
-    # Build SSML for natural JARVIS delivery
-    text_escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&apos;")
-    ssml = f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts"><voice name="{voice}"><mstts:express-as style="calm" styledegree="1.0">{text_escaped}</mstts:express-as></voice></speak>'
+    # Strip emoji and special chars that cause TTS issues
+    text_clean = re.sub(r'[\U0001F300-\U0001FAFF\U0001F600-\U0001F64F\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\u2600-\u26FF\u2700-\u27BF\uFE00-\uFE0F]', '', text)
+    text_clean = re.sub(r'\*{1,2}(.*?)\*{1,2}', r'\1', text_clean)
+    text_clean = re.sub(r'[-_#>`|]', ' ', text_clean)
+    text_clean = re.sub(r'\s+', ' ', text_clean).strip()
 
-    # Try edge_tts with SSML (expressive, much more human-like)
+    if not text_clean:
+        text_clean = "Done."
+
+    # Try edge_tts with plain text (avoid SSML — causes XML tag reading on some voices)
     try:
         import edge_tts
-        communicate = edge_tts.Communicate(ssml, voice)
+        communicate = edge_tts.Communicate(text_clean, voice)
 
         async def stream():
             async for chunk in communicate.stream():
@@ -238,36 +243,8 @@ async def text_to_speech(req: TTSRequest):
     except Exception:
         pass
 
-    # Fallback: plain text edge_tts
-    try:
-        import edge_tts
-        communicate = edge_tts.Communicate(text, voice)
-
-        async def stream2():
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    yield chunk["data"]
-
-        return StreamingResponse(stream2(), media_type="audio/mpeg")
-    except Exception:
-        pass
-
-    # Local fallback via pyttsx3
-    try:
-        import pyttsx3, tempfile, os
-        engine = pyttsx3.init()
-        engine.setProperty("rate", 180)
-        engine.setProperty("volume", 1.0)
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            tmp_path = f.name
-        engine.save_to_file(text, tmp_path)
-        engine.runAndWait()
-        with open(tmp_path, "rb") as f:
-            data = f.read()
-        os.unlink(tmp_path)
-        return Response(content=data, media_type="audio/wav")
-    except Exception as e:
-        return Response(content=f"TTS error: {e}".encode(), status_code=500, media_type="text/plain")
+    # Fallback: browser speech synthesis (handled client-side)
+    return Response(content="TTS unavailable on server", status_code=503, media_type="text/plain")
 
 
 # ── Device scanner ───────────────────────────────────────────

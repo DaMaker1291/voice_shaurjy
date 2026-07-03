@@ -757,7 +757,11 @@ JSON:"""
 
             return None
         except Exception as e:
-            return {"type": "error", "text": f"Workflow error: {e}"}
+            err_msg = str(e)
+            if "valid JSON" in err_msg or "invalid JSON" in err_msg:
+                # AI couldn't build a workflow — that's fine, fall through to normal response
+                return None
+            return {"type": "error", "text": f"Workflow error: {err_msg}"}
 
     def _exec_action_wrapper(self, action: str, params: str = "") -> str:
         try:
