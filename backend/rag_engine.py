@@ -10,7 +10,7 @@ _SENTENCE_TRANSFORMER_AVAILABLE = False
 try:
     from sentence_transformers import SentenceTransformer
     _SENTENCE_TRANSFORMER_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
     SentenceTransformer = None
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -48,7 +48,12 @@ def index_document(user_id: str, chunks: list[dict]):
     docs = _load()
     docs.setdefault(user_id, [])
     for c in chunks:
-        vec = embed_text(c["content"])
+        vec = []
+        if _SENTENCE_TRANSFORMER_AVAILABLE:
+            try:
+                vec = embed_text(c["content"])
+            except Exception:
+                vec = []
         docs[user_id].append({
             "content": c["content"],
             "metadata": c.get("metadata", {}),
@@ -62,12 +67,29 @@ def query_context(user_id: str, query: str, top_k: int = 3) -> list[str]:
     entries = docs.get(user_id, [])
     if not entries:
         return []
-    qv = np.array(embed_text(query))
-    scores = [np.dot(qv, np.array(e["embedding"])) for e in entries]
-    idx = np.argsort(scores)[-top_k:][::-1]
+    # If embeddings exist, use cosine similarity
+    if entries[0].get("embedding"):
+        try:
+            qv = np.array(embed_text(query))
+            scores = [np.dot(qv, np.array(e["embedding"])) for e in entries]
+            idx = np.argsort(scores)[-top_k:][::-1]
+            return [
+                f"[{entries[i]['metadata'].get('source', '?')}] {entries[i]['content']}"
+                for i in idx
+            ]
+        except Exception:
+            pass
+    # Fallback: simple keyword matching
+    ql = query.lower()
+    scored = []
+    for e in entries:
+        content = e["content"].lower()
+        score = sum(1 for word in ql.split() if word in content)
+        scored.append((score, e))
+    scored.sort(key=lambda x: x[0], reverse=True)
     return [
-        f"[{entries[i]['metadata'].get('source', '?')}] {entries[i]['content']}"
-        for i in idx
+        f"[{e['metadata'].get('source', '?')}] {e['content']}"
+        for _, e in scored[:top_k]
     ]
 
 

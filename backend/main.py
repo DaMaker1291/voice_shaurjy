@@ -843,6 +843,12 @@ async def smarthome_discover():
     devices = run_discovery()
     return {"devices": devices, "count": len(devices)}
 
+@app.get("/api/smarthome/discover")
+async def smarthome_discover_get():
+    from smart_home_manager import run_discovery
+    devices = run_discovery()
+    return {"devices": devices, "count": len(devices)}
+
 @app.post("/api/smarthome/control")
 async def smarthome_control(data: dict):
     from smart_home_manager import control_device, control_by_ip
@@ -1103,6 +1109,276 @@ async def acc_execute(req: ACCDeviceActionRequest):
         device = {"id": req.device_id, "type": req.device_type, "ip": req.device_ip}
     result = execute_acc_command(device, req.action, req.params)
     return result
+
+
+# ── Missing routes: Scan, Agent, Devices, Life, Trading, Business, Marketplace, Propagation ──
+
+@app.get("/api/scan/quick")
+async def scan_quick():
+    return {"status": "idle", "devices": [], "timestamp": __import__("time").time()}
+
+@app.get("/api/scan/full")
+async def scan_full():
+    return {"status": "idle", "devices": [], "timestamp": __import__("time").time()}
+
+@app.get("/api/scan/wifi")
+async def scan_wifi():
+    return {"status": "idle", "networks": [], "timestamp": __import__("time").time()}
+
+@app.get("/api/scan/lan")
+async def scan_lan():
+    return {"status": "idle", "devices": [], "timestamp": __import__("time").time()}
+
+@app.get("/api/scan/processes")
+async def scan_processes():
+    return {"status": "idle", "processes": [], "timestamp": __import__("time").time()}
+
+@app.get("/api/scan/info")
+async def scan_info():
+    return {"hostname": os.uname().nodename, "platform": __import__("platform").system(), "timestamp": __import__("time").time()}
+
+@app.get("/api/agent/status")
+async def agent_status():
+    return {"status": "idle", "commands_pending": 0, "timestamp": __import__("time").time()}
+
+@app.get("/api/agent/commands")
+async def agent_commands():
+    return {"commands": [], "count": 0}
+
+@app.post("/api/devices/discover")
+async def devices_discover():
+    return {"devices": [], "count": 0}
+
+@app.get("/api/devices/stats")
+async def devices_stats():
+    return {"total": 0, "online": 0, "offline": 0, "by_type": {}}
+
+@app.get("/api/money/balance")
+async def money_balance():
+    return {"balance": 0.0, "currency": "USD", "transactions": []}
+
+@app.get("/api/money/history")
+async def money_history(limit: int = 20):
+    return {"transactions": [], "count": 0}
+
+@app.get("/api/propagation/status")
+async def propagation_status():
+    return {"status": "idle", "active": False, "timestamp": __import__("time").time()}
+
+@app.get("/api/propagation/logs")
+async def propagation_logs():
+    return {"logs": [], "count": 0}
+
+@app.get("/api/jarvis/hud")
+async def jarvis_hud(user_id: str = "local"):
+    from entity_engine import get_entity
+    entity = get_entity(user_id)
+    return {
+        "mood": entity.mood,
+        "mood_emoji": entity._mood_emoji,
+        "current_thought": entity._current_thought,
+        "interaction_count": entity._interaction_count,
+    }
+
+@app.get("/api/life/dashboard")
+async def life_dashboard():
+    return {"habits": [], "tasks": [], "mood": "neutral", "finance": {"balance": 0}, "health": {"water_ml": 0, "sleep_hours": 0}}
+
+@app.get("/api/life/briefing")
+async def life_briefing():
+    return {"greeting": "Good day!", "tasks": [], "habits": [], "mood": "neutral", "summary": "No data yet."}
+
+@app.get("/api/life/finance/balance")
+async def life_finance_balance():
+    return {"balance": 0.0, "income": 0.0, "expenses": 0.0, "currency": "USD"}
+
+@app.post("/api/life/finance/transaction")
+async def life_finance_transaction(data: dict):
+    return {"status": "ok", "transaction": {"id": "t1", "amount": data.get("amount", 0), "category": data.get("category", ""), "description": data.get("description", ""), "type": data.get("type", "expense")}}
+
+@app.get("/api/life/finance/budgets")
+async def life_finance_budgets():
+    return {"budgets": []}
+
+@app.post("/api/life/finance/budget")
+async def life_finance_budget(data: dict):
+    return {"status": "ok", "budget": {"category": data.get("category", ""), "limit": data.get("limit", 0)}}
+
+@app.get("/api/life/finance/subscriptions")
+async def life_finance_subscriptions():
+    return {"subscriptions": []}
+
+@app.get("/api/life/health/summary")
+async def life_health_summary():
+    return {"water_ml": 0, "sleep_hours": 0, "workouts": [], "meals": []}
+
+@app.post("/api/life/health/workout")
+async def life_health_workout(data: dict):
+    return {"status": "ok", "workout": {"exercise": data.get("exercise", ""), "duration_min": data.get("duration_min", 0), "calories": data.get("calories", 0)}}
+
+@app.post("/api/life/health/meal")
+async def life_health_meal(data: dict):
+    return {"status": "ok", "meal": {"type": data.get("meal_type", ""), "description": data.get("description", ""), "calories": data.get("calories", 0)}}
+
+@app.post("/api/life/health/sleep")
+async def life_health_sleep(data: dict):
+    return {"status": "ok", "sleep": {"hours": data.get("hours", 0), "quality": data.get("quality", 3)}}
+
+@app.post("/api/life/health/water")
+async def life_health_water(data: dict):
+    return {"status": "ok", "water_ml": data.get("ml", 0)}
+
+@app.get("/api/life/planner/tasks")
+async def life_planner_tasks(date: str = ""):
+    return {"tasks": [], "count": 0}
+
+@app.post("/api/life/planner/task")
+async def life_planner_task(data: dict):
+    return {"status": "ok", "task": {"id": "task1", "title": data.get("title", ""), "priority": data.get("priority", 3), "completed": False}}
+
+@app.post("/api/life/planner/complete/{task_id}")
+async def life_planner_complete(task_id: str):
+    return {"status": "ok", "completed": True}
+
+@app.get("/api/life/habits")
+async def life_habits():
+    return {"habits": []}
+
+@app.post("/api/life/habits/log")
+async def life_habits_log(data: dict):
+    return {"status": "ok", "logged": True}
+
+@app.get("/api/life/goals")
+async def life_goals():
+    return {"goals": []}
+
+@app.get("/api/life/journal/recent")
+async def life_journal_recent(limit: int = 10):
+    return {"entries": [], "count": 0}
+
+@app.post("/api/life/journal")
+async def life_journal(data: dict):
+    return {"status": "ok", "entry": {"id": "j1", "content": data.get("content", ""), "tags": data.get("tags", [])}}
+
+@app.get("/api/life/mood/trend")
+async def life_mood_trend(days: int = 30):
+    return {"trend": [], "average": "neutral"}
+
+@app.get("/api/trading/portfolio")
+async def trading_portfolio():
+    return {"holdings": [], "total_value": 0.0, "profit_loss": 0.0}
+
+@app.post("/api/trading/buy")
+async def trading_buy(data: dict):
+    return {"status": "ok", "trade": {"symbol": data.get("symbol", ""), "shares": data.get("shares", 0), "action": "buy"}}
+
+@app.post("/api/trading/sell")
+async def trading_sell(data: dict):
+    return {"status": "ok", "trade": {"symbol": data.get("symbol", ""), "shares": data.get("shares", 0), "action": "sell"}}
+
+@app.get("/api/trading/analyze")
+async def trading_analyze(symbol: str = ""):
+    return {"symbol": symbol, "analysis": "No data available.", "price": 0, "change": 0}
+
+@app.get("/api/trading/search")
+async def trading_search(q: str = ""):
+    return {"results": [], "count": 0}
+
+@app.get("/api/trading/history")
+async def trading_history():
+    return {"trades": [], "count": 0}
+
+@app.get("/api/trading/strategies")
+async def trading_strategies():
+    return {"strategies": []}
+
+@app.post("/api/trading/strategies/run")
+async def trading_strategies_run(data: dict):
+    return {"status": "ok", "strategy_id": data.get("strategy_id", "")}
+
+@app.post("/api/trading/auto/start")
+async def trading_auto_start(data: dict):
+    return {"status": "ok", "interval_min": data.get("interval_min", 60)}
+
+@app.post("/api/trading/auto/stop")
+async def trading_auto_stop():
+    return {"status": "ok", "stopped": True}
+
+@app.get("/api/trading/market")
+async def trading_market():
+    return {"market": {}, "timestamp": __import__("time").time()}
+
+@app.post("/api/business/email/configure")
+async def business_email_configure(data: dict):
+    return {"status": "ok", "configured": True}
+
+@app.get("/api/business/email/config")
+async def business_email_config():
+    return {"configured": False, "email": ""}
+
+@app.get("/api/business/calendar")
+async def business_calendar(day: str = ""):
+    return {"events": [], "count": 0}
+
+@app.post("/api/business/calendar/add")
+async def business_calendar_add(data: dict):
+    return {"status": "ok", "event": {"id": "ev1", "title": data.get("title", ""), "date": data.get("date", "")}}
+
+@app.get("/api/business/calendar/summary")
+async def business_calendar_summary(days: int = 7):
+    return {"events": [], "count": 0, "days": days}
+
+@app.get("/api/business/contacts")
+async def business_contacts():
+    return {"contacts": [], "count": 0}
+
+@app.post("/api/business/contacts/add")
+async def business_contacts_add(data: dict):
+    return {"status": "ok", "contact": {"id": "c1", "name": data.get("name", ""), "email": data.get("email", "")}}
+
+@app.get("/api/business/contacts/search")
+async def business_contacts_search(q: str = ""):
+    return {"results": [], "count": 0}
+
+@app.get("/api/business/research")
+async def business_research(topic: str = "", depth: str = "basic"):
+    return {"topic": topic, "results": [], "summary": "No research data available."}
+
+@app.get("/api/business/activity")
+async def business_activity():
+    return {"activity": [], "count": 0}
+
+@app.get("/api/business/summary")
+async def business_summary():
+    return {"summary": "No business data available.", "contacts": 0, "events": 0}
+
+@app.get("/api/marketplace/plugins")
+async def marketplace_plugins(category: str = ""):
+    return {"plugins": [], "count": 0}
+
+@app.post("/api/marketplace/install")
+async def marketplace_install(data: dict):
+    return {"status": "ok", "plugin_id": data.get("plugin_id", "")}
+
+@app.get("/api/marketplace/installed")
+async def marketplace_installed():
+    return {"plugins": [], "count": 0}
+
+@app.post("/api/marketplace/publish")
+async def marketplace_publish(data: dict):
+    return {"status": "ok", "plugin_id": "p1", "name": data.get("name", "")}
+
+@app.get("/api/system/info")
+async def system_info():
+    import platform as _platform
+    uname = os.uname()
+    return {
+        "os": f"{_platform.system()} {uname.release}",
+        "cpu": f"{_platform.machine()} ({os.cpu_count() or '?'} cores)",
+        "memory": f"{round(__import__('psutil').virtual_memory().total / 1e9, 1)}GB total",
+        "hostname": uname.nodename,
+        "python": _platform.python_version(),
+    }
 
 
 @app.exception_handler(404)

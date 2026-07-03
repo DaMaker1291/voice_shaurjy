@@ -4501,3 +4501,169 @@ if sys.platform == "darwin":
             _mac_cognitive_alert._thread.start()
             return f"Cognitive alert set: '{condition}'"
         return f"Alert already running: {_mac_cognitive_alert._condition}"
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Linux Executors — override Windows actions when running on Linux
+#  (registered last so they win over Windows versions)
+# ═══════════════════════════════════════════════════════════════════
+
+elif sys.platform == "linux":
+    import subprocess as _sp
+
+    def _linux_run(cmd: str, timeout=15) -> str:
+        try:
+            r = _sp.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
+            return (r.stdout or r.stderr or f"exit {r.returncode}").strip()
+        except Exception as e:
+            return f"Error: {e}"
+
+    @register("screenshot")
+    def _linux_screenshot(_):
+        return "Screenshot not available on cloud server. Use relay agent for local screenshots."
+
+    @register("clipboard_show")
+    def _linux_clipboard_show(_):
+        c = _linux_run("xclip -selection clipboard -o 2>/dev/null || pbpaste 2>/dev/null || echo ''")
+        return f"Clipboard: {c[:500] or 'empty (no display)'}"
+
+    @register("clipboard_copy")
+    def _linux_clipboard_copy(text):
+        c = text.replace("copy", "").replace("clipboard", "").strip() or "test"
+        _linux_run(f'echo "{c[:100]}" | xclip -selection clipboard 2>/dev/null')
+        return f"Copied: {c[:50]}"
+
+    @register("vol_level")
+    def _linux_vol_level(_):
+        r = _linux_run("amixer get Master 2>/dev/null | grep -oP '\\d+%' | head -1")
+        return f"Volume: {r or 'unknown'}"
+
+    @register("vol_up")
+    def _linux_vol_up(_):
+        _linux_run("amixer set Master 10%+ 2>/dev/null")
+        return "Volume up"
+
+    @register("vol_down")
+    def _linux_vol_down(_):
+        _linux_run("amixer set Master 10%- 2>/dev/null")
+        return "Volume down"
+
+    @register("vol_mute")
+    def _linux_vol_mute(_):
+        _linux_run("amixer set Master toggle 2>/dev/null")
+        return "Mute toggled"
+
+    @register("vol_set")
+    def _linux_vol_set(text):
+        import re as _re
+        m = _re.search(r"(\d+)", text)
+        if not m: return "Specify a number."
+        lvl = min(100, max(0, int(m.group(1))))
+        _linux_run(f"amixer set Master {lvl}% 2>/dev/null")
+        return f"Volume set to {lvl}%"
+
+    @register("brightness_up")
+    def _linux_brightness_up(_):
+        return "Brightness control not available on cloud server."
+
+    @register("brightness_down")
+    def _linux_brightness_down(_):
+        return "Brightness control not available on cloud server."
+
+    @register("brightness_set")
+    def _linux_brightness_set(_):
+        return "Brightness control not available on cloud server."
+
+    @register("display_info")
+    def _linux_display_info(_):
+        r = _linux_run("xrandr 2>/dev/null | head -5 || echo 'No display'")
+        return f"Display: {r}"
+
+    @register("send_notification")
+    def _linux_notify(text):
+        t = text.replace("send notification", "").replace("notify", "").replace("notification", "").strip()
+        if not t: t = "Hello from JARVIS"
+        # Try notify-send (Linux desktop), fall back to terminal message
+        _linux_run(f'notify-send "JARVIS" "{t[:200]}" 2>/dev/null')
+        return f"Notification: {t[:60]}"
+
+    @register("lock")
+    def _linux_lock(_):
+        _linux_run("xdg-screensaver lock 2>/dev/null || gnome-screensaver-command -l 2>/dev/null || loginctl lock-session 2>/dev/null")
+        return "Locking screen..."
+
+    @register("time")
+    def _linux_time(_):
+        return __import__("datetime").datetime.now().strftime("%A, %B %d, %Y — %I:%M %p")
+
+    @register("whoami")
+    def _linux_whoami(_):
+        return f"User: {_linux_run('whoami')}"
+
+    @register("uptime")
+    def _linux_uptime(_):
+        return _linux_run("uptime -p 2>/dev/null || uptime")
+
+    @register("system_info")
+    def _linux_sysinfo(_):
+        os_v = _linux_run("cat /etc/os-release 2>/dev/null | head -2")
+        cpu = _linux_run("lscpu 2>/dev/null | grep 'Model name' | head -1")
+        mem = _linux_run("free -h 2>/dev/null | head -2")
+        return f"OS: {os_v}\nCPU: {cpu}\nMemory:\n{mem}"
+
+    @register("disk_info")
+    def _linux_disk(_):
+        return _linux_run("df -h / 2>/dev/null | tail -1")
+
+    @register("memory_info")
+    def _linux_mem(_):
+        return _linux_run("free -h 2>/dev/null | head -2")
+
+    @register("process_list")
+    def _linux_procs(_):
+        return _linux_run("ps aux --sort=-%cpu | head -15")
+
+    @register("network_info")
+    def _linux_net(_):
+        return _linux_run("ip addr show 2>/dev/null | grep 'inet ' || ifconfig 2>/dev/null | grep 'inet '")
+
+    @register("wifi_list")
+    def _linux_wifi(_):
+        return _linux_run("nmcli device wifi list 2>/dev/null || iwlist scanning 2>/dev/null | head -20 || echo 'No WiFi tools available'")
+
+    @register("battery_status")
+    def _linux_battery(_):
+        return _linux_run("cat /sys/class/power_supply/BAT*/capacity 2>/dev/null || echo 'No battery detected'")
+
+    @register("open_app")
+    def _linux_open_app(text):
+        name = text.lower().strip()
+        _linux_run(f"xdg-open https://{name} 2>/dev/null || echo 'Cannot open {name}'")
+        return f"Opening {name}..."
+
+    @register("open_url")
+    def _linux_open_url(text):
+        url = text.replace("open", "").replace("go to", "").replace("url", "").replace("website", "").strip()
+        if not url: return "Which URL?"
+        if not url.startswith("http"): url = "https://" + url
+        _linux_run(f"xdg-open '{url}' 2>/dev/null")
+        return f"Opening {url[:70]}..."
+
+    @register("search")
+    def _linux_search(text):
+        from urllib.parse import quote as _uq2
+        q = text.replace("search", "").replace("google", "").replace("look up", "").strip() or text
+        _linux_run(f"xdg-open 'https://google.com/search?q={_uq2(q)}' 2>/dev/null")
+        return f'Searching for "{q}"...'
+
+    @register("cognitive_scan")
+    def _linux_cognitive_scan(_):
+        lines = []
+        lines.append(f"=== COGNITIVE ENVIRONMENT SCAN ===")
+        lines.append(f"Time: {_linux_run('date')}")
+        lines.append(f"Uptime: {_linux_run('uptime -p 2>/dev/null || uptime')}")
+        lines.append(f"Users: {_linux_run('who')}")
+        lines.append(f"Processes (top 5 by CPU): {_linux_run('ps aux --sort=-%cpu | head -6')}")
+        lines.append(f"Disk: {_linux_run('df -h / 2>/dev/null | tail -1')}")
+        lines.append(f"Network: {_linux_run('ip route 2>/dev/null | head -3')}")
+        return "\n".join(lines)

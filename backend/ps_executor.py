@@ -1,6 +1,7 @@
-"""Ultra-fast PowerShell executor. Uses subprocess.run() with proper timeouts — no deadlocks."""
+"""Cross-platform command executor. Uses PowerShell on Windows, bash on Linux/macOS."""
 
 import subprocess
+import platform
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -12,9 +13,11 @@ _CACHE_TTL = 5.0
 _CACHE_MAX = 128
 _LOCK = threading.Lock()
 
+_IS_WINDOWS = platform.system() == "Windows"
+
 
 def ps(cmd: str, timeout: float = 15.0, use_cache: bool = True) -> str:
-    """Execute PowerShell command. Always times out properly. Falls back safely."""
+    """Execute a shell command. PowerShell on Windows, bash on Linux/macOS."""
 
     key = cmd.strip()
 
@@ -26,10 +29,16 @@ def ps(cmd: str, timeout: float = 15.0, use_cache: bool = True) -> str:
                     return result
 
     try:
-        r = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", cmd],
-            capture_output=True, text=True, timeout=timeout,
-        )
+        if _IS_WINDOWS:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", cmd],
+                capture_output=True, text=True, timeout=timeout,
+            )
+        else:
+            r = subprocess.run(
+                ["bash", "-c", cmd],
+                capture_output=True, text=True, timeout=timeout,
+            )
         result = (r.stdout.strip() or r.stderr.strip())[:2000]
     except subprocess.TimeoutExpired:
         result = "timed_out"
