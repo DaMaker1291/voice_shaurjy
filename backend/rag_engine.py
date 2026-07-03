@@ -7,11 +7,18 @@ import numpy as np
 
 _EMB = None
 _SENTENCE_TRANSFORMER_AVAILABLE = False
-try:
-    from sentence_transformers import SentenceTransformer
-    _SENTENCE_TRANSFORMER_AVAILABLE = True
-except (ImportError, OSError):
-    SentenceTransformer = None
+SentenceTransformer = None
+
+def _check_sentence_transformers():
+    global _SENTENCE_TRANSFORMER_AVAILABLE, SentenceTransformer
+    if SentenceTransformer is not None:
+        return
+    try:
+        from sentence_transformers import SentenceTransformer as ST
+        SentenceTransformer = ST
+        _SENTENCE_TRANSFORMER_AVAILABLE = True
+    except (ImportError, OSError, Exception):
+        _SENTENCE_TRANSFORMER_AVAILABLE = False
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 DOCS_FILE = os.path.join(DATA_DIR, "documents.json")
@@ -20,6 +27,7 @@ EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 
 def _embedder():
     global _EMB
+    _check_sentence_transformers()
     if not _SENTENCE_TRANSFORMER_AVAILABLE:
         raise RuntimeError("sentence-transformers not installed. Run: pip install sentence-transformers torch")
     if _EMB is None:
