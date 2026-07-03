@@ -4,7 +4,7 @@ import PricingCard from "@/components/PricingCard";
 import { useState, useEffect } from "react";
 import { setBackendUrl, getBackendUrl } from "@/lib/api";
 
-const HF_API = "https://dgfhgjhj-my-actual-brain.hf.space";
+const HF_API = "https://dgfhgjhj-jarvis-ai-brain.hf.space";
 
 export default function Settings() {
   const [tier, setTier] = useState("free");
@@ -15,12 +15,7 @@ export default function Settings() {
     setUrlInput(getBackendUrl());
   }, []);
 
-  const agentUrl = `${HF_API}/relay_agent`;
-  const psParts = {
-    a: `powershell -c "& { `,
-    b: `curl.exe -sL '${agentUrl}' -o \"$env:TEMP\\relay_agent.py\"; python \"$env:TEMP\\relay_agent.py\" --user $env:USERNAME }"`,
-  };
-  const psCommand = psParts.a + psParts.b;
+  const psCommand = `powershell -c "curl.exe -sL '${HF_API}/relay_agent' -o \\$env:TEMP\\relay_agent.py; python \\$env:TEMP\\relay_agent.py --user \\$env:USERNAME"`;
 
   const copyCmd = async () => {
     try {
@@ -79,7 +74,7 @@ export default function Settings() {
         <p className="text-sm text-gray-400 mb-4">
           Run the relay agent on your Windows PC so Jason can execute actions locally (battery, OneNote,
           volume, network scan, browser, screen vision, etc.).
-          It polls the cloud every 0.5s &mdash; actions run on your machine instantly.
+          It polls the cloud every 0.5s — actions run on your machine instantly.
         </p>
 
         <div className="flex items-center gap-3 mb-4">
@@ -95,24 +90,62 @@ export default function Settings() {
           </span>
         </div>
 
-        <div className="bg-gray-950 rounded-lg p-4 space-y-3 text-sm font-mono">
-          <p className="text-green-400 text-xs font-semibold tracking-wide">
-            # One-click install &mdash; run this in PowerShell (as admin):
-          </p>
+        <div className="bg-gray-950 rounded-lg p-4 space-y-4 text-sm font-mono">
 
-          <div className="bg-gray-900 rounded p-3 text-xs text-gray-300 break-all select-all leading-relaxed relative group">
-            {psCommand}
-            <button
-              onClick={copyCmd}
-              className="absolute top-2 right-2 text-[9px] text-gray-600 hover:text-gray-300 bg-gray-800 px-2 py-1 rounded transition-all"
-            >
-              {copied ? "Copied" : "Copy"}
-            </button>
+          {/* Option 1: CMD */}
+          <div className="space-y-2 border border-gray-800 rounded-lg p-3 bg-gray-900/50">
+            <p className="text-cyan-400 text-xs font-semibold">Option 1: Command Prompt (cmd.exe)</p>
+            <p className="text-gray-500 text-[10px] mb-2">Open cmd.exe and run these TWO commands separately:</p>
+
+            <div className="step-indicator mb-3">
+              <div className="step-num">1</div>
+              <div className="step-line" />
+              <div className="step-num">2</div>
+            </div>
+
+            <p className="text-gray-500 text-[10px]">Step 1 — Download:</p>
+            <div className="bg-gray-900 rounded p-2 text-xs text-gray-300 break-all select-all relative group">
+              <span>curl -O {HF_API}/relay_agent</span>
+              <button
+                onClick={() => navigator.clipboard.writeText(`curl -O ${HF_API}/relay_agent`)}
+                className="copy-btn absolute top-2 right-2 text-[9px] text-gray-600 hover:text-gray-300 bg-gray-800 px-2 py-1 rounded transition-all"
+              >
+                Copy
+              </button>
+            </div>
+
+            <p className="text-gray-500 text-[10px]">Step 2 — Run:</p>
+            <div className="bg-gray-900 rounded p-2 text-xs text-gray-300 break-all select-all relative group">
+              <span>python relay_agent.py --user supro</span>
+              <button
+                onClick={() => navigator.clipboard.writeText("python relay_agent.py --user supro")}
+                className="copy-btn absolute top-2 right-2 text-[9px] text-gray-600 hover:text-gray-300 bg-gray-800 px-2 py-1 rounded transition-all"
+              >
+                Copy
+              </button>
+            </div>
           </div>
 
+          {/* Option 2: PowerShell one-liner */}
+          <div className="space-y-2 border border-purple-800/40 rounded-lg p-3 bg-purple-900/10">
+            <p className="text-purple-400 text-xs font-semibold">Option 2: PowerShell (One-liner)</p>
+            <p className="text-gray-500 text-[10px] mb-2">Open PowerShell (Admin) and paste this single command:</p>
+
+            <div className="bg-gray-900 rounded p-2 text-xs text-gray-300 break-all select-all relative group">
+              {psCommand}
+              <button
+                onClick={copyCmd}
+                className={`copy-btn absolute top-2 right-2 text-[9px] text-gray-600 hover:text-gray-300 bg-gray-800 px-2 py-1 rounded transition-all ${copied ? "copy-flash text-green-400" : ""}`}
+              >
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
+
+          {/* Option 3: Clone repo */}
           <details className="pt-2 border-t border-gray-800">
             <summary className="text-purple-400 text-xs font-semibold tracking-wide cursor-pointer hover:text-purple-300">
-              Manual setup (if one-click fails)
+              Option 3: Clone the repo (full dev setup)
             </summary>
             <div className="mt-3 space-y-1.5 pl-2">
               <p className="text-gray-500 text-xs">
@@ -120,15 +153,24 @@ export default function Settings() {
               </p>
               <p className="text-gray-500 text-xs">2. Clone the repo and run:</p>
               <div className="bg-gray-900/60 rounded p-2 text-xs text-gray-400 break-all select-all">
-                git clone https://github.com/DaMaker1291/voice_shaurjy.git &amp;&amp; cd voice_shaurjy &amp;&amp; pip install -r backend/requirements-render.txt &amp;&amp; python relay_agent.py --user local
+                git clone https://github.com/DaMaker1291/voice_shaurjy.git
+              </div>
+              <div className="bg-gray-900/60 rounded p-2 text-xs text-gray-400 break-all select-all">
+                cd voice_shaurjy
+              </div>
+              <div className="bg-gray-900/60 rounded p-2 text-xs text-gray-400 break-all select-all">
+                pip install -r backend/requirements-render.txt
+              </div>
+              <div className="bg-gray-900/60 rounded p-2 text-xs text-gray-400 break-all select-all">
+                python relay_agent.py --user supro
               </div>
             </div>
           </details>
         </div>
 
         <p className="text-xs text-gray-500 mt-3">
-          Keep the terminal window open while using the assistant. The agent auto-detects your Windows username.
-          Actions include: volume, brightness, screenshots, OneNote, Outlook, Chrome, system stats, network scan, and 200+ more.
+          Keep the terminal window open while using the assistant. Actions include: volume, brightness,
+          screenshots, OneNote, Outlook, Chrome, system stats, network scan, and 200+ more.
         </p>
       </section>
 

@@ -709,6 +709,7 @@ export default function Home() {
                 <div className="absolute top-10 right-0 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-2 shadow-2xl min-w-[150px] z-50 animate-fade-in glow-purple" onClick={() => setShowPageNav(false)}>
                   {[
                     { href: "/", label: "Chat" },
+                    { href: "/acc", label: "ACC" },
                     { href: "/dashboard", label: "Brain" },
                     { href: "/secretary", label: "Secretary" },
                     { href: "/life", label: "Life OS" },

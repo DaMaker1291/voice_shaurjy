@@ -924,6 +924,7 @@ async def smarthome_device_delete(data: dict):
 async def relay_register(data: dict):
     """Called by relay agent on startup to register this device."""
     from relay import record_heartbeat
+    from acc_manager import register_relay_device
     uid = data.get("user_id", "local")
     _relay_devices[uid] = {
         "hostname": data.get("hostname", "?"),
@@ -931,6 +932,7 @@ async def relay_register(data: dict):
         "info": data.get("info", {}),
         "last_seen": __import__("time").time(),
     }
+    register_relay_device(uid, {"hostname": data.get("hostname", "?"), "platform": data.get("platform", "?"), "info": data.get("info", {})})
     record_heartbeat(uid)
     return {"status": "registered"}
 
@@ -1055,6 +1057,71 @@ async def jarvis_thoughts(user_id: str = "local", limit: int = 10):
 async def jarvis_status(user_id: str = "local"):
     """Return full agent status summary."""
     return await jarvis_thoughts(user_id)
+
+
+# ── ACC (Agent Command Center) ────────────────────────────────────
+
+class ACCCommandRequest(BaseModel):
+    device_id: str = ""
+    device_type: str = ""
+    device_name: str = ""
+    device_protocol: str = ""
+    command: str = ""
+    capabilities: list = []
+
+class ACCDeviceActionRequest(BaseModel):
+    device_id: str = ""
+    device_ip: str = ""
+    device_type: str = ""
+    action: str = ""
+    params: str = ""
+
+@app.get("/api/acc/devices")
+async def acc_devices():
+    """Return all devices across all sources (smart home, system, relay)."""
+    from acc_manager import get_all_acc_devices
+    devices = get_all_acc_devices()
+    total = len(devices)
+    online = sum(1 for d in devices if d.get("status") == "online")
+    by_type = {}
+    for d in devices:
+        t = d.get("type", "unknown")
+        by_type.setdefault(t, {"total": 0, "online": 0})
+        by_type[t]["total"] += 1
+        if d.get("status") == "online":
+            by_type[t]["online"] += 1
+    return {"devices": devices, "total": total, "online": online, "offline": total - online, "by_type": by_type}
+
+
+@app.post("/api/acc/parse")
+async def acc_parse(req: ACCCommandRequest):
+    """Parse a natural language command for a specific device."""
+    from acc_manager import parse_command_for_device
+    device = {
+        "id": req.device_id,
+        "name": req.device_name,
+        "type": req.device_type,
+        "protocol": req.device_protocol,
+        "capabilities": req.capabilities,
+    }
+    result = parse_command_for_device(device, req.command)
+    return result
+
+
+@app.post("/api/acc/execute")
+async def acc_execute(req: ACCDeviceActionRequest):
+    """Execute a parsed action on a device."""
+    from acc_manager import execute_acc_command, get_all_acc_devices
+    devices = get_all_acc_devices()
+    device = None
+    for d in devices:
+        if d.get("id") == req.device_id or d.get("ip") == req.device_ip:
+            device = d
+            break
+    if not device:
+        device = {"id": req.device_id, "type": req.device_type, "ip": req.device_ip}
+    result = execute_acc_command(device, req.action, req.params)
+    return result
 
 
 @app.exception_handler(404)
