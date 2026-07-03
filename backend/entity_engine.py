@@ -434,35 +434,33 @@ class Entity:
     # ── Action Routing ─────────────────────────────────────────────
 
     def _route_action(self, text: str) -> dict | None:
-        from actions import detect_action, cloud_safe_execute, _ACTION_LABELS
+        from actions import detect_action, cloud_safe_execute, relay_action, _ACTION_LABELS
 
         action = detect_action(text)
         if action:
-            # Check launch preference for launchable actions
-            LAUNCHABLE_ACTIONS = {"spotify", "whatsapp_open", "web_app_open", "teams_open"}
-            if action in LAUNCHABLE_ACTIONS:
-                pref = self.memory.get_preference(f"launch_{action}")
-                if not pref:
-                    return {
-                        "action": "ask_launch",
-                        "launch_action": action,
-                        "question": f"Should I open that in the app (requires relay) or in your browser?",
-                        "text": f"App or browser?",
-                    }
-                # If preference is "app", force relay check (bypass cloud-safe)
-                if pref == "app":
-                    from actions import relay_action
-                    result = relay_action(action, text, user_id=self.user_id)
-                    label = _ACTION_LABELS.get(action, "")
-                    self._set_mood("focused")
-                    if result.startswith("__NEEDS_RELAY__:"):
-                        msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
-                        return {"text": f"{msg}", "action": "__needs_relay__"}
-                    if result.startswith("__RELAY__:"):
-                        parts = result.split(":", 2)
-                        relay_id = parts[1] if len(parts) > 1 else ""
-                        return {"text": f"{label}\n⏳ Opening on your computer...", "action": action, "relay_id": relay_id, "async": True}
-                    return {"text": f"{label}\n{result}", "action": action}
+            # Web-launchable actions: auto-open browser (no questions)
+            WEB_URLS = {
+                "spotify": "https://open.spotify.com",
+                "whatsapp_open": "https://web.whatsapp.com",
+                "teams_open": "https://teams.microsoft.com",
+            }
+            if action in WEB_URLS:
+                # Try relay first (app mode), fall back to browser URL
+                try:
+                    from relay import is_relay_alive
+                    if is_relay_alive():
+                        result = relay_action(action, text, user_id=self.user_id)
+                        if result.startswith("__RELAY__:"):
+                            parts = result.split(":", 2)
+                            relay_id = parts[1] if len(parts) > 1 else ""
+                            label = _ACTION_LABELS.get(action, "")
+                            return {"text": f"{label}\nOpening on your computer...", "action": action, "relay_id": relay_id, "async": True}
+                except Exception:
+                    pass
+                # Relay offline — return URL for frontend to open
+                url = WEB_URLS[action]
+                self._set_mood("focused")
+                return {"text": f"Opening {action} in your browser...", "action": action, "link": url}
 
             result = cloud_safe_execute(action, text, user_id=self.user_id)
             label = _ACTION_LABELS.get(action, "")
@@ -612,20 +610,6 @@ Recent interactions:
         if not skip_actions:
             action_result = self._route_action(user_input)
             if action_result and action_result.get("action"):
-                # Handle launch preference question — show as ask task
-                if action_result["action"] == "ask_launch":
-                    result["task"] = {
-                        "type": "ask",
-                        "question": action_result.get("question", "App or browser?"),
-                        "session_id": f"launch_{action_result['launch_action']}",
-                        "step": 1, "total": 1,
-                        "text": f"❓ {action_result.get('question', 'App or browser?')}",
-                        "launch_action": action_result["launch_action"],
-                    }
-                    result["text"] = action_result.get("question", "App or browser?")
-                    self.memory.log_interaction(user_input, result["text"], "ask_launch")
-                    return result
-
                 result["action"] = action_result["action"]
                 result["text"] = action_result.get("text", "")
                 result["thought"] = f"Executing {action_result['action']}..."
@@ -637,6 +621,8 @@ Recent interactions:
                     result["qr_image"] = action_result["qr_image"]
                 if action_result.get("image"):
                     result["image"] = action_result["image"]
+                if action_result.get("link"):
+                    result["link"] = action_result["link"]
                 if action_result.get("wa_link"):
                     result["wa_link"] = action_result["wa_link"]
                 self.memory.log_interaction(user_input, result["text"], action_result["action"])

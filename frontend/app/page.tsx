@@ -367,9 +367,21 @@ export default function Home() {
           }]);
           setLastResponse(reply);
           setTimeout(() => setActionFeedback(null), 4000);
-          // Auto-open WhatsApp — navigates to wa.me universal link
-          // Opens native app if installed, falls back to browser tab if not
+          // Auto-open WhatsApp
           setTimeout(() => { window.location.href = res.wa_link; }, 300);
+          return;
+        }
+
+        // Handle generic URL link — auto-open in browser
+        if (res.link) {
+          setMessages((p) => [...p, {
+            role: "assistant",
+            content: reply,
+            link: res.link
+          }]);
+          setLastResponse(reply);
+          setTimeout(() => setActionFeedback(null), 4000);
+          setTimeout(() => { window.location.href = res.link; }, 300);
           return;
         }
 
@@ -744,7 +756,7 @@ export default function Home() {
           )}
 
           {/* Ambient glow rings behind orb */}
-          <div className={`absolute w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] md:w-[550px] md:h-[550px] rounded-full -z-5 transition-all duration-700 ${
+          <div className={`absolute w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] md:w-[550px] md:h-[550px] rounded-full -z-10 transition-all duration-700 ${
             listening ? 'ambient-glow-listening' : thinking ? 'ambient-glow-thinking' : speaking ? 'ambient-glow-speaking' : 'ambient-glow-idle'
           }`} style={{ marginTop: taskQuestion ? -80 : -40 }} />
 
