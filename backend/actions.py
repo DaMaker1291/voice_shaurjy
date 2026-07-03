@@ -1170,7 +1170,7 @@ def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
 # Cloud-safe actions — ones that work on Linux without needing a relay agent
 _CLOUD_SAFE_ACTIONS = {
     "weather", "public_ip", "math_eval", "timer", "alarm",
-    "time", "timer_stop", "timer_remaining", "network_scan_quick", "network_scan_deep",
+    "time", "timer_stop", "timer_remaining",
 
     # Web-able actions — run via Playwright on server, relay if available
     "spotify",

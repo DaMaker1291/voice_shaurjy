@@ -650,6 +650,67 @@ body {
 .center-overlay pre::-webkit-scrollbar-track { background: transparent; }
 .center-overlay pre::-webkit-scrollbar-thumb { background: rgba(6,182,212,0.2); border-radius: 2px; }
 
+/* ── Ambient ring animation ── */
+@keyframes ring-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.orb-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(168,85,247,0.08);
+  animation: ring-spin 20s linear infinite;
+  pointer-events: none;
+}
+
+/* ── Gradient border for cards ── */
+.gradient-border {
+  position: relative;
+  border-radius: 16px;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(168,85,247,0.3), transparent 40%, transparent 60%, rgba(6,182,212,0.3));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ── Header glow line ── */
+.header-glow {
+  position: relative;
+}
+.header-glow::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 5%; right: 5%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(168,85,247,0.15), rgba(6,182,212,0.15), transparent);
+}
+
+/* ── Floating orbs decoration ── */
+@keyframes float-orb {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.15; }
+  50% { transform: translateY(-20px) scale(1.1); opacity: 0.25; }
+}
+.floating-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  pointer-events: none;
+}
+
+/* ── Shimmer animation for skeleton ── */
+@keyframes shimmer {
+  0% { transform: translateX(-100%) skewX(-12deg); }
+  100% { transform: translateX(200%) skewX(-12deg); }
+}
+.animate-shimmer { animation: shimmer 2s ease-in-out infinite; }
+
 /* ── Overlay data lines ── */
 .center-overlay pre {
   font-size: 12px;

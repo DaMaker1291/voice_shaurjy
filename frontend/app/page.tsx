@@ -32,6 +32,53 @@ const SUGGESTIONS = [
   "open Spotify", "battery status",
 ];
 
+function ParticleBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    c.width = window.innerWidth; c.height = window.innerHeight;
+    const particles: { x: number; y: number; vx: number; vy: number; r: number }[] = [];
+    for (let i = 0; i < 50; i++) {
+      particles.push({ x: Math.random() * c.width, y: Math.random() * c.height, vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4, r: Math.random() * 1.5 + 0.5 });
+    }
+    const connections: { a: number; b: number }[] = [];
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        if (Math.random() < 0.08) connections.push({ a: i, b: j });
+      }
+    }
+    let anim: number;
+    const draw = () => {
+      ctx.clearRect(0, 0, c.width, c.height);
+      particles.forEach(p => {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > c.width) p.vx *= -1;
+        if (p.y < 0 || p.y > c.height) p.vy *= -1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(120, 60, 220, 0.25)";
+        ctx.fill();
+      });
+      connections.forEach(cn => {
+        const a = particles[cn.a], b = particles[cn.b];
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = "rgba(120, 60, 220, 0.06)";
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      });
+      anim = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => cancelAnimationFrame(anim);
+  }, []);
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />;
+}
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -592,7 +639,7 @@ export default function Home() {
       <div className="aurora" />
       <div className="scan-overlay" />
       <div className="particle-field">
-        {Array.from({ length: 30 }, (_, i) => (
+        {Array.from({ length: 40 }, (_, i) => (
           <div
             key={i}
             className="particle"
@@ -605,44 +652,64 @@ export default function Home() {
           />
         ))}
       </div>
+      <ParticleBg />
+
+      {/* Floating orb decorations */}
+      <div className="floating-orb w-96 h-96 bg-purple-700/10 top-[-10%] left-[-5%]" style={{ animation: 'float-orb 8s ease-in-out infinite' }} />
+      <div className="floating-orb w-80 h-80 bg-cyan-700/8 bottom-[-5%] right-[-5%]" style={{ animation: 'float-orb 10s ease-in-out infinite 2s' }} />
+      <div className="floating-orb w-64 h-64 bg-blue-700/6 top-[40%] right-[-8%]" style={{ animation: 'float-orb 12s ease-in-out infinite 4s' }} />
 
       <div className="relative z-10 flex-[3] min-w-0 flex flex-col px-4">
 
-        {/* Status bar — neon gradient text */}
-        <div className="absolute top-3 left-4 z-30 flex items-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full ${listening ? "bg-green-400" : thinking ? "bg-purple-400" : speaking ? "bg-cyan-400" : "bg-gray-600"}`} />
-          <span className="status-text">{scanning ? "scanning..." : thinking ? "processing" : speaking ? "speaking" : entityMoodEmoji ? `${entityMoodEmoji} ${entityMood}` : "idle"}</span>
-        </div>
-
-        {/* Page nav (replaces old layout nav) */}
-        <div className="absolute top-3 right-4 z-30 flex items-center gap-1">
-          <button onClick={() => setShowPageNav(o => !o)} className="text-gray-500 hover:text-purple-400 transition-colors p-1 rounded text-[11px] font-mono tracking-wider">
-            ☰
-          </button>
-          <button onClick={() => setSidebarOpen((o) => !o)} className="text-gray-500 hover:text-purple-400 transition-colors p-1 rounded">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
-            </svg>
-          </button>
-          {showPageNav && (
-            <div className="absolute top-8 right-0 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-2 shadow-2xl min-w-[140px] z-50 animate-fade-in glow-purple" onClick={() => setShowPageNav(false)}>
-              {[
-                { href: "/", label: "Chat" },
-                { href: "/dashboard", label: "Brain" },
-                { href: "/secretary", label: "Secretary" },
-                { href: "/life", label: "Life OS" },
-                { href: "/trading", label: "Trading" },
-                { href: "/marketplace", label: "Plugins" },
-                { href: "/smarthome", label: "Smart Home" },
-                { href: "/settings", label: "Settings" },
-              ].map(l => (
-                <Link key={l.href} href={l.href}
-                  className="block text-[11px] font-mono text-gray-400 hover:text-purple-400 hover:bg-purple-900/10 px-3 py-1.5 rounded-lg transition-colors">
-                  {l.label}
-                </Link>
-              ))}
+        {/* Glass hero header */}
+        <div className="absolute top-0 left-0 right-0 z-30">
+          <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a1e]/80 via-[#0a0a1e]/40 to-transparent pointer-events-none" />
+          <div className="relative flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${
+                listening ? "bg-green-400 shadow-[0_0_12px_rgba(34,197,94,0.6)]" :
+                thinking ? "bg-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.6)]" :
+                speaking ? "bg-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.6)]" :
+                "bg-gray-600"
+              }`} />
+              <div className="flex items-baseline gap-2">
+                <span className="text-[11px] font-mono tracking-[0.25em] uppercase bg-gradient-to-r from-purple-300 to-cyan-300 bg-clip-text text-transparent font-semibold">
+                  {scanning ? "scanning" : thinking ? "processing" : speaking ? "speaking" : entityMood}
+                </span>
+                <span className="text-[10px] font-mono text-gray-600/50">{entityMoodEmoji}</span>
+              </div>
             </div>
-          )}
+
+            <div className="flex items-center gap-1">
+              <button onClick={() => setShowPageNav(o => !o)} className="text-gray-500 hover:text-purple-400 transition-colors p-1.5 rounded-lg hover:bg-purple-900/10 text-[11px] font-mono tracking-wider">
+                ☰
+              </button>
+              <button onClick={() => setSidebarOpen((o) => !o)} className="text-gray-500 hover:text-purple-400 transition-colors p-1.5 rounded-lg hover:bg-purple-900/10">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+                </svg>
+              </button>
+              {showPageNav && (
+                <div className="absolute top-10 right-0 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl p-2 shadow-2xl min-w-[150px] z-50 animate-fade-in glow-purple" onClick={() => setShowPageNav(false)}>
+                  {[
+                    { href: "/", label: "Chat" },
+                    { href: "/dashboard", label: "Brain" },
+                    { href: "/secretary", label: "Secretary" },
+                    { href: "/life", label: "Life OS" },
+                    { href: "/trading", label: "Trading" },
+                    { href: "/marketplace", label: "Plugins" },
+                    { href: "/smarthome", label: "Smart Home" },
+                    { href: "/settings", label: "Settings" },
+                  ].map(l => (
+                    <Link key={l.href} href={l.href}
+                      className="block text-[11px] font-mono text-gray-400 hover:text-purple-400 hover:bg-purple-900/10 px-3 py-1.5 rounded-lg transition-colors">
+                      {l.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Task progress */}
@@ -672,8 +739,25 @@ export default function Home() {
             </div>
           )}
 
+          {/* Ambient glow rings behind orb */}
+          <div className={`absolute w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] md:w-[550px] md:h-[550px] rounded-full -z-5 transition-all duration-700 ${
+            listening ? 'ambient-glow-listening' : thinking ? 'ambient-glow-thinking' : speaking ? 'ambient-glow-speaking' : 'ambient-glow-idle'
+          }`} style={{ marginTop: taskQuestion ? -80 : -40 }} />
+
+          {/* Expanding status rings */}
+          {(listening || thinking || speaking) && (
+            <div className={`absolute w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[420px] md:h-[420px] rounded-full ${
+              listening ? 'status-ring-listening' : thinking ? 'status-ring-thinking' : 'status-ring-speaking'
+            }`} style={{ marginTop: taskQuestion ? -80 : -40 }} />
+          )}
+
           {/* Centered BotSwarm agents — dim when overlay active */}
-          <div className={`glow-card w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[420px] md:h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl shadow-blue-900/30 cursor-pointer transition-all duration-500 ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
+          <div className={`w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[420px] md:h-[420px] rounded-full overflow-hidden border border-blue-800/20 shadow-2xl cursor-pointer transition-all duration-500 ${
+            listening ? 'shadow-[0_0_60px_rgba(34,197,94,0.15)]' :
+            thinking ? 'shadow-[0_0_60px_rgba(168,85,247,0.2)]' :
+            speaking ? 'shadow-[0_0_60px_rgba(6,182,212,0.15)]' :
+            'shadow-blue-900/30'
+          } ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
             <BotSwarm
               listening={listening}
               thinking={thinking}
@@ -694,7 +778,12 @@ export default function Home() {
           {/* Suggestions */}
           {showSuggestions && messages.length <= 1 && !listening && !thinking && !speaking && (
             <div className="mt-6 max-w-lg w-full px-6 animate-fade-in">
-              <div className="glass rounded-2xl p-4 glow-purple">
+              <div className="glass-card rounded-2xl p-5 glow-purple relative">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-1 h-1 rounded-full bg-purple-500/40" />
+                  <span className="text-[8px] font-mono text-gray-700 tracking-[0.2em] uppercase">quick actions</span>
+                  <div className="flex-1 h-px bg-gradient-to-r from-purple-800/20 to-transparent" />
+                </div>
                 <div className="flex flex-wrap justify-center gap-2">
                   {SUGGESTIONS.map((s, i) => (
                     <button
@@ -777,10 +866,12 @@ export default function Home() {
           {/* Last response */}
           {lastResponse && !listening && !thinking && !speaking && (
             <div className="mt-6 max-w-2xl w-full px-6 animate-fade-in message-enter">
-              <div className="holo-card glow-card glow-purple px-5 py-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500/60" />
-                  <span className="text-[9px] font-mono tracking-[0.15em] uppercase text-purple-500/60 text-glow">jarvis</span>
+              <div className="holo-card glow-card px-5 py-4 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-purple-500/40 to-cyan-500/40" />
+                <div className="flex items-center gap-2 mb-2.5">
+                  <div className="w-2 h-2 rounded-full bg-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.3)]" />
+                  <span className="text-[9px] font-mono tracking-[0.2em] uppercase bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent font-semibold">jarvis</span>
+                  <div className="flex-1 h-px bg-gradient-to-r from-purple-800/20 to-transparent" />
                 </div>
                 <p className="text-sm text-gray-200 font-light leading-relaxed whitespace-pre-wrap">{lastResponse}</p>
               </div>
@@ -834,19 +925,22 @@ export default function Home() {
         {/* Text input */}
         {!taskQuestion && (
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
-            <div className="input-bar flex items-center gap-2 px-5 py-2.5 glow-purple">
-              <input
-                ref={inputRef}
-                type="text"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
-                placeholder="Ask Jason anything..."
-                className="bg-transparent text-sm text-gray-200 placeholder-gray-700/50 outline-none flex-1 font-mono"
-              />
-              <button onClick={sendText} className="send-btn p-1.5 rounded-full transition-all duration-200">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" /></svg>
-              </button>
+            <div className="relative group">
+              <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-r from-purple-600/20 via-cyan-500/20 to-purple-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-sm" />
+              <div className="input-bar relative flex items-center gap-2 px-5 py-3 glow-purple bg-[#0d0d24]/80">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
+                  placeholder="Ask Jason anything..."
+                  className="bg-transparent text-sm text-gray-200 placeholder-gray-700/50 outline-none flex-1 font-mono"
+                />
+                <button onClick={sendText} className="send-btn p-2 rounded-full transition-all duration-200 hover:bg-purple-900/20">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" /></svg>
+                </button>
+              </div>
             </div>
           </div>
         )}
