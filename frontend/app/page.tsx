@@ -1,102 +1,56 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import BotSwarm from "@/components/BotSwarm";
 import Sidebar from "@/components/Sidebar";
+import AgentStatusBar from "@/components/AgentStatusBar";
+import AgentRouter from "@/components/AgentRouter";
+import CockpitTelemetry from "@/components/CockpitTelemetry";
 import Link from "next/link";
 import { entityProcess } from "@/lib/api";
 
+/* ─────────────────────────── Types ──────────────────────────── */
 interface Message { role: string; content: string; image?: string; link?: string }
-
-interface Strategy {
-  name: string; description: string; pros: string[]; cons: string[];
-  complexity: number; key_steps: string[];
-}
-
-interface EntityState {
-  memory_summary: string;
-  active_goals: { goal: string; priority: number; progress: number }[];
-  preferences: Record<string, { value: string }>;
-  interaction_count: number;
-}
-
+interface Strategy { name: string; description: string; pros: string[]; cons: string[]; complexity: number; key_steps: string[] }
+interface EntityState { memory_summary: string; active_goals: { goal: string; priority: number; progress: number }[]; preferences: Record<string, { value: string }>; interaction_count: number }
 interface BotEvent { type: string; label: string; timestamp: number }
+interface SystemStats { cpu?: { percent: number; count: number }; memory?: { percent: number; used_gb: number; total_gb: number }; battery?: { percent: number; charging: boolean; present: boolean }; uptime_h?: number }
+interface ActivityEntry { ts: number; msg: string; type: "info" | "action" | "error" | "success" }
+interface RouterPayload { routing?: { target_agent?: string; routing_confidence?: number; extracted_intent?: string; execution_context?: Record<string, unknown> }; agent_response?: Record<string, unknown>; latency_ms?: { supervisor?: number; worker?: number; total?: number }; target_agent?: string }
+interface DeviceNode { id: string; name: string; status: "ACTIVE" | "STANDBY" | "CHARGING" | "OFFLINE" | "UNKNOWN" | "OPTIMAL" | "WARNING" | "CRITICAL"; domain?: string; metrics?: string; controls?: string[] }
 
-interface SystemStats {
-  cpu?: { percent: number; count: number };
-  memory?: { percent: number; used_gb: number; total_gb: number };
-  battery?: { percent: number; charging: boolean; present: boolean };
-  uptime_h?: number;
-}
-
+/* ─────────────────────────── Config ─────────────────────────── */
 const BASE = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
   ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
   : "https://dgfhgjhj-jarvis-ai-brain.hf.space";
 
 const SUGGESTIONS = [
-  "play some music", "what's the time", "scan my network",
-  "volume to 50", "lock my PC", "take a screenshot",
-  "open Spotify", "battery status",
+  "scan my network", "turn off all lights", "open VS Code",
+  "book a flight to Tokyo", "take a screenshot", "what's my CPU usage?",
+  "volume to 60%", "search for weather today",
 ];
 
 const NAV_ITEMS = [
-  { href: "/", label: "Chat", icon: "💬" },
+  { href: "/", label: "Command", icon: "⚡" },
   { href: "/acc", label: "ACC", icon: "🎮" },
   { href: "/dashboard", label: "Brain", icon: "🧠" },
-  { href: "/smarthome", label: "Home", icon: "🏠" },
-  { href: "/settings", label: "Settings", icon: "⚙" },
+  { href: "/smarthome", label: "HAL", icon: "🏠" },
+  { href: "/settings", label: "Config", icon: "⚙" },
 ];
 
-function SystemStatsWidget({ stats }: { stats: SystemStats | null }) {
-  if (!stats) return null;
-  return (
-    <div className="flex items-center gap-4 text-[9px] font-mono">
-      {stats.cpu && (
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-900/50 border border-gray-800/30">
-          <span className="text-gray-600">CPU</span>
-          <span className={stats.cpu.percent > 80 ? "text-red-400" : stats.cpu.percent > 50 ? "text-yellow-400" : "text-green-400"}>
-            {stats.cpu.percent}%
-          </span>
-        </div>
-      )}
-      {stats.memory && (
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-900/50 border border-gray-800/30">
-          <span className="text-gray-600">RAM</span>
-          <span className={stats.memory.percent > 80 ? "text-red-400" : stats.memory.percent > 50 ? "text-yellow-400" : "text-green-400"}>
-            {stats.memory.used_gb.toFixed(1)}/{stats.memory.total_gb.toFixed(0)}GB
-          </span>
-        </div>
-      )}
-      {stats.battery?.present && (
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-900/50 border border-gray-800/30">
-          <span className="text-gray-600">BAT</span>
-          <span className={stats.battery.percent < 20 ? "text-red-400" : stats.battery.charging ? "text-green-400" : "text-yellow-400"}>
-            {stats.battery.percent}%{stats.battery.charging ? " ⚡" : ""}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
+/* ─────────────────────────── Particle BG ────────────────────── */
 function ParticleBg() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    const c = canvasRef.current;
-    if (!c) return;
-    const ctx = c.getContext("2d");
-    if (!ctx) return;
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext("2d"); if (!ctx) return;
     c.width = window.innerWidth; c.height = window.innerHeight;
-    const particles: { x: number; y: number; vx: number; vy: number; r: number }[] = [];
-    for (let i = 0; i < 50; i++) {
-      particles.push({ x: Math.random() * c.width, y: Math.random() * c.height, vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4, r: Math.random() * 1.5 + 0.5 });
-    }
-    const connections: { a: number; b: number }[] = [];
-    for (let i = 0; i < particles.length; i++) {
-      for (let j = i + 1; j < particles.length; j++) {
-        if (Math.random() < 0.08) connections.push({ a: i, b: j });
-      }
-    }
+    const particles = Array.from({ length: 60 }, () => ({
+      x: Math.random() * c.width, y: Math.random() * c.height,
+      vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3,
+      r: Math.random() * 1.2 + 0.3,
+    }));
     let anim: number;
     const draw = () => {
       ctx.clearRect(0, 0, c.width, c.height);
@@ -104,82 +58,82 @@ function ParticleBg() {
         p.x += p.vx; p.y += p.vy;
         if (p.x < 0 || p.x > c.width) p.vx *= -1;
         if (p.y < 0 || p.y > c.height) p.vy *= -1;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(120, 60, 220, 0.25)";
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(52,211,153,0.15)"; ctx.fill();
       });
-      connections.forEach(cn => {
-        const a = particles[cn.a], b = particles[cn.b];
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = "rgba(120, 60, 220, 0.06)";
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
-      });
+      // Draw connections
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 120) {
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = `rgba(52,211,153,${0.04 * (1 - dist / 120)})`;
+            ctx.lineWidth = 0.5; ctx.stroke();
+          }
+        }
+      }
       anim = requestAnimationFrame(draw);
     };
-    draw();
-    return () => cancelAnimationFrame(anim);
+    draw(); return () => cancelAnimationFrame(anim);
   }, []);
   return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />;
 }
 
+/* ─────────────────────────── Main ───────────────────────────── */
 export default function Home() {
+  // Chat state
   const [messages, setMessages] = useState<Message[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [listening, setListening] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [interim, setInterim] = useState("");
   const [confidence, setConfidence] = useState(0);
-  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
-  const [actionType, setActionType] = useState<string>("action");
-  const [taskSession, setTaskSession] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(true);
   const [taskQuestion, setTaskQuestion] = useState<string | null>(null);
+  const [taskSession, setTaskSession] = useState<string | null>(null);
+  const [taskResult, setTaskResult] = useState<string | null>(null);
   const [taskStep, setTaskStep] = useState(0);
   const [taskTotal, setTaskTotal] = useState(0);
-  const [taskResult, setTaskResult] = useState<string | null>(null);
   const [collectedInfo, setCollectedInfo] = useState<Record<string, string>>({});
-  const [scanning, setScanning] = useState(false);
+
+  // Multi-agent state
+  const [isDispatching, setIsDispatching] = useState(false);
+  const [routerPayload, setRouterPayload] = useState<RouterPayload | null>(null);
+  const [activeAgent, setActiveAgent] = useState<string | null>(null);
+  const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
+
+  // System state
+  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+  const [devices, setDevices] = useState<DeviceNode[]>([]);
+  const [relayOnline, setRelayOnline] = useState(false);
+  const [botEvents, setBotEvents] = useState<BotEvent[]>([]);
+  const [entityMood, setEntityMood] = useState("curious");
+  const [entityMoodEmoji, setEntityMoodEmoji] = useState("🔍");
+  const [entityThought, setEntityThought] = useState("");
   const [profileSummary, setProfileSummary] = useState("");
   const [profileInterests, setProfileInterests] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(true);
-  const [botEvents, setBotEvents] = useState<BotEvent[]>([]);
+  const [voice, setVoice] = useState("en-GB-RyanNeural");
+
+  // Layout
+  const [cockpitTab, setCockpitTab] = useState<"router" | "telemetry">("router");
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const taskInputRef = useRef<HTMLInputElement>(null);
   const retryCountRef = useRef(0);
-  const [strategies, setStrategies] = useState<Strategy[] | null>(null);
-  const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
-  const [proactiveSuggestions, setProactiveSuggestions] = useState<string[]>([]);
-  const [entityState, setEntityState] = useState<EntityState | null>(null);
-  const [selectedStrategy, setSelectedStrategy] = useState<number | null>(null);
-  const [entityMemory, setEntityMemory] = useState("");
-  const [activityIntensity, setActivityIntensity] = useState(0);
-  const [voice, setVoice] = useState<string>("en-GB-RyanNeural");
-  const [entityMood, setEntityMood] = useState("curious");
-  const [entityMoodEmoji, setEntityMoodEmoji] = useState("🔍");
-  const [entityThought, setEntityThought] = useState("");
-  const [centerOverlay, setCenterOverlay] = useState<string | null>(null);
-  const [lastResponse, setLastResponse] = useState<string>("");
-  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
-  const [accDeviceCount, setAccDeviceCount] = useState(0);
-  const [accOnlineCount, setAccOnlineCount] = useState(0);
-  const overlayTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const showCenterOverlay = useCallback((content: string) => {
-    setCenterOverlay(content);
-    if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
-    overlayTimerRef.current = setTimeout(() => setCenterOverlay(null), 10000);
-  }, []);
-
-  const dismissOverlay = useCallback(() => {
-    setCenterOverlay(null);
-    if (overlayTimerRef.current) { clearTimeout(overlayTimerRef.current); overlayTimerRef.current = null; }
+  /* ── Helpers ───────────────────────────────────────────────── */
+  const addLog = useCallback((msg: string, type: ActivityEntry["type"] = "info") => {
+    setActivityLog(prev => [...prev.slice(-30), { ts: Date.now(), msg, type }]);
   }, []);
 
   const addBotEvent = useCallback((type: string, label: string) => {
@@ -187,811 +141,654 @@ export default function Home() {
   }, []);
 
   useEffect(() => { synthRef.current = window.speechSynthesis; }, []);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Poll system stats
+  /* ── System stats polling ──────────────────────────────────── */
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [sysRes, accRes] = await Promise.allSettled([
+        const [sysRes, accRes, relayRes] = await Promise.allSettled([
           fetch(`${BASE}/api/system/stats`),
           fetch(`${BASE}/api/acc/devices`),
+          fetch(`${BASE}/health`),
         ]);
-        if (sysRes.status === "fulfilled") {
-          const data = await sysRes.value.json();
-          setSystemStats({ cpu: data.cpu, memory: data.memory, battery: data.battery, uptime_h: data.uptime_h });
+        if (sysRes.status === "fulfilled" && sysRes.value.ok) {
+          const d = await sysRes.value.json();
+          setSystemStats({ cpu: d.cpu, memory: d.memory, battery: d.battery, uptime_h: d.uptime_h });
         }
-        if (accRes.status === "fulfilled") {
-          const data = await accRes.value.json();
-          setAccDeviceCount(data.total || 0);
-          setAccOnlineCount(data.online || 0);
+        if (accRes.status === "fulfilled" && accRes.value.ok) {
+          const d = await accRes.value.json();
+          if (d.devices) setDevices(d.devices);
+          setRelayOnline(true);
         }
-      } catch {}
+        if (relayRes.status === "fulfilled" && relayRes.value.ok) setRelayOnline(true);
+      } catch { setRelayOnline(false); }
     };
-    fetchStats();
-    const i = setInterval(fetchStats, 10000);
+    fetchStats(); const i = setInterval(fetchStats, 10000);
     return () => clearInterval(i);
   }, []);
 
-  // Poll entity state
+  /* ── Entity mood polling ───────────────────────────────────── */
   useEffect(() => {
     const i = setInterval(async () => {
       try {
         const res = await fetch(`${BASE}/api/entity/state?user_id=local`);
-        const data = await res.json();
-        if (data.mood) setEntityMood(data.mood);
-        if (data.mood_emoji) setEntityMoodEmoji(data.mood_emoji);
-        if (data.current_thought) setEntityThought(data.current_thought);
+        const d = await res.json();
+        if (d.mood) setEntityMood(d.mood);
+        if (d.mood_emoji) setEntityMoodEmoji(d.mood_emoji);
+        if (d.current_thought) setEntityThought(d.current_thought);
       } catch {}
     }, 2000);
     return () => clearInterval(i);
   }, []);
 
-  // Initial scan
+  /* ── Initial boot ──────────────────────────────────────────── */
   useEffect(() => {
     (async () => {
-      setScanning(true);
-      addBotEvent("action", "scanning device");
+      addLog("JARVIS cognitive architecture initialising...", "info");
       fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" }).catch(() => {});
       try {
         const res = await fetch(`${BASE}/api/profile?user_id=local`);
-        const data = await res.json();
-        setProfileSummary(data.summary || "");
-        setProfileInterests(data.profile?.interests?.slice(0, 8).map((i: any) => i.topic) || []);
+        const d = await res.json();
+        setProfileSummary(d.summary || "");
+        setProfileInterests(d.profile?.interests?.slice(0, 8).map((i: any) => i.topic) || []);
       } catch {}
-      setScanning(false);
-      addBotEvent("action", "scan complete");
-      setMessages((p) => [...p, {
-        role: "assistant",
-        content: "Welcome back. I'm ready — ask me anything, or tap the orb to speak."
-      }]);
-      setTimeout(async () => {
-        try {
-          const res = await fetch(`${BASE}/api/profile?user_id=local`);
-          const data = await res.json();
-          if (data?.profile?.device?.installed_apps?.length > 0 || data?.profile?.interests?.length > 0) {
-            setProfileSummary(data.summary || "");
-            setProfileInterests(data.profile?.interests?.slice(0, 8).map((i: any) => i.topic) || []);
-          }
-        } catch {}
-      }, 5000);
+      addLog("System boot complete. Multi-agent router ONLINE.", "success");
+      setMessages([{ role: "assistant", content: "Systems online. Multi-agent cognitive architecture active — Supervisor Router, OS Agent, HAL Agent, and Web Agent standing by. Issue a command." }]);
     })();
-    const interval = setInterval(async () => {
-      try {
-        await fetch(`${BASE}/api/device/scan?user_id=local`, { method: "POST" });
-        const res = await fetch(`${BASE}/api/profile?user_id=local`);
-        const data = await res.json();
-        setProfileSummary(data.summary || "");
-        setProfileInterests(data.profile?.interests?.slice(0, 8).map((i: any) => i.topic) || []);
-      } catch {}
-    }, 600000);
-    return () => clearInterval(interval);
-  }, [addBotEvent]);
+  }, [addLog]);
 
+  /* ── TTS ───────────────────────────────────────────────────── */
   const speak = useCallback(async (text: string) => {
-    setSpeaking(true);
-    addBotEvent("action", "speaking response");
-    const voiceName = voice || "en-US-AriaNeural";
+    setSpeaking(true); addBotEvent("action", "speaking response");
     try {
       const res = await fetch(`${BASE}/api/tts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice: voiceName }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice }),
       });
       if (!res.ok) throw new Error("TTS failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.onended = () => { URL.revokeObjectURL(url); setSpeaking(false); };
-      audio.load();
-      await audio.play();
+      audio.load(); await audio.play();
     } catch {
-      const synth = synthRef.current;
-      if (!synth) { setSpeaking(false); return; }
+      const synth = synthRef.current; if (!synth) { setSpeaking(false); return; }
       synth.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.05; utterance.pitch = 1.0;
       utterance.onend = () => setSpeaking(false);
       const voices = synth.getVoices();
-      const preferred = voices.find((v) => v.name.includes(voiceName.split("-")[1] || "Ryan") || v.name.includes("Ryan") || v.name.includes("Aria") || v.name.includes("Jenny"));
+      const preferred = voices.find(v => v.name.includes("Ryan") || v.name.includes("Aria"));
       if (preferred) utterance.voice = preferred;
       synth.speak(utterance);
     }
   }, [addBotEvent, voice]);
 
-  const sendTaskResponse = useCallback(async (response: string) => {
-    if (!taskSession || !response.trim()) return;
-    setMessages((p) => [...p, { role: "user", content: response }]);
-    setTaskQuestion(null);
-    setThinking(true);
-    addBotEvent("workflow", "processing task response");
+  /* ── Multi-agent router dispatch ───────────────────────────── */
+  const dispatchToRouter = useCallback(async (text: string) => {
+    setIsDispatching(true);
+    setRouterPayload(null);
+    setActiveAgent(null);
+    addLog(`Dispatching: "${text.slice(0, 60)}..."`, "action");
+    addBotEvent("action", "routing intent");
+
     try {
-      const res = await fetch(`${BASE}/api/task/respond`, {
+      const res = await fetch(`${BASE}/api/router/dispatch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: taskSession, response }),
+        body: JSON.stringify({ user_text: text, user_id: "local", relay_context: {} }),
       });
-      const data = await res.json();
-      _handleTaskResponse(data);
-    } catch {
-      addBotEvent("error", "task failed");
-      setMessages((p) => [...p, { role: "assistant", content: "Task failed." }]);
-      setTaskSession(null);
-    }
-    setThinking(false);
-  }, [taskSession, addBotEvent]);
 
-  const pollRelayResult = useCallback(async (relayId: string) => {
-    let attempts = 0;
-    const maxAttempts = 60;
-    const poll = async () => {
-      if (attempts >= maxAttempts) return;
-      attempts++;
+      if (!res.ok) throw new Error(`Router error: ${res.status}`);
+      const data: RouterPayload = await res.json();
+
+      setRouterPayload(data);
+      setActiveAgent(data.target_agent ?? null);
+      addLog(
+        `→ ${data.target_agent} | confidence ${Math.round((data.routing?.routing_confidence ?? 0) * 100)}% | ${data.latency_ms?.total}ms`,
+        "success"
+      );
+
+      // Switch to router tab to show the result
+      setCockpitTab("router");
+
+      return data;
+    } catch (err: any) {
+      addLog(`Router error: ${err.message}`, "error");
+      return null;
+    } finally {
+      setIsDispatching(false);
+    }
+  }, [addBotEvent, addLog]);
+
+  /* ── Primary send handler ──────────────────────────────────── */
+  const sendText = useCallback(async () => {
+    const text = textInput.trim(); if (!text) return;
+    setTextInput(""); setShowSuggestions(false);
+    setMessages(p => [...p, { role: "user", content: text }]);
+    setThinking(true); addBotEvent("action", "processing");
+
+    // Fire router dispatch in parallel (non-blocking telemetry)
+    dispatchToRouter(text);
+
+    // Handle task session continuation
+    if (taskSession && taskQuestion) {
       try {
-        const { relayStatus } = await import("@/lib/api");
-        const res = await relayStatus(relayId);
-        if (res.status === "done" || res.status === "failed") {
-          const resultText = res.result || (res.status === "done" ? "✅ Done" : "❌ Failed");
-          setMessages((p) => {
-            const updated = [...p];
-            const last = updated[updated.length - 1];
-            if (last && last.role === "assistant") last.content = resultText;
-            return updated;
-          });
-          setLastResponse(resultText);
-          setActionFeedback(resultText);
-          if (resultText && resultText.length > 20) showCenterOverlay(resultText);
-          setTimeout(() => setActionFeedback(null), 5000);
-          return;
-        }
-        setTimeout(poll, 1000);
-      } catch { setTimeout(poll, 2000); }
-    };
-    poll();
-  }, [showCenterOverlay]);
-
-  const handleQuery = useCallback(async (text: string) => {
-    if (!text.trim()) return;
-    setMessages((p) => [...p, { role: "user", content: text }]);
-    setSidebarOpen(true);
-    setThinking(true);
-    setSpeaking(false);
-    setShowSuggestions(false);
-    setLastResponse("");
-    setStrategies(null);
-    setFollowUpQuestions([]);
-    setProactiveSuggestions([]);
-    setSelectedStrategy(null);
-    setActivityIntensity(1);
-    addBotEvent("thinking", "processing query");
-
-    try {
-      const res = await entityProcess(text);
-      const reply = res.text || "";
-
-      if (res.strategies?.strategies) {
-        addBotEvent("planning", `generated ${res.strategies.strategies.length} strategies`);
-        setStrategies(res.strategies.strategies);
-        setFollowUpQuestions(res.strategies.follow_up_questions || []);
-        setMessages((p) => [...p, {
-          role: "assistant",
-          content: `I've thought of a few approaches for that. Here are your options:\n\n${res.strategies.strategies.map((s: Strategy, i: number) => `${i+1}. **${s.name}** - ${s.description}`).join("\n")}\n\nWhich approach sounds best?`
-        }]);
-      }
-
-      if (res.follow_up?.length > 0) setFollowUpQuestions(res.follow_up);
-      if (res.proactive?.length > 0) setProactiveSuggestions(res.proactive);
-
-      if (res.action) {
-        addBotEvent("action", reply.slice(0, 60));
-        setActionFeedback(reply);
-        setActionType(res.action_type || "action");
-
-        if (res.action === "__needs_relay__") {
-          const isWin = navigator.platform?.toLowerCase().includes("win");
-          const isMac = navigator.platform?.toLowerCase().includes("mac");
-          const downloadCmd = isWin
-            ? `powershell -c "curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user $env:USERNAME"`
-            : isMac
-              ? `curl -sL https://dgfhgjhj-jarvis-ai-brain.hf.space/relay -o ~/relay.py && python3 ~/relay.py --user $(whoami)`
-              : `curl -sL https://dgfhgjhj-jarvis-ai-brain.hf.space/relay -o /tmp/relay.py && python3 /tmp/relay.py --user $(whoami)`;
-          const platformLabel = isWin ? "Windows" : isMac ? "macOS" : "Linux";
-          const settingsLink = typeof window !== "undefined" ? `${window.location.origin}/settings` : "/settings";
-          setMessages((p) => [...p, {
-            role: "assistant",
-            content: `⚠️ The relay agent is required for this action.\n\n**${platformLabel} one-liner:**\n\`\`\`\n${downloadCmd}\n\`\`\`\n\nPaste that in a terminal to connect this machine.`,
-            link: settingsLink,
-          }]);
-          setLastResponse(`Relay agent needed — open Settings to download.`);
-          setTimeout(() => setActionFeedback(null), 8000);
-          speak("This action needs the relay agent. Open settings or paste the command shown to install.");
-          return;
-        }
-
-        if (res.qr_image) {
-          setMessages((p) => [...p, { role: "assistant", content: reply, image: `data:image/png;base64,${res.qr_image}`, link: res.wa_link || "https://wa.me/" }]);
-          setLastResponse(reply);
-          speak("Scan this QR code with your phone to link WhatsApp Web");
-          setTimeout(() => setActionFeedback(null), 4000);
-          return;
-        }
-
-        if (res.wa_link) {
-          setMessages((p) => [...p, { role: "assistant", content: reply, link: res.wa_link }]);
-          setLastResponse(reply);
-          setTimeout(() => setActionFeedback(null), 4000);
-          setTimeout(() => { window.location.href = res.wa_link; }, 300);
-          return;
-        }
-
-        if (res.link) {
-          setMessages((p) => [...p, { role: "assistant", content: reply, link: res.link }]);
-          setLastResponse(reply);
-          setTimeout(() => setActionFeedback(null), 4000);
-          setTimeout(() => { window.location.href = res.link; }, 300);
-          return;
-        }
-
-        if (res.image) {
-          setMessages((p) => [...p, { role: "assistant", content: reply, image: `data:image/png;base64,${res.image}` }]);
-          setLastResponse(reply);
-          setTimeout(() => setActionFeedback(null), 4000);
-          return;
-        }
-
-        const lines = reply.split("\n");
-        const mainPart = lines.slice(1).join("\n").trim();
-        if (mainPart && mainPart.length > 20) showCenterOverlay(mainPart);
-
-        if (res.async && res.relay_id) {
-          setMessages((p) => [...p, { role: "assistant", content: reply }]);
-          setLastResponse(reply);
-          pollRelayResult(res.relay_id);
+        const res = await fetch(`${BASE}/api/task/respond`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: taskSession, response: text }),
+        });
+        const data = await res.json();
+        if (data.type === "ask") {
+          setTaskQuestion(data.question); setTaskStep(data.step || 0); setTaskTotal(data.total || 0);
+          setMessages(p => [...p, { role: "assistant", content: data.question }]);
+        } else if (data.type === "complete") {
+          setTaskResult(data.text || data.collected ? JSON.stringify(data.collected, null, 2) : "Task complete.");
+          setCollectedInfo(data.collected || {}); setTaskQuestion(null); setTaskSession(null);
+          setMessages(p => [...p, { role: "assistant", content: "Task complete ✓" }]);
         } else {
-          setMessages((p) => [...p, { role: "assistant", content: reply }]);
-          setLastResponse(reply);
-          setTimeout(() => setActionFeedback(null), 4000);
+          setMessages(p => [...p, { role: "assistant", content: data.text || data.message || "Done." }]);
+          setTaskQuestion(null); setTaskSession(null);
         }
-      } else if (res.task) {
-        addBotEvent("workflow", "task started");
-        _handleTaskResponse(res.task);
-      } else if (reply) {
-        addBotEvent("action", "responding");
-        speak(reply);
-        setLastResponse(reply);
-        setMessages((p) => [...p, { role: "assistant", content: reply }]);
+      } catch (e: any) {
+        setMessages(p => [...p, { role: "assistant", content: `Error: ${e.message}` }]);
       }
-
-      if (res.entity_state) {
-        setEntityState(res.entity_state);
-        setEntityMemory(res.entity_state.memory_summary || "");
-      }
-      if (res.mood) setEntityMood(res.mood);
-      if (res.mood_emoji) setEntityMoodEmoji(res.mood_emoji);
-      if (res.thought) setEntityThought(res.thought);
-    } catch (e) {
-      addBotEvent("error", "backend unreachable");
-      setLastResponse("(backend unreachable)");
-      setMessages((p) => [...p, { role: "assistant", content: "(backend unreachable)" }]);
+      setThinking(false); return;
     }
-    setThinking(false);
-    setTimeout(() => setActivityIntensity(0.3), 2000);
-  }, [speak, addBotEvent]);
 
-  const pickStrategy = useCallback(async (index: number) => {
-    setSelectedStrategy(index);
-    if (!strategies || !strategies[index]) return;
-    const strat = strategies[index];
-    addBotEvent("planning", `selected strategy: ${strat.name}`);
-    setMessages((p) => [...p, { role: "assistant", content: `👍 Let's go with **${strat.name}**. I'll start working on it.\n\nSteps:\n${strat.key_steps.map((s, i) => `${i+1}. ${s}`).join("\n")}` }]);
-    setStrategies(null);
-    const res = await entityProcess(`Execute strategy: ${strat.name}. ${strat.key_steps.join(", ")}`);
-    if (res.text) {
-      setLastResponse(res.text);
-      setMessages((p) => [...p, { role: "assistant", content: res.text }]);
-    }
-  }, [strategies, addBotEvent]);
-
-  const handleFollowUp = useCallback(async (q: string) => {
-    setMessages((p) => [...p, { role: "user", content: q }]);
-    if (messages.length === 0) setSidebarOpen(true);
-    setThinking(true);
-    setShowSuggestions(false);
-    setStrategies(null);
-    setFollowUpQuestions([]);
-    setProactiveSuggestions([]);
-    addBotEvent("thinking", "following up");
+    // Standard entity processing
     try {
-      const res = await entityProcess(`(follow-up) ${q}`);
-      const reply = res.text || "";
-      if (res.entity_state) { setEntityState(res.entity_state); setEntityMemory(res.entity_state.memory_summary || ""); }
-      if (reply) { speak(reply); setLastResponse(reply); setMessages((p) => [...p, { role: "assistant", content: reply }]); }
-    } catch { setMessages((p) => [...p, { role: "assistant", content: "(follow-up failed)" }]); }
-    setThinking(false);
-  }, [speak, addBotEvent]);
+      const data = await entityProcess(text, "local");
+      const reply = data?.text || data?.message || "Acknowledged.";
+      setMessages(p => [...p, { role: "assistant", content: reply }]);
+      addLog("Response received", "success");
 
-  const handleProactive = useCallback(async (s: string) => {
-    setMessages((p) => [...p, { role: "user", content: s }]);
-    setThinking(true);
-    addBotEvent("thinking", "proactive action");
-    try {
-      const res = await entityProcess(`(proactive) ${s}`);
-      const reply = res.text || "";
-      if (res.entity_state) { setEntityState(res.entity_state); setEntityMemory(res.entity_state.memory_summary || ""); }
-      if (reply) { setLastResponse(reply); setMessages((p) => [...p, { role: "assistant", content: reply }]); }
-    } catch { setMessages((p) => [...p, { role: "assistant", content: "(action failed)" }]); }
-    setThinking(false);
-  }, [addBotEvent]);
-
-  const _handleTaskResponse = useCallback((data: any) => {
-    if (data.type === "ask") {
-      setTaskSession(data.session_id || taskSession);
-      setTaskQuestion(data.question);
-      setTaskStep(data.step || 0);
-      setTaskTotal(data.total || 0);
-      setTaskResult(null);
-      addBotEvent("workflow", `asking: ${(data.question || "").slice(0, 40)}`);
-      setMessages((p) => [...p, { role: "assistant", content: `❓ ${data.question}` }]);
-      speak(data.question);
-      setTimeout(() => taskInputRef.current?.focus(), 200);
-    } else if (data.type === "notify") {
-      addBotEvent("action", data.text);
-      setActionFeedback(data.text);
-      setActionType("workflow");
-      setTaskStep(data.step || 0);
-      setTaskTotal(data.total || 0);
-      setTimeout(() => setActionFeedback(null), 3000);
-    } else if (data.type === "complete") {
-      addBotEvent("action", "task complete");
-      setTaskSession(null);
-      setTaskQuestion(null);
-      setTaskResult(data.text);
-      setCollectedInfo(data.collected || {});
-      const msgLink = data.link || data.wa_link || "";
-      setMessages((p) => [...p, { role: "assistant", content: `✅ ${data.text}`, link: msgLink }]);
-      if (msgLink) setTimeout(() => { window.location.href = msgLink; }, 500);
-      speak("Task complete!");
-    } else if (data.type === "workflow") {
-      addBotEvent("workflow", data.text);
-      setMessages((p) => [...p, { role: "assistant", content: `🔄 ${data.text}` }]);
-    } else if (data?.workflow_result?.results) {
-      for (const r of data.workflow_result.results) {
-        if (r.type === "ask") _handleTaskResponse({ type: "ask", question: r.question, session_id: data.execution_id });
-        else if (r.type === "notify") { setActionFeedback(r.text); setTimeout(() => setActionFeedback(null), 2000); }
-        else if (r.type === "complete") { addBotEvent("action", "workflow complete"); setMessages((p) => [...p, { role: "assistant", content: `✅ ${r.text}` }]); }
+      if (data?.type === "ask" && data?.session_id) {
+        setTaskSession(data.session_id); setTaskQuestion(data.question);
+        setTaskStep(data.step || 0); setTaskTotal(data.total || 0);
       }
-    } else if (data.type === "error") {
-      addBotEvent("error", data.text);
-      setMessages((p) => [...p, { role: "assistant", content: `⚠️ ${data.text}` }]);
-      setTaskSession(null);
-      setTaskQuestion(null);
+      if (data?.action_feedback) addBotEvent("action", data.action_feedback);
+
+      // TTS for short replies
+      if (reply.length < 300) speak(reply).catch(() => {});
+    } catch (err: any) {
+      const errMsg = `Connection error: ${err.message}`;
+      setMessages(p => [...p, { role: "assistant", content: errMsg }]);
+      addLog(errMsg, "error");
+      retryCountRef.current += 1;
     }
-  }, [taskSession, speak, addBotEvent]);
+    setThinking(false);
+  }, [textInput, taskSession, taskQuestion, dispatchToRouter, speak, addBotEvent, addLog]);
 
-  const startListening = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { setTimeout(() => inputRef.current?.focus(), 100); return; }
-    const r = new SR();
-    r.lang = "en-US";
-    r.interimResults = true;
-    r.continuous = true;
-    r.maxAlternatives = 3;
-    let final = "";
-
-    r.onresult = (e: any) => {
-      let bestConfidence = 0;
-      let bestInterim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const result = e.results[i];
-        const transcript = result[0].transcript;
-        if (result.isFinal) { final += (final ? " " : "") + transcript; bestConfidence = Math.max(bestConfidence, result[0].confidence); }
-        else { bestInterim += (bestInterim ? " " : "") + transcript; bestConfidence = Math.max(bestConfidence, result[0].confidence); }
-      }
-      const displayText = bestInterim || final;
-      setInterim(displayText);
-      (r as any)._capturedText = displayText;
-      setConfidence(Math.round(bestConfidence * 100));
-      if (final) {
-        clearTimeout((r as any)._silenceTimer);
-        (r as any)._silenceTimer = setTimeout(() => {
-          r.stop();
-          const t = final.trim();
-          if (!t) return;
-          setListening(false);
-          setInterim("");
-          retryCountRef.current = 0;
-          setShowSuggestions(false);
-          if (taskQuestion) sendTaskResponse(t);
-          else handleQuery(t);
-        }, 1500);
-      }
-    };
-
-    r.onerror = (e: any) => {
-      if (e.error === "not-allowed") { setInterim("Mic blocked"); setListening(false); return; }
-      if (e.error === "no-speech" && retryCountRef.current < 2) { retryCountRef.current++; r.start(); return; }
-      setListening(false); setInterim("");
-    };
-    r.onend = () => { setListening(false); if (!final) setInterim(""); };
-    retryCountRef.current = 0;
-    recognitionRef.current = r;
-    r.start();
-    setListening(true);
-    addBotEvent("listening", "listening...");
-    setInterim("");
-    setConfidence(0);
-  }, [taskQuestion, handleQuery, sendTaskResponse, addBotEvent]);
-
-  const stopListening = useCallback(() => {
-    clearTimeout((recognitionRef.current as any)?._silenceTimer);
-    recognitionRef.current?.stop();
-    setListening(false);
-    const t = ((recognitionRef.current as any)?._capturedText || "").trim();
-    setInterim("");
-    if (t) {
-      setShowSuggestions(false);
-      if (taskQuestion) sendTaskResponse(t);
-      else handleQuery(t);
-    }
-  }, [taskQuestion, handleQuery, sendTaskResponse]);
-
-  const sendText = useCallback(() => {
-    const txt = textInput.trim();
-    if (!txt) return;
-    setTextInput("");
-    setShowSuggestions(false);
-    if (taskQuestion) { sendTaskResponse(txt); }
-    else { handleQuery(txt); }
-  }, [textInput, taskQuestion, handleQuery, sendTaskResponse]);
-
+  /* ── Voice ─────────────────────────────────────────────────── */
   const handleOrbClick = useCallback(() => {
-    if (listening) stopListening();
-    else startListening();
-  }, [listening, startListening, stopListening]);
-
-  const pickSuggestion = useCallback((s: string) => {
-    setShowSuggestions(false);
-    handleQuery(s);
-  }, [handleQuery]);
-
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && listening) { stopListening(); }
-      if (e.key === "Enter" && taskQuestion) { sendTaskResponse(textInput); }
+    if (listening) {
+      recognitionRef.current?.stop(); setListening(false); return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { alert("Speech recognition not supported in this browser."); return; }
+    const rec = new SR();
+    rec.continuous = false; rec.interimResults = true; rec.lang = "en-GB";
+    rec.onresult = (e: any) => {
+      let interim_t = "", final_t = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          final_t += e.results[i][0].transcript;
+          setConfidence(Math.round(e.results[i][0].confidence * 100));
+        } else { interim_t += e.results[i][0].transcript; }
+      }
+      setInterim(interim_t || final_t);
+      if (final_t) { setTextInput(final_t); setInterim(""); }
     };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [listening, stopListening, taskQuestion, textInput, sendTaskResponse]);
+    rec.onend = () => { setListening(false); };
+    rec.onerror = () => setListening(false);
+    recognitionRef.current = rec;
+    rec.start(); setListening(true);
+    addBotEvent("action", "listening");
+  }, [listening, addBotEvent]);
 
-  const orbState = listening ? "listening" : thinking ? "thinking" : speaking ? "speaking" : "idle";
+  /* ── Status ─────────────────────────────────────────────────── */
+  const agentState = thinking ? "thinking" : listening ? "listening" : speaking ? "speaking" : "idle";
 
+  /* ─────────────────────────── Render ─────────────────────────── */
   return (
-    <div className="relative h-screen w-full overflow-hidden flex flex-col" style={{ backgroundColor: '#030512' }}>
-      <div className="gradient-bg" />
-      <div className="grid-overlay" />
-      <div className="stars" />
-      <div className="stars2" />
-      <div className="stars3" />
-      <div className="aurora" />
-      <div className="corner-glow-tl" />
-      <div className="corner-glow-br" />
+    <div className="fixed inset-0 overflow-hidden" style={{ background: "#030512" }}>
       <ParticleBg />
 
-      {/* ── Top Navigation Bar ─────────────────────────────────── */}
-      <header className="relative z-30 flex items-center justify-between px-4 md:px-6 py-2.5 border-b border-purple-900/15 bg-[#030512]/70 backdrop-blur-xl">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 shadow-lg ${
-              listening ? "bg-green-400 shadow-green-500/50" :
-              thinking ? "bg-purple-400 shadow-purple-500/50" :
-              speaking ? "bg-cyan-400 shadow-cyan-500/50" :
-              "bg-gray-600"
-            }`} />
-            <span className="text-sm font-bold bg-gradient-to-r from-purple-300 via-cyan-300 to-purple-300 bg-clip-text text-transparent">
-              J.A.R.V.I.S.
-            </span>
-            <span className="text-[9px] font-mono text-gray-600 tracking-[0.2em] hidden sm:inline">
-              {orbState === "listening" ? "LISTENING" : orbState === "thinking" ? "PROCESSING" : orbState === "speaking" ? "SPEAKING" : entityMood.toUpperCase()}
-            </span>
+      {/* Background grid */}
+      <div className="cockpit-grid fixed inset-0 pointer-events-none z-0" />
+
+      {/* Main Layout */}
+      <div className="relative z-10 flex flex-col h-full">
+
+        {/* ── Top nav bar ────────────────────────────────────────── */}
+        <div
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "8px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)",
+            background: "rgba(3,5,18,0.9)", backdropFilter: "blur(16px)",
+            flexShrink: 0, zIndex: 20,
+          }}
+        >
+          {/* Logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div
+              onClick={() => setSidebarOpen(true)}
+              style={{
+                width: "28px", height: "28px", borderRadius: "8px",
+                background: "linear-gradient(135deg, rgba(52,211,153,0.2), rgba(167,139,250,0.2))",
+                border: "1px solid rgba(52,211,153,0.2)", display: "flex",
+                alignItems: "center", justifyContent: "center", cursor: "pointer",
+                boxShadow: "0 0 12px rgba(52,211,153,0.15)",
+              }}
+            >
+              <span style={{ fontSize: "14px" }}>🌌</span>
+            </div>
+            <div>
+              <span style={{ fontSize: "13px", fontFamily: "monospace", fontWeight: 700, color: "#34d399", letterSpacing: "0.1em" }}>
+                J.A.R.V.I.S
+              </span>
+              <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.2)", display: "block", letterSpacing: "0.12em" }}>
+                COGNITIVE ARCHITECTURE v3.0
+              </span>
+            </div>
           </div>
-          <SystemStatsWidget stats={systemStats} />
+
+          {/* Nav */}
+          <nav style={{ display: "flex", gap: "4px" }}>
+            {NAV_ITEMS.map(n => (
+              <Link key={n.href} href={n.href}
+                style={{
+                  display: "flex", alignItems: "center", gap: "4px",
+                  padding: "4px 10px", borderRadius: "6px", fontSize: "10px",
+                  fontFamily: "monospace", color: n.href === "/" ? "#34d399" : "rgba(255,255,255,0.3)",
+                  background: n.href === "/" ? "rgba(52,211,153,0.08)" : "transparent",
+                  border: n.href === "/" ? "1px solid rgba(52,211,153,0.15)" : "1px solid transparent",
+                  textDecoration: "none", letterSpacing: "0.05em",
+                  transition: "all 0.2s",
+                }}
+              >
+                <span>{n.icon}</span>{n.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* Entity mood chip */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {entityThought && (
+              <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.2)", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {entityThought.slice(0, 60)}
+              </span>
+            )}
+            <div style={{
+              display: "flex", alignItems: "center", gap: "5px",
+              padding: "3px 8px", borderRadius: "20px",
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.02)",
+            }}>
+              <span style={{ fontSize: "10px" }}>{entityMoodEmoji}</span>
+              <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)", letterSpacing: "0.06em" }}>{entityMood}</span>
+            </div>
+          </div>
         </div>
-        <nav className="flex items-center gap-1">
-          {NAV_ITEMS.map(item => (
-            <Link key={item.href} href={item.href}
-              className="nav-link flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-mono text-gray-500 hover:text-purple-400 hover:bg-purple-900/10 rounded-lg transition-all duration-200">
-              <span>{item.icon}</span>
-              <span className="hidden md:inline">{item.label}</span>
-            </Link>
-          ))}
-          <button onClick={() => setSidebarOpen(o => !o)}
-            className="ml-1 p-1.5 text-gray-600 hover:text-purple-400 hover:bg-purple-900/10 rounded-lg transition-all duration-200">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
-            </svg>
-          </button>
-        </nav>
-      </header>
 
-      {/* ── Main Content ──────────────────────────────────────── */}
-      <div className="relative z-10 flex-1 flex min-h-0">
-        <div className="flex-1 flex flex-col min-w-0">
+        {/* ── Agent Pipeline Status Bar ───────────────────────────── */}
+        <AgentStatusBar routingData={routerPayload} isDispatching={isDispatching} />
 
-          {/* Dashboard / Suggestions area */}
-          {showSuggestions && messages.length <= 1 && !listening && !thinking && !speaking && !taskQuestion && (
-            <div className="flex-1 flex flex-col items-center justify-center px-4">
-              <div className="animate-fade-in text-center space-y-8 max-w-2xl w-full">
-                {/* Dashboard widgets */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-xl mx-auto">
-                  <div className="glass-card rounded-2xl p-4 text-center glow-card-sm">
-                    <div className="text-xl mb-1">{accOnlineCount > 0 ? "🟢" : "⚪"}</div>
-                    <div className="text-lg font-bold text-gray-200 font-mono">{accDeviceCount}</div>
-                    <div className="text-[7px] font-mono text-gray-600 tracking-[0.2em] uppercase mt-0.5">Devices</div>
-                  </div>
-                  <div className="glass-card rounded-2xl p-4 text-center glow-card-sm">
-                    <div className="text-xl mb-1">🧠</div>
-                    <div className="text-lg font-bold text-gray-200 font-mono">{messages.length}</div>
-                    <div className="text-[7px] font-mono text-gray-600 tracking-[0.2em] uppercase mt-0.5">Messages</div>
-                  </div>
-                  <div className="glass-card rounded-2xl p-4 text-center glow-card-sm">
-                    <div className="text-xl mb-1">
-                      {systemStats?.battery?.present
-                        ? (systemStats.battery.charging ? "⚡" : systemStats.battery.percent < 20 ? "🔴" : "🔋")
-                        : "💻"}
+        {/* ── Main content area ───────────────────────────────────── */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+
+          {/* ── LEFT: Chat Panel ──────────────────────────────────── */}
+          <div
+            style={{
+              width: chatCollapsed ? "48px" : "42%",
+              minWidth: chatCollapsed ? "48px" : "320px",
+              maxWidth: chatCollapsed ? "48px" : "560px",
+              flexShrink: 0,
+              display: "flex",
+              flexDirection: "column",
+              borderRight: "1px solid rgba(255,255,255,0.05)",
+              background: "rgba(3,5,18,0.6)",
+              backdropFilter: "blur(8px)",
+              transition: "width 0.3s ease, min-width 0.3s ease",
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            {/* Collapse toggle */}
+            <button
+              onClick={() => setChatCollapsed(!chatCollapsed)}
+              style={{
+                position: "absolute", top: "50%", right: "-12px",
+                transform: "translateY(-50%)", zIndex: 30,
+                width: "20px", height: "40px", borderRadius: "0 8px 8px 0",
+                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)",
+                borderLeft: "none", color: "rgba(255,255,255,0.3)",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "10px", transition: "all 0.2s",
+              }}
+            >
+              {chatCollapsed ? "›" : "‹"}
+            </button>
+
+            {!chatCollapsed && (
+              <>
+                {/* Chat header */}
+                <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.04)", flexShrink: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "10px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>
+                      COMMAND INTERFACE
+                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      {/* Agent orb */}
+                      <BotSwarm
+                        listening={agentState === "listening"}
+                        thinking={agentState === "thinking"}
+                        speaking={agentState === "speaking"}
+                        botEvents={botEvents}
+                      />
                     </div>
-                    <div className="text-lg font-bold text-gray-200 font-mono">
-                      {systemStats?.memory ? `${systemStats.memory.percent}%` : "--"}
-                    </div>
-                    <div className="text-[7px] font-mono text-gray-600 tracking-[0.2em] uppercase mt-0.5">RAM</div>
                   </div>
-                  <div className="glass-card rounded-2xl p-4 text-center glow-card-sm">
-                    <div className="text-xl mb-1">🔗</div>
-                    <div className="text-lg font-bold text-gray-200 font-mono">
-                      {systemStats?.cpu ? `${systemStats.cpu.percent}%` : "--"}
+                </div>
+
+                {/* Messages */}
+                <div
+                  className="cockpit-scroll"
+                  style={{ flex: 1, overflow: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}
+                >
+                  {messages.map((msg, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        animation: "fadeInUp 0.25s ease",
+                        display: "flex",
+                        flexDirection: msg.role === "user" ? "row-reverse" : "row",
+                        gap: "8px", alignItems: "flex-end",
+                      }}
+                    >
+                      {msg.role === "assistant" && (
+                        <div style={{ width: "18px", height: "18px", borderRadius: "50%", background: "rgba(52,211,153,0.15)", border: "1px solid rgba(52,211,153,0.2)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "8px" }}>
+                          ⚡
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          maxWidth: "85%", padding: "8px 12px", borderRadius: msg.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
+                          background: msg.role === "user" ? "rgba(52,211,153,0.08)" : "rgba(255,255,255,0.03)",
+                          border: msg.role === "user" ? "1px solid rgba(52,211,153,0.15)" : "1px solid rgba(255,255,255,0.05)",
+                          fontSize: "12px", lineHeight: "1.6",
+                          color: msg.role === "user" ? "rgba(52,211,153,0.9)" : "rgba(220,220,240,0.85)",
+                          fontFamily: msg.role === "user" ? "monospace" : "inherit",
+                        }}
+                      >
+                        {msg.content}
+                        {msg.link && (
+                          <a href={msg.link} target="_blank" rel="noopener noreferrer"
+                            style={{ display: "block", marginTop: "4px", fontSize: "10px", color: "#a78bfa", textDecoration: "none" }}>
+                            → {msg.link.slice(0, 40)}...
+                          </a>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-[7px] font-mono text-gray-600 tracking-[0.2em] uppercase mt-0.5">CPU</div>
-                  </div>
+                  ))}
+
+                  {/* Thinking indicator */}
+                  {thinking && (
+                    <div style={{ display: "flex", gap: "8px", alignItems: "flex-end", animation: "fadeInUp 0.2s ease" }}>
+                      <div style={{ width: "18px", height: "18px", borderRadius: "50%", background: "rgba(167,139,250,0.15)", border: "1px solid rgba(167,139,250,0.2)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "8px" }}>⚡</div>
+                      <div style={{ padding: "8px 12px", borderRadius: "12px 12px 12px 2px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                        <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                          {[0, 0.2, 0.4].map((d, i) => (
+                            <div key={i} style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#a78bfa", animation: `status-pulse 1.2s ease-in-out ${d}s infinite` }} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
                 </div>
 
                 {/* Suggestions */}
-                <div className="glass-card rounded-2xl p-5 max-w-lg mx-auto relative">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-1 h-1 rounded-full bg-purple-500/40" />
-                    <span className="text-[8px] font-mono text-gray-700 tracking-[0.2em] uppercase">quick actions</span>
-                    <div className="flex-1 h-px bg-gradient-to-r from-purple-800/20 to-transparent" />
-                  </div>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {SUGGESTIONS.map((s, i) => (
-                      <button key={s} onClick={() => pickSuggestion(s)}
-                        className="suggestion-btn" style={{ animationDelay: `${i * 50}ms` }}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Chat / Interaction area */}
-          {(!showSuggestions || messages.length > 1 || listening || thinking || speaking || taskQuestion) && (
-            <div className="flex-1 flex flex-col items-center justify-center relative px-4">
-              {/* Center overlay */}
-              {centerOverlay && (
-                <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none" onClick={dismissOverlay}>
-                  <div className="pointer-events-auto center-overlay max-w-xl w-full mx-6 max-h-[60vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[9px] font-mono tracking-[0.25em] uppercase text-cyan-500/70">result</span>
-                      <button onClick={dismissOverlay} className="text-gray-600 hover:text-gray-300 transition-colors text-[10px] font-mono tracking-wider">✕ dismiss</button>
+                {showSuggestions && messages.length <= 1 && (
+                  <div style={{ padding: "8px 12px", flexShrink: 0 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                      {SUGGESTIONS.slice(0, 4).map(s => (
+                        <button key={s} onClick={() => { setTextInput(s); setShowSuggestions(false); inputRef.current?.focus(); }}
+                          style={{
+                            padding: "3px 8px", fontSize: "9px", fontFamily: "monospace",
+                            borderRadius: "4px", border: "1px solid rgba(255,255,255,0.07)",
+                            background: "rgba(255,255,255,0.02)", color: "rgba(255,255,255,0.35)",
+                            cursor: "pointer", transition: "all 0.15s", letterSpacing: "0.04em",
+                          }}
+                          onMouseEnter={e => { (e.target as HTMLElement).style.borderColor = "rgba(52,211,153,0.2)"; (e.target as HTMLElement).style.color = "#34d399"; }}
+                          onMouseLeave={e => { (e.target as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; (e.target as HTMLElement).style.color = "rgba(255,255,255,0.35)"; }}
+                        >
+                          {s}
+                        </button>
+                      ))}
                     </div>
-                    <pre className="text-sm text-gray-200 font-mono leading-relaxed whitespace-pre-wrap">{centerOverlay}</pre>
-                  </div>
-                  <div className="absolute inset-0 -z-10" onClick={dismissOverlay} />
-                </div>
-              )}
-
-              {/* Ambient glow */}
-              <div className={`absolute w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] rounded-full -z-10 transition-all duration-700 ${
-                listening ? 'ambient-glow-listening' : thinking ? 'ambient-glow-thinking' : speaking ? 'ambient-glow-speaking' : 'ambient-glow-idle'
-              }`} style={{ marginTop: taskQuestion ? -80 : -40 }} />
-
-              {/* Status ring */}
-              {(listening || thinking || speaking) && (
-                <div className={`absolute w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] rounded-full ${
-                  listening ? 'status-ring-listening' : thinking ? 'status-ring-thinking' : 'status-ring-speaking'
-                }`} style={{ marginTop: taskQuestion ? -80 : -40 }} />
-              )}
-
-              {/* BotSwarm orb */}
-              <div className={`w-[180px] h-[180px] sm:w-[260px] sm:h-[260px] rounded-full overflow-hidden border border-blue-800/15 shadow-2xl cursor-pointer transition-all duration-700 ease-out ${
-                listening ? 'shadow-[0_0_60px_rgba(34,197,94,0.15)] border-green-800/20' :
-                thinking ? 'shadow-[0_0_70px_rgba(168,85,247,0.2)] border-purple-800/20' :
-                speaking ? 'shadow-[0_0_60px_rgba(6,182,212,0.15)] border-cyan-800/20' :
-                'shadow-blue-900/20 hover:shadow-[0_0_40px_rgba(120,60,220,0.08)]'
-              } ${centerOverlay ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100'}`} style={{ marginTop: taskQuestion ? -80 : -40 }} onClick={handleOrbClick}>
-                <BotSwarm listening={listening} thinking={thinking} speaking={speaking} activity={activityIntensity} botEvents={botEvents} centered />
-              </div>
-
-              {!listening && !thinking && !speaking && !taskQuestion && messages.length <= 1 && (
-                <div className="mt-4 text-center animate-fade-in">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <span className="w-1 h-1 rounded-full bg-purple-500/30 animate-ping" style={{ animationDuration: '2s' }} />
-                    <span className="text-[9px] font-mono text-purple-400/40 tracking-[0.25em] uppercase">tap the orb or type below</span>
-                    <span className="w-1 h-1 rounded-full bg-purple-500/30 animate-ping" style={{ animationDuration: '2s' }} />
-                  </div>
-                </div>
-              )}
-
-              {/* Strategies */}
-              {strategies && strategies.length > 0 && (
-                <div className="mt-6 max-w-lg w-full px-4">
-                  <div className="space-y-2.5">
-                    {strategies.map((s, i) => (
-                      <button key={i} onClick={() => pickStrategy(i)}
-                        className={`strategy-card w-full text-left p-4 ${selectedStrategy === i ? "selected" : ""}`}
-                        style={{ animationDelay: `${i * 80}ms` }}>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="strategy-name">{s.name}</span>
-                          <span className="strategy-complexity">CX {s.complexity}/10</span>
-                        </div>
-                        <p className="strategy-desc mb-2">{s.description}</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {s.pros.slice(0, 2).map((p, pi) => (
-                            <span key={pi} className="strategy-pro">+ {p}</span>
-                          ))}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Follow-up questions */}
-              {followUpQuestions.length > 0 && !strategies && (
-                <div className="mt-6 max-w-lg w-full px-4">
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {followUpQuestions.map((q, i) => (
-                      <button key={i} onClick={() => handleFollowUp(q)}
-                        className="followup-btn" style={{ animationDelay: `${i * 60}ms` }}>
-                        {q.length > 50 ? q.slice(0, 50) + "..." : q}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Proactive suggestions */}
-              {proactiveSuggestions.length > 0 && !strategies && (
-                <div className="mt-4 max-w-lg w-full px-4">
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {proactiveSuggestions.map((s, i) => (
-                      <button key={i} onClick={() => handleProactive(s)}
-                        className="proactive-btn" style={{ animationDelay: `${i * 60}ms` }}>
-                        {s.length > 45 ? s.slice(0, 45) + "..." : s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Last response card */}
-              {lastResponse && !listening && !thinking && !speaking && (
-                <div className="mt-6 max-w-2xl w-full px-6 message-enter">
-                  <div className="holo-card glow-card px-5 py-4 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-purple-500/40 to-cyan-500/40" />
-                    <div className="flex items-center gap-2 mb-2.5">
-                      <div className="w-2 h-2 rounded-full bg-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.3)]" />
-                      <span className="text-[9px] font-mono tracking-[0.2em] uppercase bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent font-semibold">jarvis</span>
-                      <div className="flex-1 h-px bg-gradient-to-r from-purple-800/20 to-transparent" />
-                    </div>
-                    <p className="text-sm text-gray-200 font-light leading-relaxed whitespace-pre-wrap">{lastResponse}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Task progress */}
-              {taskTotal > 0 && taskStep > 0 && (
-                <div className="mt-4 w-72">
-                  <div className="task-progress-bar">
-                    <div className="task-progress-fill" style={{ width: `${(taskStep / taskTotal) * 100}%` }} />
-                  </div>
-                  <p className="text-[9px] font-mono text-gray-600/60 text-center mt-1 tracking-wider">step {taskStep} / {taskTotal}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Bottom Input Bar ────────────────────────────────── */}
-          {!taskQuestion ? (
-            <div className="relative z-20 px-4 pb-4 pt-2">
-              <div className="max-w-lg mx-auto relative group">
-                <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-r from-purple-600/20 via-cyan-500/20 to-purple-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-sm" />
-                <div className="input-bar relative flex items-center gap-2 px-5 py-3">
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={textInput}
-                    onChange={(e) => setTextInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
-                    placeholder="Ask JARVIS anything..."
-                    className="bg-transparent text-sm text-gray-200 placeholder-gray-700/50 outline-none flex-1 font-mono"
-                  />
-                  <button onClick={handleOrbClick}
-                    className={`p-2 rounded-full transition-all duration-300 ${
-                      listening
-                        ? "bg-green-500/20 text-green-400 shadow-[0_0_12px_rgba(34,197,94,0.3)]"
-                        : "text-gray-500 hover:text-purple-400 hover:bg-purple-900/20"
-                    }`}>
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m-4 0h8" />
-                    </svg>
-                  </button>
-                  <button onClick={sendText} className="send-btn p-2 rounded-full transition-all duration-200 hover:bg-purple-900/20">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* Task question input */
-            <div className="relative z-20 px-4 pb-4 pt-2">
-              <div className="max-w-lg mx-auto glass-card px-6 py-5">
-                <p className="text-[10px] font-mono text-purple-400/80 tracking-[0.25em] uppercase mb-2">JARVIS needs to know</p>
-                <p className="text-sm text-gray-200 mb-4 leading-relaxed">{taskQuestion}</p>
-                <div className="flex gap-2.5">
-                  <input ref={taskInputRef} type="text" value={textInput} onChange={(e) => setTextInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") sendText(); }} placeholder="Type your answer..."
-                    className="task-input flex-1" autoFocus />
-                  <button onClick={sendText} className="task-send-btn">Send</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Task result */}
-          {taskResult && (
-            <div className="relative z-20 px-4 pb-4">
-              <div className="max-w-lg mx-auto glass-card px-6 py-5">
-                <p className="text-[10px] font-mono text-green-400/80 tracking-[0.25em] uppercase mb-2">
-                  <span className="inline-block mr-1.5">✓</span> Task complete
-                </p>
-                <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{taskResult}</p>
-                {Object.keys(collectedInfo).length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-800/30 space-y-1.5">
-                    {Object.entries(collectedInfo).map(([k, v]) => (
-                      <p key={k} className="text-xs text-gray-500"><span className="text-purple-400/70">{k}:</span> <span className="text-gray-400">{v}</span></p>
-                    ))}
                   </div>
                 )}
-                <button onClick={() => setTaskResult(null)} className="mt-3 text-[9px] text-gray-700/50 hover:text-gray-400 font-mono tracking-[0.15em] uppercase transition-colors">dismiss</button>
-              </div>
-            </div>
-          )}
 
-          {/* Live transcript */}
-          {listening && interim && (
-            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4 pointer-events-none">
-              <div className="glass-card px-5 py-3 text-center">
-                <p className="text-sm text-cyan-300/80 font-mono cursor-blink">{interim}</p>
-                {confidence > 0 && (
-                  <div className="mt-2 flex items-center gap-2 justify-center">
-                    <div className="w-24 h-1 rounded-full bg-gray-800/50 overflow-hidden">
-                      <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-300" style={{ width: `${confidence}%` }} />
+                {/* Task flow */}
+                {taskQuestion && (
+                  <div style={{ padding: "8px 12px", flexShrink: 0 }}>
+                    <div style={{ padding: "10px 12px", borderRadius: "8px", background: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.15)" }}>
+                      <p style={{ fontSize: "8px", fontFamily: "monospace", color: "#a78bfa", marginBottom: "4px", letterSpacing: "0.1em" }}>
+                        STEP {taskStep}/{taskTotal} — NEEDS INPUT
+                      </p>
+                      <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)", marginBottom: "0" }}>{taskQuestion}</p>
                     </div>
-                    <span className="text-[9px] font-mono text-gray-500">{confidence}%</span>
                   </div>
                 )}
+
+                {/* Interim voice text */}
+                {listening && interim && (
+                  <div style={{ padding: "4px 12px", flexShrink: 0 }}>
+                    <p style={{ fontSize: "11px", fontFamily: "monospace", color: "rgba(34,211,238,0.7)", animation: "data-flicker 0.5s infinite" }}>
+                      ›{interim}
+                    </p>
+                  </div>
+                )}
+
+                {/* Input bar */}
+                <div
+                  style={{
+                    padding: "10px 12px", borderTop: "1px solid rgba(255,255,255,0.04)", flexShrink: 0,
+                    display: "flex", alignItems: "center", gap: "8px",
+                  }}
+                >
+                  <div
+                    style={{
+                      flex: 1, display: "flex", alignItems: "center", gap: "6px",
+                      padding: "8px 12px", borderRadius: "10px",
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.07)",
+                      transition: "border-color 0.2s",
+                    }}
+                    onFocus={() => {}}
+                  >
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={textInput}
+                      onChange={e => setTextInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") sendText(); }}
+                      placeholder="Issue a command..."
+                      style={{
+                        background: "transparent", border: "none", outline: "none",
+                        flex: 1, fontSize: "12px", fontFamily: "monospace",
+                        color: "rgba(220,220,240,0.85)",
+                        letterSpacing: "0.02em",
+                      }}
+                    />
+                    {/* Voice btn */}
+                    <button
+                      onClick={handleOrbClick}
+                      style={{
+                        padding: "4px", borderRadius: "6px", border: "none",
+                        background: listening ? "rgba(34,197,94,0.15)" : "transparent",
+                        color: listening ? "#4ade80" : "rgba(255,255,255,0.2)",
+                        cursor: "pointer", flexShrink: 0, transition: "all 0.2s",
+                        boxShadow: listening ? "0 0 8px rgba(34,197,94,0.3)" : "none",
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" y1="19" x2="12" y2="23" />
+                        <line x1="8" y1="23" x2="16" y2="23" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Send */}
+                  <button
+                    onClick={sendText}
+                    disabled={!textInput.trim()}
+                    style={{
+                      padding: "8px 14px", borderRadius: "10px", border: "1px solid rgba(52,211,153,0.2)",
+                      background: textInput.trim() ? "rgba(52,211,153,0.1)" : "rgba(255,255,255,0.02)",
+                      color: textInput.trim() ? "#34d399" : "rgba(255,255,255,0.15)",
+                      fontSize: "11px", fontFamily: "monospace", cursor: textInput.trim() ? "pointer" : "default",
+                      transition: "all 0.2s", letterSpacing: "0.06em",
+                      boxShadow: textInput.trim() ? "0 0 10px rgba(52,211,153,0.1)" : "none",
+                      flexShrink: 0,
+                    }}
+                  >
+                    SEND
+                  </button>
+                </div>
+              </>
+            )}
+
+            {chatCollapsed && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "16px", gap: "12px" }}>
+                <span style={{ writingMode: "vertical-rl", color: "rgba(255,255,255,0.1)", fontSize: "9px", fontFamily: "monospace", letterSpacing: "0.12em" }}>CHAT</span>
               </div>
+            )}
+          </div>
+
+          {/* ── RIGHT: Cockpit Panel ────────────────────────────────── */}
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              padding: "12px",
+              gap: "10px",
+              overflow: "hidden",
+              minWidth: 0,
+            }}
+          >
+            {/* Cockpit tab switcher */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: "4px" }}>
+                {(["router", "telemetry"] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setCockpitTab(tab)}
+                    style={{
+                      padding: "5px 14px", fontSize: "9px", fontFamily: "monospace",
+                      borderRadius: "6px", letterSpacing: "0.1em", textTransform: "uppercase",
+                      border: "1px solid",
+                      borderColor: cockpitTab === tab ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.06)",
+                      background: cockpitTab === tab ? "rgba(52,211,153,0.08)" : "transparent",
+                      color: cockpitTab === tab ? "#34d399" : "rgba(255,255,255,0.25)",
+                      cursor: "pointer", transition: "all 0.2s",
+                    }}
+                  >
+                    {tab === "router" ? "⚡ Router" : "📡 Telemetry"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Live dispatch indicator */}
+              {isDispatching && (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#f59e0b", animation: "status-pulse 0.6s ease-in-out infinite" }} />
+                  <span style={{ fontSize: "9px", fontFamily: "monospace", color: "#f59e0b", letterSpacing: "0.08em" }}>
+                    ROUTING...
+                  </span>
+                </div>
+              )}
             </div>
-          )}
+
+            {/* ── Router tab ── */}
+            {cockpitTab === "router" && (
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <AgentRouter
+                  routingData={routerPayload as any}
+                  isDispatching={isDispatching}
+                  userText={messages.filter(m => m.role === "user").slice(-1)[0]?.content}
+                />
+              </div>
+            )}
+
+
+            {/* ── Telemetry tab ── */}
+            {cockpitTab === "telemetry" && (
+              <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+                <CockpitTelemetry
+                  relayOnline={relayOnline}
+                  devices={devices}
+                  systemStats={systemStats}
+                  agentResponse={routerPayload?.agent_response ?? null}
+                  activeAgent={activeAgent}
+                  activityLog={activityLog}
+                />
+              </div>
+            )}
+          </div>
         </div>
-
-        {/* Sidebar */}
-        <Sidebar messages={messages} open={sidebarOpen} onClose={() => setSidebarOpen(false)}
-          summary={profileSummary} interests={profileInterests} />
       </div>
+
+      {/* Task result overlay */}
+      {taskResult && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(3,5,18,0.8)", backdropFilter: "blur(8px)",
+          }}
+          onClick={() => setTaskResult(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: "480px", width: "90%", padding: "24px",
+              background: "rgba(10,15,30,0.95)", borderRadius: "16px",
+              border: "1px solid rgba(52,211,153,0.2)",
+              boxShadow: "0 0 40px rgba(52,211,153,0.1)",
+              animation: "fadeInUp 0.3s ease",
+            }}
+          >
+            <p style={{ fontSize: "9px", fontFamily: "monospace", color: "#34d399", letterSpacing: "0.15em", marginBottom: "8px" }}>
+              ✓ TASK COMPLETE
+            </p>
+            <p style={{ fontSize: "12px", color: "rgba(220,220,240,0.8)", whiteSpace: "pre-wrap", lineHeight: "1.6" }}>{taskResult}</p>
+            {Object.keys(collectedInfo).length > 0 && (
+              <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                {Object.entries(collectedInfo).map(([k, v]) => (
+                  <p key={k} style={{ fontSize: "10px", fontFamily: "monospace", color: "rgba(255,255,255,0.4)", marginBottom: "2px" }}>
+                    <span style={{ color: "#a78bfa" }}>{k}:</span> {v}
+                  </p>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setTaskResult(null)}
+              style={{ marginTop: "16px", fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.2)", letterSpacing: "0.1em", background: "none", border: "none", cursor: "pointer" }}
+            >
+              DISMISS ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar */}
+      <Sidebar messages={messages} open={sidebarOpen} onClose={() => setSidebarOpen(false)}
+        summary={profileSummary} interests={profileInterests} />
     </div>
   );
 }

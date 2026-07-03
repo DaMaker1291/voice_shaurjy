@@ -15,6 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from models import TextQuery, DocumentUpload, LicenseActivate, LiveKitTokenRequest, ReminderCreate, ReminderUpdate, TaskRespond
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
 from document_processor import process_upload
 from rag_engine import index_document, has_documents, count_chunks
 from billing import get_tier, activate_license, is_premium
@@ -33,9 +35,36 @@ app.add_middleware(
 )
 
 
+class RouterDispatchRequest(BaseModel):
+    user_text: str
+    user_id: str = "local"
+    relay_context: Optional[Dict[str, Any]] = None
+
+
+@app.post("/api/router/dispatch")
+async def router_dispatch(req: RouterDispatchRequest):
+    """
+    Multi-Agent Router Dispatch — JARVIS cognitive triage pipeline.
+    Stage 1: Supervisor Router classifies intent (<100ms, 8B model).
+    Stage 2: Domain worker (OS/HAL/WEB) generates typed execution payload (70B model).
+    Returns full telemetry packet with routing metadata and latency breakdowns.
+    """
+    try:
+        from multi_agent_router import route_and_execute
+        result = route_and_execute(
+            user_text=req.user_text,
+            user_id=req.user_id,
+            relay_context=req.relay_context or {},
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/")
 async def root():
     return RedirectResponse(url="/voice_shaurjy/")
+
 
 @app.get("/relay_agent")
 @app.get("/relay")

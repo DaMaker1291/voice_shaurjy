@@ -14,6 +14,43 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Multi-Agent Architecture Design Tokens ──────────────── */
+:root {
+  --agent-router:  #34d399;
+  --agent-os:      #f59e0b;
+  --agent-hal:     #22d3ee;
+  --agent-web:     #a78bfa;
+  --agent-error:   #ef4444;
+  --surface-0:     rgba(3,5,18,1);
+  --surface-1:     rgba(255,255,255,0.02);
+  --surface-2:     rgba(255,255,255,0.05);
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-mid:    rgba(255,255,255,0.10);
+}
+
+/* ── Cockpit keyframes ────────────────────────────────────── */
+@keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes scan-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes skeleton-pulse { 0%, 100% { opacity: 0.06; } 50% { opacity: 0.12; } }
+@keyframes agent-glow-pulse { 0%, 100% { box-shadow: 0 0 8px var(--agent-router); } 50% { box-shadow: 0 0 20px var(--agent-router), 0 0 40px var(--agent-router); } }
+@keyframes router-flow { 0% { stroke-dashoffset: 100; opacity: 0.3; } 50% { opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0.3; } }
+@keyframes cockpit-scanline { 0% { top: -2px; } 100% { top: 100%; } }
+@keyframes data-flicker { 0%, 95%, 100% { opacity: 1; } 96%, 99% { opacity: 0.7; } }
+@keyframes grid-pulse { 0%, 100% { opacity: 0.03; } 50% { opacity: 0.06; } }
+
+.cockpit-grid {
+  background-image: linear-gradient(rgba(52,211,153,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(52,211,153,0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+  animation: grid-pulse 4s ease-in-out infinite;
+}
+.data-value { animation: data-flicker 8s ease-in-out infinite; }
+.skeleton { background: rgba(255,255,255,0.04); border-radius: 4px; animation: skeleton-pulse 1.4s ease-in-out infinite; }
+.cockpit-scroll::-webkit-scrollbar { width: 3px; height: 3px; }
+.cockpit-scroll::-webkit-scrollbar-track { background: transparent; }
+.cockpit-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+.cockpit-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+
 /* ── Ambient glow rings behind agents ──────────────────── */
 @keyframes ambient-pulse-listening {
   0%, 100% { transform: translate(-50%,-50%) scale(1); opacity: 0.15; }
