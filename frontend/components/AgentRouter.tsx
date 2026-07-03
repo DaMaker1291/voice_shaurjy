@@ -19,6 +19,8 @@ interface AgentRouterProps {
     agent_response?: Record<string, unknown>;
     latency_ms?: { supervisor?: number; worker?: number; total?: number };
     target_agent?: string;
+    model_source?: string;
+    security_status?: string;
   } | null;
   isDispatching?: boolean;
   userText?: string;
@@ -185,7 +187,7 @@ export default function AgentRouter({ routingData, isDispatching, userText }: Ag
           flexShrink: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
           <div
             style={{
               width: "6px",
@@ -199,7 +201,42 @@ export default function AgentRouter({ routingData, isDispatching, userText }: Ag
           <span style={{ fontSize: "11px", fontFamily: "monospace", color: "rgba(255,255,255,0.6)", letterSpacing: "0.08em" }}>
             COGNITIVE ROUTER
           </span>
+
+          {routingData?.model_source && (
+            <span
+              style={{
+                fontSize: "8px",
+                fontFamily: "monospace",
+                color: routingData.model_source === "LOCAL_LLAMA" ? "#34d399" : "#a78bfa",
+                background: routingData.model_source === "LOCAL_LLAMA" ? "rgba(52,211,153,0.1)" : "rgba(167,139,250,0.1)",
+                border: `1px solid ${routingData.model_source === "LOCAL_LLAMA" ? "rgba(52,211,153,0.2)" : "rgba(167,139,250,0.2)"}`,
+                padding: "1px 5px",
+                borderRadius: "3px",
+                letterSpacing: "0.05em",
+              }}
+            >
+              {routingData.model_source}
+            </span>
+          )}
+
+          {routingData?.security_status && (
+            <span
+              style={{
+                fontSize: "8px",
+                fontFamily: "monospace",
+                color: routingData.security_status === "PASSED" ? "#34d399" : "#ef4444",
+                background: routingData.security_status === "PASSED" ? "rgba(52,211,153,0.1)" : "rgba(239,68,68,0.15)",
+                border: `1px solid ${routingData.security_status === "PASSED" ? "rgba(52,211,153,0.2)" : "rgba(239,68,68,0.25)"}`,
+                padding: "1px 5px",
+                borderRadius: "3px",
+                letterSpacing: "0.05em",
+              }}
+            >
+              SEC: {routingData.security_status}
+            </span>
+          )}
         </div>
+
 
         {/* Tab switcher */}
         <div style={{ display: "flex", gap: "4px" }}>
