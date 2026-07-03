@@ -1155,16 +1155,28 @@ def execute_action(action: str, user_text: str = "") -> str:
         return f"Failed: {e}"
 
 
+RELAY_INSTRUCTIONS = """J.A.R.V.I.S. Relay Agent is not running on your computer.
+
+Download and run it (one time, no project files needed):
+
+  curl -O https://dgfhgjhj-jarvis-ai-brain.hf.space/relay
+  python3 relay --user yourname
+
+Keep that terminal window open. Then ask me again!"""
+
 def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
     """Queue a desktop action and return relay_id. Frontend polls for result."""
     try:
         from relay import is_relay_alive, queue_action
+    except Exception:
+        return f"__NEEDS_RELAY__:Relay bridge not available on this server.\n\n{RELAY_INSTRUCTIONS}"
+    try:
         if not is_relay_alive(user_id):
-            return "__NEEDS_RELAY__:" + f"Action '{action}' needs the relay agent on your computer. Open a terminal in the project folder and run:\n  macOS/Linux: ./run-relay.sh\n  Windows: run-relay.bat\nThen try again."
+            return f"__NEEDS_RELAY__:Action '{action}' needs your computer.\n\n{RELAY_INSTRUCTIONS}"
         relay_id = queue_action(action, params, user_id=user_id)
         return f"__RELAY__:{relay_id}:{action}"
     except Exception as e:
-        return f"Cannot execute '{action}' on this server and relay unavailable: {e}"
+        return f"__NEEDS_RELAY__:Cannot execute '{action}' on server.\n\n{RELAY_INSTRUCTIONS}\n\n(Error: {e})"
 
 
 # Cloud-safe actions — ones that work on Linux without needing a relay agent

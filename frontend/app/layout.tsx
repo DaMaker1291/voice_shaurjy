@@ -3,8 +3,8 @@ import ClientLayout from "@/components/ClientLayout";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Second Brain - Sassy Voice Assistant",
-  description: "Your sassy, voice-first second brain. Talk to your notes.",
+  title: "J.A.R.V.I.S. — Sovereign Digital Entity",
+  description: "Your omnipresent AI. Voice-first OS, smart home, and web automation.",
 };
 
 export const viewport = {
