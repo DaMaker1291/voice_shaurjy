@@ -436,6 +436,13 @@ _KEYWORD_MAP: dict[str, str] = {
     "notification center": "notify_center", "center notification": "notify_center",
     "show notification": "notify_persistent", "sticky note": "notify_persistent",
     "sticky notification": "notify_persistent",
+
+    # Network scanning
+    "network scan": "network_scan_deep", "deep scan": "network_scan_deep",
+    "scan network": "network_scan_deep", "scan my network": "network_scan_deep",
+    "quick scan": "network_scan_quick", "arp scan": "network_scan_quick",
+    "who is on the network": "network_scan_quick",
+    "what devices": "network_scan_quick",
 }
 
 # Keyword phrase → action ID lookup (longest-first for specificity)
@@ -1163,7 +1170,7 @@ def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
 # Cloud-safe actions — ones that work on Linux without needing a relay agent
 _CLOUD_SAFE_ACTIONS = {
     "weather", "public_ip", "math_eval", "timer", "alarm",
-    "time", "timer_stop", "timer_remaining",
+    "time", "timer_stop", "timer_remaining", "network_scan_quick", "network_scan_deep",
 
     # Web-able actions — run via Playwright on server, relay if available
     "spotify",
@@ -1739,6 +1746,79 @@ def _mac_vendor(mac: str) -> str:
         }
     prefix = mac.upper()[:8]  # "XX:XX:XX"
     return _MAC_VENDORS.get(prefix, "Unknown")
+
+
+@register("network_scan_quick")
+def _network_scan_quick(_):
+    """Cross-platform: ARP scan to find LAN devices. Works on macOS/Linux/Windows."""
+    import subprocess, platform, re
+    os_name = platform.system()
+    devices = []
+    try:
+        if os_name == "Windows":
+            out = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=10).stdout or ""
+            for line in out.splitlines():
+                parts = line.strip().split()
+                if len(parts) >= 3 and re.match(r'\d+\.\d+\.\d+\.\d+', parts[0]):
+                    devices.append({"ip": parts[0], "mac": parts[1].replace("-", ":").upper()})
+        elif os_name == "Darwin":
+            out = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=10).stdout or ""
+            for line in out.splitlines():
+                m = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([a-f0-9:]+)', line.lower())
+                if m:
+                    devices.append({"ip": m.group(1), "mac": m.group(2).upper()})
+        else:  # Linux
+            out = subprocess.run(["arp", "-n"], capture_output=True, text=True, timeout=10).stdout or ""
+            for line in out.splitlines():
+                parts = line.strip().split()
+                if len(parts) >= 3 and re.match(r'\d+\.\d+\.\d+\.\d+', parts[0]) and parts[1] != "<incomplete>":
+                    devices.append({"ip": parts[0], "mac": parts[2].strip("()")})
+    except: pass
+
+    if not devices:
+        # Ping sweep fallback (limited to a few hosts)
+        try:
+            import socket
+            local_ip = "192.168.1.1"
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(1)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            base = ".".join(local_ip.split(".")[:3])
+            for i in [1, 254, 100, 101, 50, 150, 200]:
+                subprocess.run(["ping", "-c", "1", "-W", "1", f"{base}.{i}"],
+                               capture_output=True, timeout=2)
+        except: pass
+        try:
+            if os_name == "Darwin":
+                out = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=10).stdout or ""
+                for line in out.splitlines():
+                    m = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([a-f0-9:]+)', line.lower())
+                    if m:
+                        devices.append({"ip": m.group(1), "mac": m.group(2).upper()})
+        except: pass
+
+    if not devices:
+        return "No devices found on network."
+
+    result = f"📡 Network scan — {len(devices)} devices:\n"
+    for d in devices[:20]:
+        try:
+            host = socket.gethostbyaddr(d["ip"])[0].split(".")[0]
+        except:
+            host = "unknown"
+        result += f"  • {host} ({d['ip']}) — {d['mac']}\n"
+    return result
+
+
+@register("network_scan_deep")
+def _network_scan_deep(_):
+    """Cross-platform deep scan: ARP + hostname + MAC vendor lookup."""
+    result = _network_scan_quick(_)
+    if result.startswith("No devices"):
+        return result
+    return result + "\nRun scan_network on Windows for detailed port info."
 
 
 @register("net_scan_deep")
