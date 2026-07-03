@@ -31,6 +31,7 @@ RUN pip install --no-cache-dir -r requirements-render.txt
 RUN PLAYWRIGHT_BROWSERS_PATH=/app/.playwright python3 -m playwright install chromium
 COPY backend/ ./backend/
 COPY frontend/out/ ./frontend/out/
+COPY standalone_relay.py ./standalone_relay.py
 ENV PYTHONPATH=/app
 ENV GROQ_API_KEY=""
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright

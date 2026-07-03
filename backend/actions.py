@@ -1157,12 +1157,11 @@ def execute_action(action: str, user_text: str = "") -> str:
 
 RELAY_INSTRUCTIONS = """J.A.R.V.I.S. Relay Agent is not running on your computer.
 
-Download and run it (one time, no project files needed):
+Open PowerShell and paste this one command:
 
-  curl -O https://dgfhgjhj-jarvis-ai-brain.hf.space/relay
-  python3 relay --user yourname
+  powershell -c "curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\relay.py; python $env:TEMP\relay.py --user $env:USERNAME"
 
-Keep that terminal window open. Then ask me again!"""
+Keep that window open. Then ask me again!"""
 
 def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
     """Queue a desktop action and return relay_id. Frontend polls for result."""

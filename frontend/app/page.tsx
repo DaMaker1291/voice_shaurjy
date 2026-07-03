@@ -387,10 +387,15 @@ export default function Home() {
         setActionType(res.action_type || "action");
 
         if (res.action === "__needs_relay__") {
-          setMessages((p) => [...p, { role: "assistant", content: reply }]);
+          const relayLink = "https://dgfhgjhj-jarvis-ai-brain.hf.space/relay";
+          setMessages((p) => [...p, {
+            role: "assistant",
+            content: reply,
+            link: relayLink,
+          }]);
           setLastResponse(reply);
           setTimeout(() => setActionFeedback(null), 8000);
-          speak(reply);
+          speak("This action needs the relay agent. Download it from the settings page.");
           return;
         }
 
