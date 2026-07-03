@@ -442,6 +442,20 @@ class Entity:
                         "question": f"Should I open that in the app (requires relay) or in your browser?",
                         "text": f"App or browser?",
                     }
+                # If preference is "app", force relay check (bypass cloud-safe)
+                if pref == "app":
+                    from actions import relay_action
+                    result = relay_action(action, text, user_id=self.user_id)
+                    label = _ACTION_LABELS.get(action, "")
+                    self._set_mood("focused")
+                    if result.startswith("__NEEDS_RELAY__:"):
+                        msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
+                        return {"text": f"{msg}", "action": "__needs_relay__"}
+                    if result.startswith("__RELAY__:"):
+                        parts = result.split(":", 2)
+                        relay_id = parts[1] if len(parts) > 1 else ""
+                        return {"text": f"{label}\n⏳ Opening on your computer...", "action": action, "relay_id": relay_id, "async": True}
+                    return {"text": f"{label}\n{result}", "action": action}
 
             result = cloud_safe_execute(action, text, user_id=self.user_id)
             label = _ACTION_LABELS.get(action, "")

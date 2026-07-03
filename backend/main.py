@@ -89,18 +89,22 @@ async def text_chat(query: TextQuery):
 async def task_respond(req: TaskRespond):
     # Handle launch preference questions (app vs browser)
     if req.session_id.startswith("launch_"):
-        from actions import cloud_safe_execute, _ACTION_LABELS
+        from actions import cloud_safe_execute, relay_action, _ACTION_LABELS
         from entity_engine import get_entity
         action_name = req.session_id[7:]  # remove "launch_" prefix
         ans = req.response.strip().lower()
         if ans in ("app", "native", "desktop", "native app", "in the app", "in app"):
             entity = get_entity(req.user_id or "local")
             entity.memory.add_preference(f"launch_{action_name}", "app")
-            # Try executing via relay
-            result = cloud_safe_execute(action_name, req.response, user_id=req.user_id or "local")
-            if result.startswith("__NEEDS_RELAY__:"):
-                return {"type": "ask", "question": "The relay agent isn't running. Start it with:\n  macOS: ./run-relay.sh\n  Windows: run-relay.bat\nThen try again.", "session_id": req.session_id}
-            return {"type": "complete", "text": f"Saved! I'll use the app for that next time. Executing now...\n{result}"}
+            # App requires relay — force relay check (bypass cloud-safe)
+            result = relay_action(action_name, req.response, user_id=req.user_id or "local")
+            if "__NEEDS_RELAY__" in result:
+                return {"type": "ask", "question": "Relay agent is offline. Start J.A.R.V.I.S. Relay on your desktop:\n  curl -O https://dgfhgjhj-jarvis-ai-brain.hf.space/relay\n  python3 relay --user yourname\nRun that on your machine, then ask me again.", "session_id": req.session_id}
+            if result.startswith("__RELAY__:"):
+                parts = result.split(":", 2)
+                relay_id = parts[1] if len(parts) > 1 else ""
+                return {"type": "complete", "text": f"Saved! I'll use the app for that next time. Queued on your computer...", "async": True, "relay_id": relay_id}
+            return {"type": "complete", "text": f"Saved! I'll use the app for that next time.\n{result}\n\n(If it didn't open, the relay agent may need to be started on your machine.)"}
         else:
             # Browser — save preference and run on server
             entity = get_entity(req.user_id or "local")
