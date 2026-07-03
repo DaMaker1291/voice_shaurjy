@@ -34,12 +34,18 @@ async def root():
     return RedirectResponse(url="/voice_shaurjy/")
 
 @app.get("/relay_agent")
-async def relay_agent():
-    fp = os.path.join(os.path.dirname(__file__), "..", "frontend", "out", "relay_agent.py")
+@app.get("/relay")
+async def relay_download():
+    fp = os.path.join(os.path.dirname(__file__), "..", "standalone_relay.py")
     if os.path.isfile(fp):
         from fastapi.responses import FileResponse
-        return FileResponse(fp, media_type="text/plain", filename="relay_agent.py")
-    return {"error": "relay_agent.py not found"}
+        return FileResponse(fp, media_type="text/plain", filename="relay.py")
+    # fallback to old location
+    fp2 = os.path.join(os.path.dirname(__file__), "..", "relay_agent.py")
+    if os.path.isfile(fp2):
+        from fastapi.responses import FileResponse
+        return FileResponse(fp2, media_type="text/plain", filename="relay_agent.py")
+    return {"error": "Relay agent not found"}
 
 @app.get("/health")
 async def health():
