@@ -1440,3 +1440,226 @@ async def serve_frontend(req, exc):
             return FileResponse(fp)
     from fastapi.responses import JSONResponse
     return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# JARVIS PLATFORM — Multi-Agent Pool, NL Parsing, Device Control
+# ═══════════════════════════════════════════════════════════════════
+
+from agent_pool import get_pool, AgentType
+from nl_command_parser import parse_command, build_device_command
+from device_bridge import get_bridge
+
+
+class AgentSpawnRequest(BaseModel):
+    name: str
+    agent_type: str = "chat"
+    config: Optional[Dict[str, Any]] = None
+    capabilities: Optional[list] = None
+    tags: Optional[list] = None
+
+
+class AgentTaskRequest(BaseModel):
+    command: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class NLCommandRequest(BaseModel):
+    text: str
+
+
+class DeviceControlRequest(BaseModel):
+    device_id: Optional[str] = None
+    device_ip: Optional[str] = None
+    command: Dict[str, Any]
+
+
+# ── Agent Pool Routes ───────────────────────────────────────────
+
+@app.get("/api/agents")
+async def list_agents(status: Optional[str] = None, agent_type: Optional[str] = None):
+    pool = get_pool()
+    agents = pool.list_agents(status=status, agent_type=agent_type)
+    return {"agents": [a.to_dict() for a in agents], "stats": pool.get_pool_stats()}
+
+
+@app.post("/api/agents/spawn")
+async def spawn_agent(req: AgentSpawnRequest):
+    pool = get_pool()
+    agent = pool.spawn(
+        name=req.name,
+        agent_type=req.agent_type,
+        config=req.config,
+        capabilities=req.capabilities,
+        tags=req.tags,
+    )
+    return agent.to_dict()
+
+
+@app.get("/api/agents/{agent_id}")
+async def get_agent(agent_id: str):
+    pool = get_pool()
+    agent = pool.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+    tasks = pool.get_agent_tasks(agent_id)
+    return {**agent.to_dict(), "tasks": [{"id": t.id, "command": t.command, "status": t.status, "result": t.result, "latency_ms": t.latency_ms} for t in tasks]}
+
+
+@app.delete("/api/agents/{agent_id}")
+async def kill_agent(agent_id: str):
+    pool = get_pool()
+    ok = pool.kill(agent_id)
+    if not ok:
+        raise HTTPException(404, "Agent not found")
+    return {"status": "killed", "agent_id": agent_id}
+
+
+@app.post("/api/agents/{agent_id}/pause")
+async def pause_agent(agent_id: str):
+    pool = get_pool()
+    ok = pool.pause(agent_id)
+    return {"status": "paused" if ok else "not_running"}
+
+
+@app.post("/api/agents/{agent_id}/resume")
+async def resume_agent(agent_id: str):
+    pool = get_pool()
+    ok = pool.resume(agent_id)
+    return {"status": "resumed" if ok else "not_paused"}
+
+
+@app.post("/api/agents/{agent_id}/task")
+async def submit_agent_task(agent_id: str, req: AgentTaskRequest):
+    pool = get_pool()
+    task = pool.submit_task(agent_id, req.command, metadata=req.metadata)
+    if not task:
+        raise HTTPException(404, "Agent not found")
+    return {"task_id": task.id, "status": task.status, "command": task.command}
+
+
+@app.get("/api/agents/{agent_id}/tasks")
+async def get_agent_tasks(agent_id: str):
+    pool = get_pool()
+    tasks = pool.get_agent_tasks(agent_id)
+    return {"tasks": [{"id": t.id, "command": t.command, "status": t.status, "result": t.result, "started_at": t.started_at, "completed_at": t.completed_at, "latency_ms": t.latency_ms} for t in tasks]}
+
+
+@app.get("/api/agents/pool/stats")
+async def pool_stats():
+    pool = get_pool()
+    return pool.get_pool_stats()
+
+
+@app.get("/api/agents/pool/events")
+async def pool_events(limit: int = 50):
+    pool = get_pool()
+    return {"events": pool.get_event_log(limit)}
+
+
+# ── NL Command Parser Routes ────────────────────────────────────
+
+@app.post("/api/nl/parse")
+async def parse_nl_command(req: NLCommandRequest):
+    try:
+        from smart_home_manager import get_manager
+        mgr = get_manager()
+        devices = [{"id": d.id, "name": d.name, "type": d.type, "ip": d.ip, "protocol": d.protocol} for d in mgr.devices.values()]
+    except Exception:
+        devices = []
+
+    parsed = parse_command(req.text, devices)
+    device_cmd = build_device_command(parsed) if parsed.intent != "chat" else None
+
+    return {
+        "parsed": {
+            "intent": parsed.intent,
+            "device_type": parsed.device_type,
+            "device_name": parsed.device_name,
+            "device_ip": parsed.device_ip,
+            "action": parsed.action,
+            "params": parsed.params,
+            "confidence": parsed.confidence,
+            "method": parsed.method,
+        },
+        "command": device_cmd,
+    }
+
+
+@app.post("/api/nl/execute")
+async def execute_nl_command(req: NLCommandRequest):
+    try:
+        from smart_home_manager import get_manager
+        mgr = get_manager()
+        devices = [{"id": d.id, "name": d.name, "type": d.type, "ip": d.ip, "protocol": d.protocol} for d in mgr.devices.values()]
+    except Exception:
+        devices = []
+
+    parsed = parse_command(req.text, devices)
+
+    if parsed.intent == "chat":
+        return {"status": "chat", "message": "This is a conversational message, not a device command."}
+
+    device_cmd = build_device_command(parsed)
+
+    # Find matching device
+    matched_device = None
+    for d in devices:
+        if parsed.device_ip and d.get("ip") == parsed.device_ip:
+            matched_device = d
+            break
+        if parsed.device_name and parsed.device_name.lower() in d.get("name", "").lower():
+            matched_device = d
+            break
+        if parsed.device_type and d.get("type") == parsed.device_type:
+            matched_device = d
+            break
+
+    if not matched_device:
+        return {"status": "no_device", "parsed": device_cmd, "message": f"No device found matching '{parsed.device_name or parsed.device_type}'"}
+
+    bridge = get_bridge()
+    result = bridge.execute(matched_device, device_cmd.get("command", {}))
+
+    return {
+        "status": result.status,
+        "device": {"name": matched_device.get("name"), "ip": matched_device.get("ip"), "type": matched_device.get("type")},
+        "command": device_cmd,
+        "result": result.result,
+        "latency_ms": result.latency_ms,
+    }
+
+
+# ── Device Bridge Routes ────────────────────────────────────────
+
+@app.get("/api/devices/command-log")
+async def device_command_log(limit: int = 50):
+    bridge = get_bridge()
+    return {"commands": bridge.get_command_log(limit)}
+
+
+@app.post("/api/devices/control")
+async def control_device_direct(req: DeviceControlRequest):
+    try:
+        from smart_home_manager import get_manager
+        mgr = get_manager()
+    except Exception:
+        raise HTTPException(500, "Smart home manager not available")
+
+    device = None
+    if req.device_id:
+        device_obj = mgr.devices.get(req.device_id)
+        if device_obj:
+            device = {"id": device_obj.id, "name": device_obj.name, "type": device_obj.type, "ip": device_obj.ip, "protocol": device_obj.protocol}
+    if not device and req.device_ip:
+        for d in mgr.devices.values():
+            if d.ip == req.device_ip:
+                device = {"id": d.id, "name": d.name, "type": d.type, "ip": d.ip, "protocol": d.protocol}
+                break
+
+    if not device:
+        raise HTTPException(404, "Device not found")
+
+    bridge = get_bridge()
+    result = bridge.execute(device, req.command)
+    return {"status": result.status, "result": result.result, "latency_ms": result.latency_ms}

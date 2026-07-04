@@ -1,326 +1,482 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { issueCommand, getAgentCommands, getAgentStatus, scanQuick, getPropagationStatus, getPropagationLogs, getSmartHomeDevices } from "@/lib/api";
 import Navbar from "@/components/Navbar";
+import { BASE } from "@/lib/api";
 
-interface Cmd {
-  id: number;
-  command: string;
-  target: string;
+interface Agent {
+  id: string;
+  name: string;
+  type: string;
   status: string;
-  issued: string;
-  completed: string | null;
-  result: any;
+  task_count: number;
+  created_at: number;
+  tags: string[];
 }
 
-export default function AgentPage() {
-  const [tab, setTab] = useState<"commands" | "scan" | "propagation" | "smarthome">("commands");
-  const [commands, setCommands] = useState<Cmd[]>([]);
-  const [status, setStatus] = useState<any>(null);
-  const [scanData, setScanData] = useState<any>(null);
-  const [propData, setPropData] = useState<any>(null);
-  const [propLogs, setPropLogs] = useState<any[]>([]);
-  const [shDevices, setShDevices] = useState<any[]>([]);
-  const [loading, setLoading] = useState<Record<string, boolean>>({});
-  const [issuing, setIssuing] = useState<string | null>(null);
+interface AgentTask {
+  id: string;
+  command: string;
+  status: string;
+  result: any;
+  started_at?: number;
+  completed_at?: number;
+  latency_ms?: number;
+}
+
+interface PoolStats {
+  total_agents: number;
+  running: number;
+  paused: number;
+  idle: number;
+  total_tasks: number;
+  completed_tasks: number;
+  failed_tasks: number;
+}
+
+interface PoolEvent {
+  timestamp: number;
+  type: string;
+  agent_id: string;
+  agent_name: string;
+  detail: string;
+}
+
+const AGENT_TYPES = [
+  { value: "chat", label: "Chat", desc: "General conversation and Q&A" },
+  { value: "coding", label: "Coding", desc: "Code generation and debugging" },
+  { value: "research", label: "Research", desc: "Web search and analysis" },
+  { value: "automation", label: "Automation", desc: "Task automation and scripting" },
+  { value: "monitoring", label: "Monitoring", desc: "System and service monitoring" },
+  { value: "analysis", label: "Analysis", desc: "Data analysis and insights" },
+];
+
+const STATUS_COLORS: Record<string, string> = {
+  running: "bg-emerald-400",
+  paused: "bg-amber-400",
+  idle: "bg-zinc-500",
+  completed: "bg-emerald-400",
+  failed: "bg-red-400",
+  pending: "bg-violet-400",
+};
+
+export default function AgentDashboardPage() {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [stats, setStats] = useState<PoolStats | null>(null);
+  const [events, setEvents] = useState<PoolEvent[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
+  const [spawnType, setSpawnType] = useState("chat");
+  const [spawnName, setSpawnName] = useState("");
+  const [spawning, setSpawning] = useState(false);
+  const [taskCommand, setTaskCommand] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [nlInput, setNlInput] = useState("");
+  const [nlResult, setNlResult] = useState<any>(null);
+  const [parsing, setParsing] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const cmds = await getAgentCommands();
-      setCommands(cmds.commands || []);
-      setStatus(await getAgentStatus());
+      const r = await fetch(`${BASE}/api/agents`);
+      const data = await r.json();
+      setAgents(data.agents || []);
+      setStats(data.stats || null);
+    } catch {}
+    try {
+      const r = await fetch(`${BASE}/api/agents/pool/events?limit=30`);
+      const data = await r.json();
+      setEvents(data.events || []);
     } catch {}
   }, []);
 
-  useEffect(() => { refresh(); const i = setInterval(refresh, 4000); return () => clearInterval(i); }, [refresh]);
-
-  const doScan = useCallback(async () => {
-    setLoading(s => ({ ...s, scan: true }));
-    try { setScanData(await scanQuick()); } catch {}
-    setLoading(s => ({ ...s, scan: false }));
-  }, []);
-
-  const doProp = useCallback(async () => {
-    setLoading(s => ({ ...s, prop: true }));
-    try { setPropData(await getPropagationStatus()); } catch {}
-    try { const logs = await getPropagationLogs(); setPropLogs(logs.logs || logs || []); } catch {}
-    setLoading(s => ({ ...s, prop: false }));
-  }, []);
-
-  const doSH = useCallback(async () => {
-    setLoading(s => ({ ...s, sh: true }));
-    try { const d = await getSmartHomeDevices(); setShDevices(d.devices || []); } catch {}
-    setLoading(s => ({ ...s, sh: false }));
-  }, []);
-
-  const doIssue = useCallback(async (command: string) => {
-    setIssuing(command);
-    try { await issueCommand(command); setTimeout(refresh, 1000); } catch {}
-    setIssuing(null);
+  useEffect(() => {
+    refresh();
+    const i = setInterval(refresh, 5000);
+    return () => clearInterval(i);
   }, [refresh]);
 
-  const quickCmds = ["scan", "propagate", "smarthome", "status"];
+  const refreshAgentTasks = useCallback(async (agentId: string) => {
+    try {
+      const r = await fetch(`${BASE}/api/agents/${agentId}/tasks`);
+      const data = await r.json();
+      setAgentTasks(data.tasks || []);
+    } catch {}
+  }, []);
 
-  const statusColor = (s: string) =>
-    s === "completed" ? "bg-emerald-400" : s === "dispatched" ? "bg-amber-400" : s === "pending" ? "bg-violet-400" : "bg-zinc-600";
+  useEffect(() => {
+    if (selectedAgent) {
+      refreshAgentTasks(selectedAgent.id);
+      const i = setInterval(() => refreshAgentTasks(selectedAgent.id), 3000);
+      return () => clearInterval(i);
+    }
+  }, [selectedAgent, refreshAgentTasks]);
 
-  const tabs = [
-    { id: "commands" as const, label: "Commands" },
-    { id: "scan" as const, label: "Scan" },
-    { id: "propagation" as const, label: "Propagation" },
-    { id: "smarthome" as const, label: "Smart Home" },
-  ];
+  const spawnAgent = async () => {
+    if (!spawnName.trim()) return;
+    setSpawning(true);
+    try {
+      await fetch(`${BASE}/api/agents/spawn`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: spawnName, agent_type: spawnType }),
+      });
+      setSpawnName("");
+      refresh();
+    } catch {}
+    setSpawning(false);
+  };
+
+  const killAgent = async (id: string) => {
+    await fetch(`${BASE}/api/agents/${id}`, { method: "DELETE" });
+    if (selectedAgent?.id === id) setSelectedAgent(null);
+    refresh();
+  };
+
+  const pauseAgent = async (id: string) => {
+    await fetch(`${BASE}/api/agents/${id}/pause`, { method: "POST" });
+    refresh();
+  };
+
+  const resumeAgent = async (id: string) => {
+    await fetch(`${BASE}/api/agents/${id}/resume`, { method: "POST" });
+    refresh();
+  };
+
+  const submitTask = async () => {
+    if (!selectedAgent || !taskCommand.trim()) return;
+    setSubmitting(true);
+    try {
+      await fetch(`${BASE}/api/agents/${selectedAgent.id}/task`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: taskCommand }),
+      });
+      setTaskCommand("");
+      refreshAgentTasks(selectedAgent.id);
+    } catch {}
+    setSubmitting(false);
+  };
+
+  const parseNL = async () => {
+    if (!nlInput.trim()) return;
+    setParsing(true);
+    try {
+      const r = await fetch(`${BASE}/api/nl/parse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: nlInput }),
+      });
+      const data = await r.json();
+      setNlResult(data);
+    } catch {}
+    setParsing(false);
+  };
+
+  const executeNL = async () => {
+    if (!nlInput.trim()) return;
+    setParsing(true);
+    try {
+      const r = await fetch(`${BASE}/api/nl/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: nlInput }),
+      });
+      const data = await r.json();
+      setNlResult(data);
+    } catch {}
+    setParsing(false);
+  };
+
+  const timeAgo = (ts: number) => {
+    if (!ts) return "";
+    const diff = (Date.now() / 1000) - ts;
+    if (diff < 60) return `${Math.floor(diff)}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return `${Math.floor(diff / 3600)}h ago`;
+  };
 
   return (
     <div className="flex flex-col h-screen bg-transparent">
       <Navbar />
-      <main className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto w-full space-y-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 max-w-7xl mx-auto w-full">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
           <div>
-            <h1 className="text-lg font-semibold text-zinc-100">JARVIS Agent Control</h1>
-            {status && (
-              <p className="text-xs text-zinc-500 font-mono mt-1">
-                {status.completed || 0} completed &middot; {status.dispatched || 0} in flight &middot; {status.pending || 0} pending
-              </p>
-            )}
+            <h1 className="text-lg font-semibold text-zinc-100">Agent Pool</h1>
+            <p className="text-xs text-zinc-500 font-mono mt-0.5">
+              {stats ? `${stats.running} running — ${stats.total_agents} total — ${stats.completed_tasks} tasks` : "Loading..."}
+            </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {quickCmds.map(c => (
-              <button
-                key={c}
-                onClick={() => doIssue(c)}
-                disabled={issuing === c}
-                className="text-xs font-mono uppercase px-3 py-1.5 rounded-lg border border-white/[0.06] text-zinc-400 hover:text-zinc-200 hover:border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.06] transition-colors duration-150 disabled:opacity-40"
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-white/[0.04] border border-white/[0.06] rounded-lg overflow-hidden">
+              <input
+                type="text"
+                placeholder="Agent name"
+                value={spawnName}
+                onChange={(e) => setSpawnName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && spawnAgent()}
+                className="bg-transparent text-xs font-mono text-zinc-300 px-3 py-2 w-36 outline-none placeholder:text-zinc-600"
+              />
+              <select
+                value={spawnType}
+                onChange={(e) => setSpawnType(e.target.value)}
+                className="bg-transparent text-xs font-mono text-zinc-400 border-l border-white/[0.06] px-2 py-2 outline-none"
               >
-                {issuing === c ? "..." : c}
-              </button>
-            ))}
+                {AGENT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value} className="bg-[#111113]">
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={spawnAgent}
+              disabled={spawning || !spawnName.trim()}
+              className="text-xs font-mono uppercase px-3 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/20 transition-colors disabled:opacity-40"
+            >
+              {spawning ? "..." : "Spawn"}
+            </button>
           </div>
         </div>
 
-        <div className="flex border-b border-white/[0.06] overflow-x-auto">
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-150 whitespace-nowrap ${
-                tab === t.id
-                  ? "text-zinc-100 border-violet-500"
-                  : "text-zinc-500 hover:text-zinc-300 border-transparent"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {tab === "commands" && (
-          <div>
-            {commands.length === 0 ? (
-              <div className="text-center py-20 text-zinc-600">
-                <svg className="w-10 h-10 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <p className="text-sm">No commands yet</p>
-                <p className="text-xs text-zinc-600 mt-2">Click a quick command button above to issue one</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Agent Grid */}
+          <div className="lg:col-span-1 space-y-3">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-wider">Agents</h2>
+              <span className="text-[10px] font-mono text-zinc-600">{agents.length}</span>
+            </div>
+            {agents.length === 0 ? (
+              <div className="text-center py-12 text-zinc-600 border border-dashed border-white/[0.06] rounded-xl">
+                <p className="text-xs">No agents running</p>
+                <p className="text-[10px] text-zinc-600 mt-1">Spawn one above</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {commands.slice().reverse().map((cmd) => (
-                  <div key={cmd.id} className="bg-[#111113] border border-white/[0.06] rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2.5">
-                        <span className={`w-2 h-2 rounded-full ${statusColor(cmd.status)}`} />
-                        <span className="text-sm font-mono text-zinc-300">{cmd.command}</span>
-                        {cmd.target && cmd.target !== "all" && (
-                          <span className="text-xs font-mono text-zinc-500 bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.06]">
-                            @{cmd.target}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-mono text-zinc-600 tracking-wider uppercase">{cmd.status}</span>
-                        {cmd.issued && (
-                          <span className="text-[10px] font-mono text-zinc-600">{new Date(cmd.issued).toLocaleTimeString()}</span>
-                        )}
-                      </div>
-                    </div>
-                    {cmd.result && (
-                      <div className="mt-2 border-t border-white/[0.04] pt-2">
-                        <pre className="text-xs font-mono text-zinc-500 leading-relaxed whitespace-pre-wrap max-h-24 overflow-y-auto">
-                          {typeof cmd.result === "string" ? cmd.result : JSON.stringify(cmd.result, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                    {cmd.command === "scan" && cmd.result?.wifi && (
-                      <div className="mt-2 flex gap-3 text-xs font-mono text-zinc-500">
-                        <span>WiFi: {cmd.result.wifi}</span>
-                        <span>LAN: {cmd.result.lan_devices} devices</span>
-                        <span>Processes: {cmd.result.processes}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab === "scan" && (
-          <div>
-            <button
-              onClick={doScan}
-              disabled={loading.scan}
-              className="mb-4 text-xs font-mono uppercase px-4 py-2 rounded-lg border border-white/[0.06] text-zinc-400 hover:text-zinc-200 hover:border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.06] transition-colors duration-150 disabled:opacity-40"
-            >
-              {loading.scan ? "Scanning..." : "Quick Scan"}
-            </button>
-            {scanData ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {scanData.wifi && (
-                  <div className="bg-[#111113] border border-white/[0.06] rounded-xl p-4">
-                    <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-2">WiFi</h3>
-                    <p className="text-sm font-mono text-zinc-300">{scanData.wifi.ssid || scanData.wifi.current_ssid || "N/A"}</p>
-                    <p className="text-xs font-mono text-zinc-500 mt-1">{scanData.wifi.interface || ""}</p>
-                  </div>
-                )}
-                {scanData.lan && (
-                  <div className="bg-[#111113] border border-white/[0.06] rounded-xl p-4">
-                    <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-2">
-                      LAN Devices ({scanData.lan.count || (scanData.lan.devices || []).length})
-                    </h3>
-                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {(scanData.lan.devices || []).slice(0, 20).map((d: any, i: number) => (
-                        <div key={i} className="flex items-center gap-2 text-xs font-mono">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400/40" />
-                          <span className="text-zinc-400 w-16 truncate">{d.ip}</span>
-                          <span className="text-zinc-500 flex-1 truncate">{d.hostname || d.mac || "unknown"}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {scanData.processes && (
-                  <div className="bg-[#111113] border border-white/[0.06] rounded-xl p-4">
-                    <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-2">Top Processes</h3>
-                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {(scanData.processes || []).slice(0, 10).map((p: any, i: number) => (
-                        <div key={i} className="flex items-center justify-between text-xs font-mono">
-                          <span className="text-zinc-400 truncate flex-1">{p.name}</span>
-                          <span className="text-zinc-500 w-12 text-right">{p.cpu?.toFixed(1) || "?"}%</span>
-                          <span className="text-zinc-600 w-12 text-right">{p.mem_mb?.toFixed(0) || "?"}MB</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {scanData.users && (
-                  <div className="bg-[#111113] border border-white/[0.06] rounded-xl p-4">
-                    <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-2">Users</h3>
-                    <div className="space-y-1">
-                      {(scanData.users || []).map((u: any, i: number) => (
-                        <div key={i} className="flex items-center gap-2 text-xs font-mono">
-                          <span className="text-zinc-400">{u.name || u.username}</span>
-                          <span className="text-zinc-600">{u.uid}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-20 text-zinc-600">
-                <svg className="w-10 h-10 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <p className="text-sm">Run a scan to see results</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab === "propagation" && (
-          <div>
-            <button
-              onClick={doProp}
-              disabled={loading.prop}
-              className="mb-4 text-xs font-mono uppercase px-4 py-2 rounded-lg border border-white/[0.06] text-zinc-400 hover:text-zinc-200 hover:border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.06] transition-colors duration-150 disabled:opacity-40"
-            >
-              {loading.prop ? "Loading..." : "Refresh"}
-            </button>
-            {propData ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="bg-[#111113] border border-white/[0.06] rounded-xl p-4">
-                  <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-2">Status</h3>
-                  <pre className="text-xs font-mono text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
-                    {JSON.stringify(propData, null, 2)}
-                  </pre>
-                </div>
-                <div className="bg-[#111113] border border-white/[0.06] rounded-xl p-4">
-                  <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-2">Logs ({propLogs.length})</h3>
-                  <div className="space-y-1 max-h-60 overflow-y-auto">
-                    {(propLogs || []).slice().reverse().map((l: any, i: number) => (
-                      <div key={i} className="text-[10px] font-mono text-zinc-500 leading-tight flex gap-2">
-                        <span className="text-zinc-600 shrink-0">
-                          {l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : ""}
-                        </span>
-                        <span className={l.level === "error" ? "text-red-400/60" : "text-zinc-500"}>
-                          {l.message || JSON.stringify(l)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-20 text-zinc-600">
-                <svg className="w-10 h-10 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.858 15.355-5.858 21.213 0" />
-                </svg>
-                <p className="text-sm">No propagation data yet</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab === "smarthome" && (
-          <div>
-            <button
-              onClick={doSH}
-              disabled={loading.sh}
-              className="mb-4 text-xs font-mono uppercase px-4 py-2 rounded-lg border border-white/[0.06] text-zinc-400 hover:text-zinc-200 hover:border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.06] transition-colors duration-150 disabled:opacity-40"
-            >
-              {loading.sh ? "Loading..." : "Refresh"}
-            </button>
-            {shDevices.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {shDevices.map((d: any, i: number) => (
+                {agents.map((agent) => (
                   <div
-                    key={i}
-                    className="bg-[#111113] border border-white/[0.06] rounded-xl p-4 animate-fade-in"
-                    style={{ animationDelay: `${i * 40}ms` }}
+                    key={agent.id}
+                    onClick={() => setSelectedAgent(agent)}
+                    className={`bg-[#111113] border rounded-xl p-3 cursor-pointer transition-all duration-150 ${
+                      selectedAgent?.id === agent.id
+                        ? "border-violet-500/30 bg-violet-500/[0.04]"
+                        : "border-white/[0.06] hover:border-white/[0.12]"
+                    }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-xs font-mono text-zinc-300 truncate">{d.name || d.ip || "Device"}</h3>
-                      <span className={`w-2 h-2 rounded-full ${d.status === "on" || d.status === "online" ? "bg-emerald-400" : "bg-zinc-600"}`} />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${STATUS_COLORS[agent.status] || "bg-zinc-600"}`} />
+                        <span className="text-sm font-medium text-zinc-200 truncate">{agent.name}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-600 uppercase">{agent.type}</span>
                     </div>
-                    <p className="text-[10px] font-mono text-zinc-500 truncate">{d.ip}</p>
-                    <p className="text-[10px] font-mono text-zinc-600">{d.type || d.protocol || "unknown"}</p>
-                    {d.ports && (
-                      <p className="text-[10px] font-mono text-zinc-600 mt-1">ports: {(d.ports || []).join(", ")}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-zinc-500">{agent.task_count} tasks — {timeAgo(agent.created_at)}</span>
+                      <div className="flex items-center gap-1">
+                        {agent.status === "running" && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); pauseAgent(agent.id); }}
+                            className="text-[10px] font-mono text-amber-400/60 hover:text-amber-400 px-1"
+                          >
+                            pause
+                          </button>
+                        )}
+                        {agent.status === "paused" && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); resumeAgent(agent.id); }}
+                            className="text-[10px] font-mono text-emerald-400/60 hover:text-emerald-400 px-1"
+                          >
+                            resume
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); killAgent(agent.id); }}
+                          className="text-[10px] font-mono text-red-400/60 hover:text-red-400 px-1"
+                        >
+                          kill
+                        </button>
+                      </div>
+                    </div>
+                    {agent.tags && agent.tags.length > 0 && (
+                      <div className="flex gap-1 mt-2 flex-wrap">
+                        {agent.tags.map((tag, i) => (
+                          <span key={i} className="text-[9px] font-mono text-zinc-500 bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/[0.06]">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* Agent Detail + Tasks */}
+          <div className="lg:col-span-2 space-y-4">
+            {selectedAgent ? (
+              <>
+                <div className="bg-[#111113] border border-white/[0.06] rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className={`w-2.5 h-2.5 rounded-full ${STATUS_COLORS[selectedAgent.status] || "bg-zinc-600"}`} />
+                      <h2 className="text-sm font-semibold text-zinc-200">{selectedAgent.name}</h2>
+                      <span className="text-[10px] font-mono text-zinc-500 bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.06]">
+                        {selectedAgent.type}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-zinc-600">{selectedAgent.id.slice(0, 8)}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] font-mono text-zinc-500">
+                    <span>Status: <span className="text-zinc-300">{selectedAgent.status}</span></span>
+                    <span>Tasks: <span className="text-zinc-300">{selectedAgent.task_count}</span></span>
+                    <span>Created: <span className="text-zinc-300">{timeAgo(selectedAgent.created_at)}</span></span>
+                  </div>
+                </div>
+
+                <div className="bg-[#111113] border border-white/[0.06] rounded-xl p-4">
+                  <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3">Submit Task</h3>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Enter command..."
+                      value={taskCommand}
+                      onChange={(e) => setTaskCommand(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && submitTask()}
+                      className="flex-1 bg-white/[0.04] border border-white/[0.06] rounded-lg px-3 py-2 text-xs font-mono text-zinc-300 outline-none focus:border-violet-500/30 placeholder:text-zinc-600 transition-colors"
+                    />
+                    <button
+                      onClick={submitTask}
+                      disabled={submitting || !taskCommand.trim()}
+                      className="text-xs font-mono uppercase px-4 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/20 transition-colors disabled:opacity-40"
+                    >
+                      {submitting ? "..." : "Run"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-[#111113] border border-white/[0.06] rounded-xl p-4">
+                  <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3">
+                    Task History
+                    <span className="text-zinc-600 ml-2">({agentTasks.length})</span>
+                  </h3>
+                  {agentTasks.length === 0 ? (
+                    <p className="text-xs text-zinc-600 text-center py-8">No tasks yet</p>
+                  ) : (
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {agentTasks.slice().reverse().map((task) => (
+                        <div key={task.id} className="border-t border-white/[0.04] pt-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-mono text-zinc-300">{task.command}</span>
+                            <div className="flex items-center gap-2">
+                              {task.latency_ms && (
+                                <span className="text-[10px] font-mono text-zinc-600">{task.latency_ms}ms</span>
+                              )}
+                              <span className={`w-1.5 h-1.5 rounded-full ${STATUS_COLORS[task.status] || "bg-zinc-600"}`} />
+                            </div>
+                          </div>
+                          {task.result && (
+                            <pre className="text-[10px] font-mono text-zinc-500 mt-1 whitespace-pre-wrap max-h-20 overflow-y-auto">
+                              {typeof task.result === "string" ? task.result : JSON.stringify(task.result, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
             ) : (
-              <div className="text-center py-20 text-zinc-600">
+              <div className="text-center py-20 text-zinc-600 border border-dashed border-white/[0.06] rounded-xl">
                 <svg className="w-10 h-10 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
-                <p className="text-sm">No smart home devices discovered</p>
+                <p className="text-sm">Select an agent to view details</p>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* NL Command Section */}
+        <div className="mt-6 bg-[#111113] border border-white/[0.06] rounded-xl p-4">
+          <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3">Natural Language Command</h3>
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              placeholder='e.g. "turn on the living room lights" or "check the temperature"'
+              value={nlInput}
+              onChange={(e) => setNlInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && parseNL()}
+              className="flex-1 bg-white/[0.04] border border-white/[0.06] rounded-lg px-3 py-2 text-xs font-mono text-zinc-300 outline-none focus:border-violet-500/30 placeholder:text-zinc-600 transition-colors"
+            />
+            <button
+              onClick={parseNL}
+              disabled={parsing || !nlInput.trim()}
+              className="text-xs font-mono uppercase px-4 py-2 rounded-lg border border-white/[0.06] text-zinc-400 hover:text-zinc-200 hover:border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.06] transition-colors disabled:opacity-40"
+            >
+              {parsing ? "..." : "Parse"}
+            </button>
+            <button
+              onClick={executeNL}
+              disabled={parsing || !nlInput.trim()}
+              className="text-xs font-mono uppercase px-4 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/20 transition-colors disabled:opacity-40"
+            >
+              {parsing ? "..." : "Execute"}
+            </button>
+          </div>
+          {nlResult && (
+            <div className="bg-white/[0.02] border border-white/[0.04] rounded-lg p-3">
+              {nlResult.parsed && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                  <div>
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase">Intent</span>
+                    <p className="text-xs font-mono text-zinc-300 mt-0.5">{nlResult.parsed.intent}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase">Device</span>
+                    <p className="text-xs font-mono text-zinc-300 mt-0.5">{nlResult.parsed.device_type || nlResult.parsed.device_name || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase">Action</span>
+                    <p className="text-xs font-mono text-zinc-300 mt-0.5">{nlResult.parsed.action || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase">Confidence</span>
+                    <p className="text-xs font-mono text-zinc-300 mt-0.5">{(nlResult.parsed.confidence * 100).toFixed(0)}%</p>
+                  </div>
+                </div>
+              )}
+              <pre className="text-[10px] font-mono text-zinc-500 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                {JSON.stringify(nlResult, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+
+        {/* Events */}
+        {events.length > 0 && (
+          <div className="mt-6 bg-[#111113] border border-white/[0.06] rounded-xl p-4">
+            <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3">
+              Recent Events
+              <span className="text-zinc-600 ml-2">({events.length})</span>
+            </h3>
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {events.slice().reverse().map((ev, i) => (
+                <div key={i} className="flex items-start gap-2 text-[10px] font-mono">
+                  <span className="text-zinc-600 shrink-0">{timeAgo(ev.timestamp)}</span>
+                  <span className={`shrink-0 px-1 rounded ${
+                    ev.type === "spawned" ? "text-emerald-400/60 bg-emerald-400/5" :
+                    ev.type === "killed" ? "text-red-400/60 bg-red-400/5" :
+                    ev.type === "error" ? "text-red-400/60 bg-red-400/5" :
+                    "text-zinc-500 bg-white/[0.04]"
+                  }`}>
+                    {ev.type}
+                  </span>
+                  <span className="text-zinc-500">{ev.agent_name}</span>
+                  <span className="text-zinc-600 truncate">{ev.detail}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </main>
