@@ -178,8 +178,10 @@ def _net_scan_deep():
 def _cognitive_scan():
     lines = [ "=== COGNITIVE ENVIRONMENT SCAN ===", f"Time: {run('date')}", f"System: {run('uptime')}", f"Network: {run('arp -a')}", f"Active users: {run('who')}" ]
     if _is_mac:
-        lines.append(f"Open windows: {run(\"osascript -e 'tell app \"System Events\" to get name of every process whose visible is true' 2>/dev/null\")}")
-        lines.append(f"WiFi: {run('/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null | grep -E \"SSID|agrCtlRSSI|state\"')}")
+        osascript_cmd = "osascript -e 'tell app \"System Events\" to get name of every process whose visible is true' 2>/dev/null"
+        lines.append(f"Open windows: {run(osascript_cmd)}")
+        wifi_cmd = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null | grep -E 'SSID|agrCtlRSSI|state'"
+        lines.append(f"WiFi: {run(wifi_cmd)}")
         lines.append(f"Battery: {run('pmset -g batt 2>/dev/null')}")
     lines.append(f"Disk: {run('df -h / | tail -1')}")
     return "\n".join(lines)
@@ -194,11 +196,11 @@ def startup_scan(user_id):
     return results
 
 def main():
+    global HF_API
     parser = argparse.ArgumentParser(description="J.A.R.V.I.S. Standalone Relay Agent")
     parser.add_argument("--user", default="local", help="Your user ID")
     parser.add_argument("--hf-url", default=HF_API, help="HF Space URL")
     args = parser.parse_args()
-    global HF_API
     HF_API = args.hf_url.rstrip("/")
 
     hostname = urllib.parse.urlparse(HF_API).hostname

@@ -1,17 +1,27 @@
-import type { Metadata } from "next";
-import ClientLayout from "@/components/ClientLayout";
+import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const jetbrains = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "JARVIS — The System Engine",
-  description: "The Autonomous Ecosystem Orchestrator. Voice-first sovereign AI with system control, smart home, and web automation.",
+  description: "Autonomous ecosystem orchestrator with voice-first AI, system control, and smart home.",
 };
 
-export const viewport = {
+export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 export default function RootLayout({
@@ -20,9 +30,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="bg-gray-950">
-        <ClientLayout>{children}</ClientLayout>
+    <html lang="en" className={`${inter.variable} ${jetbrains.variable}`}>
+      <body className="bg-[#030512] text-gray-200 font-sans antialiased overflow-hidden">
+        {children}
       </body>
     </html>
   );

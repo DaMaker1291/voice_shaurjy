@@ -1117,3 +1117,14 @@ html {
   0%, 100% { opacity: 0.5; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.1); }
 }
+
+/* ── Mobile dropdown nav ── */
+.dropdown { position: relative; }
+.dropdown:hover .dropdown-menu,
+.dropdown:focus-within .dropdown-menu { display: block; }
+
+/* ── Writing mode for collapsed chat ── */
+.writing-mode-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}

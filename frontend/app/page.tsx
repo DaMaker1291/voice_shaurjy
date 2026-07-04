@@ -1,16 +1,15 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import dynamic from "next/dynamic";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import BotSwarm from "@/components/BotSwarm";
 import Sidebar from "@/components/Sidebar";
 import AgentStatusBar from "@/components/AgentStatusBar";
 import AgentRouter from "@/components/AgentRouter";
 import CockpitTelemetry from "@/components/CockpitTelemetry";
-import Link from "next/link";
 import { entityProcess } from "@/lib/api";
 
-/* ─────────────────────────── Types ──────────────────────────── */
 interface Message { role: string; content: string; image?: string; link?: string }
 interface Strategy { name: string; description: string; pros: string[]; cons: string[]; complexity: number; key_steps: string[] }
 interface EntityState { memory_summary: string; active_goals: { goal: string; priority: number; progress: number }[]; preferences: Record<string, { value: string }>; interaction_count: number }
@@ -20,7 +19,6 @@ interface ActivityEntry { ts: number; msg: string; type: "info" | "action" | "er
 interface RouterPayload { routing?: { target_agent?: string; routing_confidence?: number; extracted_intent?: string; execution_context?: Record<string, unknown> }; agent_response?: Record<string, unknown>; latency_ms?: { supervisor?: number; worker?: number; total?: number }; target_agent?: string }
 interface DeviceNode { id: string; name: string; status: "ACTIVE" | "STANDBY" | "CHARGING" | "OFFLINE" | "UNKNOWN" | "OPTIMAL" | "WARNING" | "CRITICAL"; domain?: string; metrics?: string; controls?: string[] }
 
-/* ─────────────────────────── Config ─────────────────────────── */
 const BASE = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
   ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
   : "https://dgfhgjhj-jarvis-ai-brain.hf.space";
@@ -33,13 +31,16 @@ const SUGGESTIONS = [
 
 const NAV_ITEMS = [
   { href: "/", label: "Command", icon: "⚡" },
-  { href: "/acc", label: "ACC", icon: "🎮" },
   { href: "/dashboard", label: "Brain", icon: "🧠" },
-  { href: "/smarthome", label: "HAL", icon: "🏠" },
+  { href: "/life", label: "Life OS", icon: "🫀" },
+  { href: "/trading", label: "Trading", icon: "📈" },
+  { href: "/secretary", label: "Secretary", icon: "📋" },
+  { href: "/agent", label: "Agent", icon: "🤖" },
+  { href: "/reminders", label: "Reminders", icon: "⏰" },
+  { href: "/marketplace", label: "Plugins", icon: "🧩" },
   { href: "/settings", label: "Config", icon: "⚙" },
 ];
 
-/* ─────────────────────────── Particle BG ────────────────────── */
 function ParticleBg() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -61,7 +62,6 @@ function ParticleBg() {
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(52,211,153,0.15)"; ctx.fill();
       });
-      // Draw connections
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const dx = particles[i].x - particles[j].x;
@@ -83,9 +83,8 @@ function ParticleBg() {
   return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />;
 }
 
-/* ─────────────────────────── Main ───────────────────────────── */
 export default function Home() {
-  // Chat state
+  const pathname = usePathname();
   const [messages, setMessages] = useState<Message[]>([]);
   const [textInput, setTextInput] = useState("");
   const [listening, setListening] = useState(false);
@@ -101,14 +100,10 @@ export default function Home() {
   const [taskStep, setTaskStep] = useState(0);
   const [taskTotal, setTaskTotal] = useState(0);
   const [collectedInfo, setCollectedInfo] = useState<Record<string, string>>({});
-
-  // Multi-agent state
   const [isDispatching, setIsDispatching] = useState(false);
   const [routerPayload, setRouterPayload] = useState<RouterPayload | null>(null);
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
-
-  // System state
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [devices, setDevices] = useState<DeviceNode[]>([]);
   const [relayOnline, setRelayOnline] = useState(false);
@@ -119,19 +114,16 @@ export default function Home() {
   const [profileSummary, setProfileSummary] = useState("");
   const [profileInterests, setProfileInterests] = useState<string[]>([]);
   const [voice, setVoice] = useState("en-GB-RyanNeural");
-
-  // Layout
   const [cockpitTab, setCockpitTab] = useState<"router" | "telemetry">("router");
   const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [mobileCockpit, setMobileCockpit] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
-  const taskInputRef = useRef<HTMLInputElement>(null);
   const retryCountRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  /* ── Helpers ───────────────────────────────────────────────── */
   const addLog = useCallback((msg: string, type: ActivityEntry["type"] = "info") => {
     setActivityLog(prev => [...prev.slice(-30), { ts: Date.now(), msg, type }]);
   }, []);
@@ -143,7 +135,6 @@ export default function Home() {
   useEffect(() => { synthRef.current = window.speechSynthesis; }, []);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  /* ── System stats polling ──────────────────────────────────── */
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -168,7 +159,6 @@ export default function Home() {
     return () => clearInterval(i);
   }, []);
 
-  /* ── Entity mood polling ───────────────────────────────────── */
   useEffect(() => {
     const i = setInterval(async () => {
       try {
@@ -182,7 +172,6 @@ export default function Home() {
     return () => clearInterval(i);
   }, []);
 
-  /* ── Initial boot ──────────────────────────────────────────── */
   useEffect(() => {
     (async () => {
       addLog("JARVIS cognitive architecture initialising...", "info");
@@ -198,7 +187,6 @@ export default function Home() {
     })();
   }, [addLog]);
 
-  /* ── TTS ───────────────────────────────────────────────────── */
   const speak = useCallback(async (text: string) => {
     setSpeaking(true); addBotEvent("action", "speaking response");
     try {
@@ -225,34 +213,24 @@ export default function Home() {
     }
   }, [addBotEvent, voice]);
 
-  /* ── Multi-agent router dispatch ───────────────────────────── */
   const dispatchToRouter = useCallback(async (text: string) => {
     setIsDispatching(true);
     setRouterPayload(null);
     setActiveAgent(null);
     addLog(`Dispatching: "${text.slice(0, 60)}..."`, "action");
     addBotEvent("action", "routing intent");
-
     try {
       const res = await fetch(`${BASE}/api/router/dispatch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_text: text, user_id: "local", relay_context: {} }),
       });
-
       if (!res.ok) throw new Error(`Router error: ${res.status}`);
       const data: RouterPayload = await res.json();
-
       setRouterPayload(data);
       setActiveAgent(data.target_agent ?? null);
-      addLog(
-        `→ ${data.target_agent} | confidence ${Math.round((data.routing?.routing_confidence ?? 0) * 100)}% | ${data.latency_ms?.total}ms`,
-        "success"
-      );
-
-      // Switch to router tab to show the result
+      addLog(`→ ${data.target_agent} | confidence ${Math.round((data.routing?.routing_confidence ?? 0) * 100)}% | ${data.latency_ms?.total}ms`, "success");
       setCockpitTab("router");
-
       return data;
     } catch (err: any) {
       addLog(`Router error: ${err.message}`, "error");
@@ -262,17 +240,12 @@ export default function Home() {
     }
   }, [addBotEvent, addLog]);
 
-  /* ── Primary send handler ──────────────────────────────────── */
   const sendText = useCallback(async () => {
     const text = textInput.trim(); if (!text) return;
     setTextInput(""); setShowSuggestions(false);
     setMessages(p => [...p, { role: "user", content: text }]);
     setThinking(true); addBotEvent("action", "processing");
-
-    // Fire router dispatch in parallel (non-blocking telemetry)
     dispatchToRouter(text);
-
-    // Handle task session continuation
     if (taskSession && taskQuestion) {
       try {
         const res = await fetch(`${BASE}/api/task/respond`, {
@@ -296,21 +269,16 @@ export default function Home() {
       }
       setThinking(false); return;
     }
-
-    // Standard entity processing
     try {
       const data = await entityProcess(text, "local");
       const reply = data?.text || data?.message || "Acknowledged.";
       setMessages(p => [...p, { role: "assistant", content: reply }]);
       addLog("Response received", "success");
-
       if (data?.type === "ask" && data?.session_id) {
         setTaskSession(data.session_id); setTaskQuestion(data.question);
         setTaskStep(data.step || 0); setTaskTotal(data.total || 0);
       }
       if (data?.action_feedback) addBotEvent("action", data.action_feedback);
-
-      // TTS for short replies
       if (reply.length < 300) speak(reply).catch(() => {});
     } catch (err: any) {
       const errMsg = `Connection error: ${err.message}`;
@@ -321,7 +289,6 @@ export default function Home() {
     setThinking(false);
   }, [textInput, taskSession, taskQuestion, dispatchToRouter, speak, addBotEvent, addLog]);
 
-  /* ── Voice ─────────────────────────────────────────────────── */
   const handleOrbClick = useCallback(() => {
     if (listening) {
       recognitionRef.current?.stop(); setListening(false); return;
@@ -348,189 +315,127 @@ export default function Home() {
     addBotEvent("action", "listening");
   }, [listening, addBotEvent]);
 
-  /* ── Status ─────────────────────────────────────────────────── */
   const agentState = thinking ? "thinking" : listening ? "listening" : speaking ? "speaking" : "idle";
 
-  /* ─────────────────────────── Render ─────────────────────────── */
   return (
-    <div className="fixed inset-0 overflow-hidden" style={{ background: "#030512" }}>
+    <div className="fixed inset-0 overflow-hidden bg-[#030512]">
       <ParticleBg />
-
-      {/* Background grid */}
       <div className="cockpit-grid fixed inset-0 pointer-events-none z-0" />
 
-      {/* Main Layout */}
       <div className="relative z-10 flex flex-col h-full">
+        {/* Top nav */}
+        <nav className="glass-strong flex items-center justify-between px-3 sm:px-6 py-3 border-b border-[#34d399]/10 flex-shrink-0 z-20">
+          <Link href="/" className="flex items-center gap-2.5 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500/20 to-purple-500/20 border border-emerald-500/20 flex items-center justify-center shadow-[0_0_12px_rgba(52,211,153,0.15)]">
+              <span className="text-sm">🌌</span>
+            </div>
+            <div className="hidden sm:block">
+              <span className="text-xs font-mono font-bold text-[#34d399] tracking-[0.1em]">J.A.R.V.I.S</span>
+              <span className="block text-[8px] font-mono text-white/20 tracking-[0.12em]">COGNITIVE ARCHITECTURE v3.0</span>
+            </div>
+          </Link>
 
-        {/* ── Top nav bar ────────────────────────────────────────── */}
-        <div
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "12px 24px", borderBottom: "1px solid rgba(52,211,153,0.15)",
-            background: "rgba(10,12,25,0.65)", backdropFilter: "blur(24px)",
-            WebkitBackdropFilter: "blur(24px)",
-            boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
-            flexShrink: 0, zIndex: 20,
-          }}
-        >
-          {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div
-              onClick={() => setSidebarOpen(true)}
-              style={{
-                width: "28px", height: "28px", borderRadius: "8px",
-                background: "linear-gradient(135deg, rgba(52,211,153,0.2), rgba(167,139,250,0.2))",
-                border: "1px solid rgba(52,211,153,0.2)", display: "flex",
-                alignItems: "center", justifyContent: "center", cursor: "pointer",
-                boxShadow: "0 0 12px rgba(52,211,153,0.15)",
-              }}
-            >
-              <span style={{ fontSize: "14px" }}>🌌</span>
-            </div>
-            <div>
-              <span style={{ fontSize: "13px", fontFamily: "monospace", fontWeight: 700, color: "#34d399", letterSpacing: "0.1em" }}>
-                J.A.R.V.I.S
-              </span>
-              <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.2)", display: "block", letterSpacing: "0.12em" }}>
-                COGNITIVE ARCHITECTURE v3.0
-              </span>
-            </div>
+          <div className="hidden lg:flex items-center gap-1">
+            {NAV_ITEMS.map((n) => {
+              const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
+              return (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-mono tracking-wide transition-all nav-link ${
+                    active
+                      ? "text-[#34d399] bg-[#34d399]/[0.08] border border-[#34d399]/15"
+                      : "text-white/30 hover:text-white/50 border border-transparent"
+                  }`}
+                >
+                  <span>{n.icon}</span><span>{n.label}</span>
+                </Link>
+              );
+            })}
           </div>
 
-          {/* Nav */}
-          <nav style={{ display: "flex", gap: "4px" }}>
-            {NAV_ITEMS.map(n => (
-              <Link key={n.href} href={n.href}
-                style={{
-                  display: "flex", alignItems: "center", gap: "4px",
-                  padding: "4px 10px", borderRadius: "6px", fontSize: "10px",
-                  fontFamily: "monospace", color: n.href === "/" ? "#34d399" : "rgba(255,255,255,0.3)",
-                  background: n.href === "/" ? "rgba(52,211,153,0.08)" : "transparent",
-                  border: n.href === "/" ? "1px solid rgba(52,211,153,0.15)" : "1px solid transparent",
-                  textDecoration: "none", letterSpacing: "0.05em",
-                  transition: "all 0.2s",
-                }}
-              >
-                <span>{n.icon}</span>{n.label}
-              </Link>
-            ))}
-          </nav>
-
-          {/* Entity mood chip */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div className="flex items-center gap-3">
             {entityThought && (
-              <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.2)", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {entityThought.slice(0, 60)}
-              </span>
+              <span className="hidden md:block text-[9px] font-mono text-white/20 max-w-[140px] truncate">{entityThought.slice(0, 50)}</span>
             )}
-            <div style={{
-              display: "flex", alignItems: "center", gap: "5px",
-              padding: "3px 8px", borderRadius: "20px",
-              border: "1px solid rgba(255,255,255,0.08)",
-              background: "rgba(255,255,255,0.02)",
-            }}>
-              <span style={{ fontSize: "10px" }}>{entityMoodEmoji}</span>
-              <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)", letterSpacing: "0.06em" }}>{entityMood}</span>
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-white/[0.06] bg-white/[0.02]">
+              <span className="text-[10px]">{entityMoodEmoji}</span>
+              <span className="text-[9px] font-mono text-white/30 tracking-wide">{entityMood}</span>
             </div>
-          </div>
-        </div>
 
-        {/* ── Agent Pipeline Status Bar ───────────────────────────── */}
+            <div className="lg:hidden dropdown relative">
+              <button className="text-white/40 hover:text-white/60 p-1.5 rounded-md border border-white/[0.06] transition-colors">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+              </button>
+              <div className="dropdown-menu hidden absolute right-0 top-full mt-1 w-48 glass-strong rounded-xl border border-purple-900/20 py-1 z-50 shadow-xl shadow-black/30">
+                {NAV_ITEMS.map((n) => {
+                  const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
+                  return (
+                    <Link key={n.href} href={n.href} className={`flex items-center gap-2 px-3 py-2 text-xs font-mono transition-colors ${active ? "text-[#34d399] bg-[#34d399]/[0.06]" : "text-white/40 hover:text-white/60 hover:bg-white/[0.03]"}`}>
+                      <span>{n.icon}</span><span>{n.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            <Link href="/settings" className="text-white/30 hover:text-white/50 p-1.5 rounded-md border border-white/[0.06] hover:border-[#a78bfa]/20 transition-all hidden sm:flex items-center justify-center">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </Link>
+          </div>
+        </nav>
+
         <AgentStatusBar routingData={routerPayload} isDispatching={isDispatching} />
 
-        {/* ── Main content area ───────────────────────────────────── */}
-        <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+        {/* Mobile toggle */}
+        <div className="lg:hidden flex border-b border-gray-800/30">
+          <button onClick={() => setMobileCockpit(false)} className={`flex-1 py-2 text-[10px] font-mono tracking-wider transition-all ${!mobileCockpit ? "text-[#34d399] border-b-2 border-[#34d399]" : "text-gray-600"}`}>
+            💬 Chat
+          </button>
+          <button onClick={() => setMobileCockpit(true)} className={`flex-1 py-2 text-[10px] font-mono tracking-wider transition-all ${mobileCockpit ? "text-[#34d399] border-b-2 border-[#34d399]" : "text-gray-600"}`}>
+            📡 Cockpit
+          </button>
+        </div>
 
-          {/* ── LEFT: Chat Panel ──────────────────────────────────── */}
-          <div
-            style={{
-              width: chatCollapsed ? "48px" : "42%",
-              minWidth: chatCollapsed ? "48px" : "320px",
-              maxWidth: chatCollapsed ? "48px" : "560px",
-              flexShrink: 0,
-              display: "flex",
-              flexDirection: "column",
-              borderRight: "1px solid rgba(52,211,153,0.1)",
-              background: "rgba(5,8,20,0.55)",
-              backdropFilter: "blur(24px)",
-              WebkitBackdropFilter: "blur(24px)",
-              boxShadow: "12px 0 32px rgba(0,0,0,0.4)",
-              transition: "width 0.4s cubic-bezier(0.16,1,0.3,1), min-width 0.4s cubic-bezier(0.16,1,0.3,1)",
-              position: "relative",
-              overflow: "hidden",
-              zIndex: 15,
-            }}
-          >
-            {/* Collapse toggle */}
+        {/* Main content */}
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          {/* Chat panel */}
+          <div className={`${mobileCockpit ? "hidden lg:flex" : "flex"} flex-col w-full lg:w-[42%] lg:min-w-[320px] lg:max-w-[560px] lg:border-r border-gray-800/20 bg-[#050814]/55 backdrop-blur-2xl relative overflow-hidden z-15 shrink-0 transition-all duration-400`}>
             <button
               onClick={() => setChatCollapsed(!chatCollapsed)}
-              style={{
-                position: "absolute", top: "50%", right: "-12px",
-                transform: "translateY(-50%)", zIndex: 30,
-                width: "20px", height: "40px", borderRadius: "0 8px 8px 0",
-                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)",
-                borderLeft: "none", color: "rgba(255,255,255,0.3)",
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "10px", transition: "all 0.2s",
-              }}
+              className="hidden lg:flex absolute top-1/2 -right-3 -translate-y-1/2 z-30 w-5 h-10 rounded-r-lg bg-white/5 border border-l-0 border-white/[0.06] text-white/30 cursor-pointer items-center justify-center text-[10px] hover:bg-white/10 transition-all"
             >
               {chatCollapsed ? "›" : "‹"}
             </button>
 
-            {!chatCollapsed && (
+            {!chatCollapsed ? (
               <>
-                {/* Chat header */}
-                <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.04)", flexShrink: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: "10px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>
-                      COMMAND INTERFACE
-                    </span>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      {/* Agent orb */}
-                      <BotSwarm
-                        listening={agentState === "listening"}
-                        thinking={agentState === "thinking"}
-                        speaking={agentState === "speaking"}
-                        botEvents={botEvents}
-                      />
-                    </div>
+                <div className="px-3 py-2.5 border-b border-white/[0.04] flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-white/30 tracking-[0.1em]">COMMAND INTERFACE</span>
+                    <BotSwarm listening={agentState === "listening"} thinking={agentState === "thinking"} speaking={agentState === "speaking"} botEvents={botEvents} />
                   </div>
                 </div>
 
-                {/* Messages */}
-                <div
-                  className="cockpit-scroll"
-                  style={{ flex: 1, overflow: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}
-                >
+                <div className="cockpit-scroll flex-1 overflow-auto p-3 flex flex-col gap-2">
                   {messages.map((msg, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        animation: "fadeInUp 0.25s ease",
-                        display: "flex",
-                        flexDirection: msg.role === "user" ? "row-reverse" : "row",
-                        gap: "8px", alignItems: "flex-end",
-                      }}
-                    >
+                    <div key={i} className="animate-fade-in flex gap-2 items-end" style={{ flexDirection: msg.role === "user" ? "row-reverse" : "row" }}>
                       {msg.role === "assistant" && (
-                        <div style={{ width: "18px", height: "18px", borderRadius: "50%", background: "rgba(52,211,153,0.15)", border: "1px solid rgba(52,211,153,0.2)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "8px" }}>
-                          ⚡
-                        </div>
+                        <div className="w-[18px] h-[18px] rounded-full bg-[#34d399]/15 border border-[#34d399]/20 shrink-0 flex items-center justify-center text-[8px]">⚡</div>
                       )}
-                      <div
-                        style={{
-                          maxWidth: "85%", padding: "8px 12px", borderRadius: msg.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
-                          background: msg.role === "user" ? "rgba(52,211,153,0.08)" : "rgba(255,255,255,0.03)",
-                          border: msg.role === "user" ? "1px solid rgba(52,211,153,0.15)" : "1px solid rgba(255,255,255,0.05)",
-                          fontSize: "12px", lineHeight: "1.6",
-                          color: msg.role === "user" ? "rgba(52,211,153,0.9)" : "rgba(220,220,240,0.85)",
-                          fontFamily: msg.role === "user" ? "monospace" : "inherit",
-                        }}
-                      >
+                      <div className={`max-w-[85%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-[#34d399]/[0.08] border border-[#34d399]/15 text-[#34d399]/90 font-mono rounded-br-sm"
+                          : "bg-white/[0.03] border border-white/[0.05] text-white/80 rounded-bl-sm"
+                      }`}>
                         {msg.content}
                         {msg.link && (
-                          <a href={msg.link} target="_blank" rel="noopener noreferrer"
-                            style={{ display: "block", marginTop: "4px", fontSize: "10px", color: "#a78bfa", textDecoration: "none" }}>
+                          <a href={msg.link} target="_blank" rel="noopener noreferrer" className="block mt-1 text-[10px] text-[#a78bfa] no-underline">
                             → {msg.link.slice(0, 40)}...
                           </a>
                         )}
@@ -538,14 +443,13 @@ export default function Home() {
                     </div>
                   ))}
 
-                  {/* Thinking indicator */}
                   {thinking && (
-                    <div style={{ display: "flex", gap: "8px", alignItems: "flex-end", animation: "fadeInUp 0.2s ease" }}>
-                      <div style={{ width: "18px", height: "18px", borderRadius: "50%", background: "rgba(167,139,250,0.15)", border: "1px solid rgba(167,139,250,0.2)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "8px" }}>⚡</div>
-                      <div style={{ padding: "8px 12px", borderRadius: "12px 12px 12px 2px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                        <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                    <div className="flex gap-2 items-end animate-fade-in">
+                      <div className="w-[18px] h-[18px] rounded-full bg-[#a78bfa]/15 border border-[#a78bfa]/20 shrink-0 flex items-center justify-center text-[8px]">⚡</div>
+                      <div className="px-3 py-2 rounded-xl rounded-bl-sm bg-white/[0.03] border border-white/[0.05]">
+                        <div className="flex gap-1 items-center">
                           {[0, 0.2, 0.4].map((d, i) => (
-                            <div key={i} style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#a78bfa", animation: `status-pulse 1.2s ease-in-out ${d}s infinite` }} />
+                            <div key={i} className="w-1 h-1 rounded-full bg-[#a78bfa] animate-pulse" style={{ animationDelay: `${d}s` }} />
                           ))}
                         </div>
                       </div>
@@ -554,21 +458,12 @@ export default function Home() {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Suggestions */}
                 {showSuggestions && messages.length <= 1 && (
-                  <div style={{ padding: "8px 12px", flexShrink: 0 }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                  <div className="px-3 py-2 flex-shrink-0">
+                    <div className="flex flex-wrap gap-1">
                       {SUGGESTIONS.slice(0, 4).map(s => (
                         <button key={s} onClick={() => { setTextInput(s); setShowSuggestions(false); inputRef.current?.focus(); }}
-                          style={{
-                            padding: "3px 8px", fontSize: "9px", fontFamily: "monospace",
-                            borderRadius: "4px", border: "1px solid rgba(255,255,255,0.07)",
-                            background: "rgba(255,255,255,0.02)", color: "rgba(255,255,255,0.35)",
-                            cursor: "pointer", transition: "all 0.15s", letterSpacing: "0.04em",
-                          }}
-                          onMouseEnter={e => { (e.target as HTMLElement).style.borderColor = "rgba(52,211,153,0.2)"; (e.target as HTMLElement).style.color = "#34d399"; }}
-                          onMouseLeave={e => { (e.target as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; (e.target as HTMLElement).style.color = "rgba(255,255,255,0.35)"; }}
-                        >
+                          className="suggestion-btn">
                           {s}
                         </button>
                       ))}
@@ -576,44 +471,23 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Task flow */}
                 {taskQuestion && (
-                  <div style={{ padding: "8px 12px", flexShrink: 0 }}>
-                    <div style={{ padding: "10px 12px", borderRadius: "8px", background: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.15)" }}>
-                      <p style={{ fontSize: "8px", fontFamily: "monospace", color: "#a78bfa", marginBottom: "4px", letterSpacing: "0.1em" }}>
-                        STEP {taskStep}/{taskTotal} — NEEDS INPUT
-                      </p>
-                      <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)", marginBottom: "0" }}>{taskQuestion}</p>
+                  <div className="px-3 py-2 flex-shrink-0">
+                    <div className="px-3 py-2.5 rounded-lg bg-[#a78bfa]/[0.06] border border-[#a78bfa]/15">
+                      <p className="text-[8px] font-mono text-[#a78bfa] mb-1 tracking-[0.1em]">STEP {taskStep}/{taskTotal} — NEEDS INPUT</p>
+                      <p className="text-[11px] text-white/70">{taskQuestion}</p>
                     </div>
                   </div>
                 )}
 
-                {/* Interim voice text */}
                 {listening && interim && (
-                  <div style={{ padding: "4px 12px", flexShrink: 0 }}>
-                    <p style={{ fontSize: "11px", fontFamily: "monospace", color: "rgba(34,211,238,0.7)", animation: "data-flicker 0.5s infinite" }}>
-                      ›{interim}
-                    </p>
+                  <div className="px-3 py-1 flex-shrink-0">
+                    <p className="text-[11px] font-mono text-[#22d3ee]/70 animate-pulse">›{interim}</p>
                   </div>
                 )}
 
-                {/* Input bar */}
-                <div
-                  style={{
-                    padding: "10px 12px", borderTop: "1px solid rgba(255,255,255,0.04)", flexShrink: 0,
-                    display: "flex", alignItems: "center", gap: "8px",
-                  }}
-                >
-                  <div
-                    style={{
-                      flex: 1, display: "flex", alignItems: "center", gap: "6px",
-                      padding: "8px 12px", borderRadius: "10px",
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.07)",
-                      transition: "border-color 0.2s",
-                    }}
-                    onFocus={() => {}}
-                  >
+                <div className="px-3 py-2.5 border-t border-white/[0.04] flex-shrink-0 flex items-center gap-2">
+                  <div className="flex-1 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07] focus-within:border-[#a78bfa]/20 transition-colors">
                     <input
                       ref={inputRef}
                       type="text"
@@ -621,23 +495,13 @@ export default function Home() {
                       onChange={e => setTextInput(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter") sendText(); }}
                       placeholder="Issue a command..."
-                      style={{
-                        background: "transparent", border: "none", outline: "none",
-                        flex: 1, fontSize: "12px", fontFamily: "monospace",
-                        color: "rgba(220,220,240,0.85)",
-                        letterSpacing: "0.02em",
-                      }}
+                      className="flex-1 bg-transparent border-none outline-none text-xs font-mono text-white/85 tracking-wide placeholder-white/20"
                     />
-                    {/* Voice btn */}
                     <button
                       onClick={handleOrbClick}
-                      style={{
-                        padding: "4px", borderRadius: "6px", border: "none",
-                        background: listening ? "rgba(34,197,94,0.15)" : "transparent",
-                        color: listening ? "#4ade80" : "rgba(255,255,255,0.2)",
-                        cursor: "pointer", flexShrink: 0, transition: "all 0.2s",
-                        boxShadow: listening ? "0 0 8px rgba(34,197,94,0.3)" : "none",
-                      }}
+                      className={`p-1 rounded-md transition-all shrink-0 ${
+                        listening ? "bg-green-500/15 text-[#4ade80] shadow-[0_0_8px_rgba(34,197,94,0.3)]" : "text-white/20 hover:text-white/40"
+                      }`}
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
@@ -647,102 +511,61 @@ export default function Home() {
                       </svg>
                     </button>
                   </div>
-
-                  {/* Send */}
                   <button
                     onClick={sendText}
                     disabled={!textInput.trim()}
-                    style={{
-                      padding: "8px 14px", borderRadius: "10px", border: "1px solid rgba(52,211,153,0.2)",
-                      background: textInput.trim() ? "rgba(52,211,153,0.1)" : "rgba(255,255,255,0.02)",
-                      color: textInput.trim() ? "#34d399" : "rgba(255,255,255,0.15)",
-                      fontSize: "11px", fontFamily: "monospace", cursor: textInput.trim() ? "pointer" : "default",
-                      transition: "all 0.2s", letterSpacing: "0.06em",
-                      boxShadow: textInput.trim() ? "0 0 10px rgba(52,211,153,0.1)" : "none",
-                      flexShrink: 0,
-                    }}
+                    className={`px-3.5 py-2 rounded-xl border text-[11px] font-mono tracking-[0.06em] transition-all shrink-0 ${
+                      textInput.trim()
+                        ? "border-[#34d399]/20 bg-[#34d399]/10 text-[#34d399] cursor-pointer shadow-[0_0_10px_rgba(52,211,153,0.1)]"
+                        : "border-white/[0.06] bg-white/[0.02] text-white/15 cursor-default"
+                    }`}
                   >
                     SEND
                   </button>
                 </div>
               </>
-            )}
-
-            {chatCollapsed && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "16px", gap: "12px" }}>
-                <span style={{ writingMode: "vertical-rl", color: "rgba(255,255,255,0.1)", fontSize: "9px", fontFamily: "monospace", letterSpacing: "0.12em" }}>CHAT</span>
+            ) : (
+              <div className="flex flex-col items-center pt-4 gap-3">
+                <span className="writing-mode-vertical text-white/10 text-[9px] font-mono tracking-[0.12em]">CHAT</span>
               </div>
             )}
           </div>
 
-          {/* ── RIGHT: Cockpit Panel ────────────────────────────────── */}
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              padding: "12px",
-              gap: "10px",
-              overflow: "hidden",
-              minWidth: 0,
-            }}
-          >
-            {/* Cockpit tab switcher */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-              <div style={{ display: "flex", gap: "4px" }}>
+          {/* Cockpit panel */}
+          <div className={`${mobileCockpit ? "flex" : "hidden lg:flex"} flex-1 flex-col p-3 gap-2.5 overflow-hidden min-w-0`}>
+            <div className="flex items-center justify-between flex-shrink-0">
+              <div className="flex gap-1">
                 {(["router", "telemetry"] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setCockpitTab(tab)}
-                    style={{
-                      padding: "5px 14px", fontSize: "9px", fontFamily: "monospace",
-                      borderRadius: "6px", letterSpacing: "0.1em", textTransform: "uppercase",
-                      border: "1px solid",
-                      borderColor: cockpitTab === tab ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.06)",
-                      background: cockpitTab === tab ? "rgba(52,211,153,0.08)" : "transparent",
-                      color: cockpitTab === tab ? "#34d399" : "rgba(255,255,255,0.25)",
-                      cursor: "pointer", transition: "all 0.2s",
-                    }}
+                    className={`px-3 py-1.5 text-[9px] font-mono tracking-[0.1em] uppercase rounded-md transition-all border ${
+                      cockpitTab === tab
+                        ? "border-[#34d399]/30 bg-[#34d399]/[0.08] text-[#34d399]"
+                        : "border-white/[0.06] text-white/25 hover:text-white/40"
+                    }`}
                   >
                     {tab === "router" ? "⚡ Router" : "📡 Telemetry"}
                   </button>
                 ))}
               </div>
-
-              {/* Live dispatch indicator */}
               {isDispatching && (
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#f59e0b", animation: "status-pulse 0.6s ease-in-out infinite" }} />
-                  <span style={{ fontSize: "9px", fontFamily: "monospace", color: "#f59e0b", letterSpacing: "0.08em" }}>
-                    ROUTING...
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] animate-pulse" />
+                  <span className="text-[9px] font-mono text-[#f59e0b] tracking-[0.08em]">ROUTING...</span>
                 </div>
               )}
             </div>
 
-            {/* ── Router tab ── */}
             {cockpitTab === "router" && (
-              <div style={{ flex: 1, minHeight: 0 }}>
-                <AgentRouter
-                  routingData={routerPayload as any}
-                  isDispatching={isDispatching}
-                  userText={messages.filter(m => m.role === "user").slice(-1)[0]?.content}
-                />
+              <div className="flex-1 min-h-0">
+                <AgentRouter routingData={routerPayload as any} isDispatching={isDispatching} userText={messages.filter(m => m.role === "user").slice(-1)[0]?.content} />
               </div>
             )}
 
-
-            {/* ── Telemetry tab ── */}
             {cockpitTab === "telemetry" && (
-              <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-                <CockpitTelemetry
-                  relayOnline={relayOnline}
-                  devices={devices}
-                  systemStats={systemStats}
-                  agentResponse={routerPayload?.agent_response ?? null}
-                  activeAgent={activeAgent}
-                  activityLog={activityLog}
-                />
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <CockpitTelemetry relayOnline={relayOnline} devices={devices} systemStats={systemStats} agentResponse={routerPayload?.agent_response ?? null} activeAgent={activeAgent} activityLog={activityLog} />
               </div>
             )}
           </div>
@@ -751,49 +574,27 @@ export default function Home() {
 
       {/* Task result overlay */}
       {taskResult && (
-        <div
-          style={{
-            position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center",
-            background: "rgba(3,5,18,0.8)", backdropFilter: "blur(8px)",
-          }}
-          onClick={() => setTaskResult(null)}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              maxWidth: "480px", width: "90%", padding: "24px",
-              background: "rgba(10,15,30,0.95)", borderRadius: "16px",
-              border: "1px solid rgba(52,211,153,0.2)",
-              boxShadow: "0 0 40px rgba(52,211,153,0.1)",
-              animation: "fadeInUp 0.3s ease",
-            }}
-          >
-            <p style={{ fontSize: "9px", fontFamily: "monospace", color: "#34d399", letterSpacing: "0.15em", marginBottom: "8px" }}>
-              ✓ TASK COMPLETE
-            </p>
-            <p style={{ fontSize: "12px", color: "rgba(220,220,240,0.8)", whiteSpace: "pre-wrap", lineHeight: "1.6" }}>{taskResult}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#030512]/80 backdrop-blur-lg" onClick={() => setTaskResult(null)}>
+          <div onClick={e => e.stopPropagation()} className="max-w-[480px] w-[90%] p-6 glass-strong rounded-2xl border border-[#34d399]/20 shadow-[0_0_40px_rgba(52,211,153,0.1)] animate-fade-in">
+            <p className="text-[9px] font-mono text-[#34d399] tracking-[0.15em] mb-2">✓ TASK COMPLETE</p>
+            <p className="text-xs text-white/80 whitespace-pre-wrap leading-relaxed">{taskResult}</p>
             {Object.keys(collectedInfo).length > 0 && (
-              <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="mt-3 pt-3 border-t border-white/[0.06]">
                 {Object.entries(collectedInfo).map(([k, v]) => (
-                  <p key={k} style={{ fontSize: "10px", fontFamily: "monospace", color: "rgba(255,255,255,0.4)", marginBottom: "2px" }}>
-                    <span style={{ color: "#a78bfa" }}>{k}:</span> {v}
+                  <p key={k} className="text-[10px] font-mono text-white/40 mb-0.5">
+                    <span className="text-[#a78bfa]">{k}:</span> {v}
                   </p>
                 ))}
               </div>
             )}
-            <button
-              onClick={() => setTaskResult(null)}
-              style={{ marginTop: "16px", fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.2)", letterSpacing: "0.1em", background: "none", border: "none", cursor: "pointer" }}
-            >
+            <button onClick={() => setTaskResult(null)} className="mt-4 text-[9px] font-mono text-white/20 tracking-[0.1em] bg-transparent border-none cursor-pointer hover:text-white/40 transition-colors">
               DISMISS ×
             </button>
           </div>
         </div>
       )}
 
-      {/* Sidebar */}
-      <Sidebar messages={messages} open={sidebarOpen} onClose={() => setSidebarOpen(false)}
-        summary={profileSummary} interests={profileInterests} />
+      <Sidebar messages={messages} open={sidebarOpen} onClose={() => setSidebarOpen(false)} summary={profileSummary} interests={profileInterests} />
     </div>
   );
 }
