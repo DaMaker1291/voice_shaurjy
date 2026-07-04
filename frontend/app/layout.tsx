@@ -15,8 +15,8 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JARVIS — The System Engine",
-  description: "Autonomous ecosystem orchestrator with voice-first AI, system control, and smart home.",
+  title: "JARVIS",
+  description: "Autonomous system engine with voice-first AI and smart home control.",
 };
 
 export const viewport: Viewport = {
@@ -31,7 +31,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrains.variable}`}>
-      <body className="bg-[#030512] text-gray-200 font-sans antialiased overflow-hidden">
+      <body className="bg-[#09090b] text-zinc-200 font-sans antialiased overflow-hidden">
+        <div className="ambient-glow" />
         {children}
       </body>
     </html>

@@ -8,55 +8,54 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        jarvis: {
-          50: '#f5f3ff',
-          100: '#ede9fe',
-          200: '#ddd6fe',
-          300: '#c4b5fd',
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-          700: '#6d28d9',
-          800: '#5b21b6',
-          900: '#4c1d95',
-          950: '#2e1065',
+        surface: {
+          DEFAULT: '#09090b',
+          2: '#111113',
+          3: '#18181b',
+          4: '#1c1c1f',
         },
-        cyber: {
-          900: '#030512',
-          800: '#05081a',
-          700: '#0a0f2e',
-          600: '#111132',
+        border: {
+          subtle: 'rgba(255,255,255,0.06)',
+          DEFAULT: 'rgba(255,255,255,0.08)',
+          strong: 'rgba(255,255,255,0.12)',
+        },
+        txt: {
+          primary: '#fafafa',
+          secondary: '#a1a1aa',
+          tertiary: '#71717a',
+          muted: '#52525b',
         },
         accent: {
-          purple: '#a78bfa',
-          cyan: '#22d3ee',
-          green: '#34d399',
-          amber: '#f59e0b',
-          red: '#ef4444',
+          DEFAULT: '#8b5cf6',
+          hover: '#7c3aed',
+          dim: 'rgba(139,92,246,0.12)',
         },
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-jetbrains)', 'monospace'],
       },
+      borderRadius: {
+        'xl': '12px',
+        '2xl': '16px',
+      },
       animation: {
-        'fade-in': 'fadeIn 0.4s cubic-bezier(0.16,1,0.3,1) both',
-        'slide-up': 'slideUp 0.4s cubic-bezier(0.16,1,0.3,1) both',
-        'pulse-slow': 'pulse 3s ease-in-out infinite',
-        'glow': 'glow 4s ease-in-out infinite',
+        'fade-in': 'fadeIn 0.35s cubic-bezier(0.16,1,0.3,1) both',
+        'slide-up': 'slideUp 0.35s cubic-bezier(0.16,1,0.3,1) both',
+        'scale-in': 'scaleIn 0.25s cubic-bezier(0.16,1,0.3,1) both',
       },
       keyframes: {
         fadeIn: {
-          from: { opacity: '0', transform: 'translateY(8px)' },
+          from: { opacity: '0', transform: 'translateY(6px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
         slideUp: {
-          from: { opacity: '0', transform: 'translateY(16px)' },
+          from: { opacity: '0', transform: 'translateY(12px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
-        glow: {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(167,139,250,0.15)' },
-          '50%': { boxShadow: '0 0 40px rgba(167,139,250,0.3)' },
+        scaleIn: {
+          from: { opacity: '0', transform: 'scale(0.96)' },
+          to: { opacity: '1', transform: 'scale(1)' },
         },
       },
     },
