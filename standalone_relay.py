@@ -7,7 +7,7 @@ Usage:
   python3 relay.py --user yourname
 """
 
-import argparse, json, os, platform, socket, subprocess, sys, threading, time, urllib.request, urllib.error, ssl, re, datetime
+import argparse, json, os, platform, socket, subprocess, sys, threading, time, urllib.request, urllib.error, urllib.parse, ssl, re, datetime
 
 _SSL_CTX = ssl.create_default_context()
 try:
@@ -210,7 +210,6 @@ def main():
     except socket.gaierror:
         print(f"[Relay] DNS failed for {hostname}"); return
 
-    import urllib.parse
     device_info = startup_scan(args.user)
     try:
         post(f"{HF_API}/api/relay/register", {"user_id": args.user, "hostname": socket.gethostname(), "platform": platform.platform(), "info": device_info})
