@@ -1662,3 +1662,63 @@ async def control_device_direct(req: DeviceControlRequest):
     bridge = get_bridge()
     result = bridge.execute(device, req.command)
     return {"status": result.status, "result": result.result, "latency_ms": result.latency_ms}
+
+
+# ── Platform Pillar Routes ──────────────────────────────────────
+
+@app.get("/api/platform/latency")
+async def get_latency_stats():
+    try:
+        from multi_agent_router import get_router
+        return get_router().get_latency_stats()
+    except Exception:
+        return {"error": "Router not available"}
+
+
+@app.get("/api/platform/vault")
+async def get_vault_stats():
+    try:
+        from execution_vault import get_vault
+        vault = get_vault()
+        return {
+            "method": vault._method,
+            "violations": vault.get_violations(10),
+            "recent_executions": vault.get_execution_log(10),
+            "tools_count": len(vault.list_tools()),
+        }
+    except Exception:
+        return {"error": "Vault not available"}
+
+
+@app.get("/api/platform/healing")
+async def get_healing_stats():
+    try:
+        from self_healing import healer
+        return {
+            **healer.get_stats(),
+            "recent_log": healer.get_healing_log(10),
+            "tools": healer.list_tools()[:20],
+        }
+    except Exception:
+        return {"error": "Self-healing engine not available"}
+
+
+@app.get("/api/platform/grammars")
+async def get_grammar_info():
+    grammar_dir = os.path.join(os.path.dirname(__file__), "grammars")
+    if not os.path.isdir(grammar_dir):
+        grammar_dir = os.path.join(os.path.dirname(__file__), "..", "backend", "grammars")
+    grammars = []
+    if os.path.isdir(grammar_dir):
+        for f in os.listdir(grammar_dir):
+            if f.endswith(".gbnf"):
+                fpath = os.path.join(grammar_dir, f)
+                with open(fpath) as fh:
+                    content = fh.read()
+                grammars.append({
+                    "name": f.replace(".gbnf", ""),
+                    "file": f,
+                    "lines": len(content.split("\n")),
+                    "bytes": len(content),
+                })
+    return {"grammars": grammars, "count": len(grammars)}

@@ -1,0 +1,54 @@
+# GBNF Grammar for JARVIS OS Agent
+# Enforces strict JSON schema for desktop automation commands
+
+root ::= space "{" space fields "}" space
+
+fields ::= field (space "," space field)*
+
+field ::= os_action_field | system_state_field
+
+os_action_field ::= "\"os_action_payload\":" space os_action
+system_state_field ::= "\"system_state_update\":" space system_state
+
+os_action ::= "{" space os_fields "}" space
+os_fields ::= os_field (space "," space os_field)*
+
+os_field ::= action_type | target_id | script_rt | payload
+action_type ::= "\"action_type\":" space action_val
+target_id ::= "\"target_identifier\":" space string_val
+script_rt ::= "\"script_runtime\":" space runtime_val
+payload ::= "\"payload_data\":" space payload_val
+
+action_val ::= "\"LAUNCH_PROCESS\"" | "\"ACCESSIBILITY_CLICK\"" | "\"SCRIPT_EXECUTION\"" | "\"KEYBOARD_EMULATION\"" | "\"FILE_OPERATION\"" | "\"PROCESS_KILL\""
+runtime_val ::= "\"python\"" | "\"powershell\"" | "\"applescript\"" | "\"javascript\"" | "\"bash\"" | "null"
+
+payload_val ::= "{" space payload_fields "}" space | "null"
+payload_fields ::= payload_field (space "," space payload_field)*
+payload_field ::= script_body | coordinates | keystrokes | file_path | process_args
+script_body ::= "\"script_body\":" space (string_val | "null")
+coordinates ::= "\"coordinates\":" space coord_val | "\"coordinates\":" space "null"
+coord_val ::= "{" space "\"x\":" space int_val space "," space "\"y\":" space int_val space "}"
+keystrokes ::= "\"keystrokes\":" space (string_val | "null")
+file_path ::= "\"file_path\":" space (string_val | "null")
+process_args ::= "\"process_args\":" space array_val
+
+system_state ::= "{" space ss_fields "}" space
+ss_fields ::= ss_field (space "," space ss_field)*
+ss_field ::= active_app | exec_status | error_detail | telemetry
+active_app ::= "\"active_application\":" space string_val
+exec_status ::= "\"execution_status\":" space status_val
+error_detail ::= "\"error_detail\":" space (string_val | "null")
+telemetry ::= "\"telemetry\":" space tel_val
+
+status_val ::= "\"PENDING\"" | "\"COMPLETED\"" | "\"CRITICAL_ERROR\""
+tel_val ::= "{" space tel_fields "}" space
+tel_fields ::= tel_field (space "," space tel_field)*
+tel_field ::= cpu_alloc | ram_alloc
+cpu_alloc ::= "\"cpu_allocation\":" space string_val
+ram_alloc ::= "\"ram_allocation\":" space string_val
+
+# Primitives
+array_val ::= "[" space (string_val (space "," space string_val)*)? space "]"
+int_val ::= "0" | [1-9] [0-9]*
+string_val ::= "\"" [^"\\]* "\""
+space ::= [ \t\n\r]*

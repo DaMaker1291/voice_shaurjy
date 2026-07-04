@@ -1,4 +1,4 @@
-"""Cross-platform command executor. Uses PowerShell on Windows, bash on Linux/macOS."""
+"""Cross-platform command executor with Execution Vault sandboxing."""
 
 import subprocess
 import platform
@@ -15,9 +15,23 @@ _LOCK = threading.Lock()
 
 _IS_WINDOWS = platform.system() == "Windows"
 
+# Lazy-load vault to avoid circular imports
+_vault = None
+
+
+def _get_vault():
+    global _vault
+    if _vault is None:
+        try:
+            from execution_vault import get_vault
+            _vault = get_vault()
+        except ImportError:
+            _vault = False
+    return _vault if _vault is not False else None
+
 
 def ps(cmd: str, timeout: float = 15.0, use_cache: bool = True) -> str:
-    """Execute a shell command. PowerShell on Windows, bash on Linux/macOS."""
+    """Execute a shell command with vault sandboxing when available."""
 
     key = cmd.strip()
 
@@ -28,22 +42,39 @@ def ps(cmd: str, timeout: float = 15.0, use_cache: bool = True) -> str:
                 if time.time() - ts < _CACHE_TTL:
                     return result
 
-    try:
-        if _IS_WINDOWS:
-            r = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", cmd],
-                capture_output=True, text=True, timeout=timeout,
-            )
-        else:
-            r = subprocess.run(
-                ["bash", "-c", cmd],
-                capture_output=True, text=True, timeout=timeout,
-            )
-        result = (r.stdout.strip() or r.stderr.strip())[:2000]
-    except subprocess.TimeoutExpired:
-        result = "timed_out"
-    except Exception as e:
-        result = f"error: {e}"
+    vault = _get_vault()
+    if vault:
+        # Use vaulted execution
+        try:
+            from execution_vault import VaultPolicy
+            policy = VaultPolicy(timeout=int(timeout))
+            vr = vault.execute(cmd, policy=policy)
+            if vr.blocked:
+                result = f"BLOCKED: {vr.block_reason}"
+            elif vr.timed_out:
+                result = "timed_out"
+            else:
+                result = (vr.stdout.strip() or vr.stderr.strip())[:2000]
+        except Exception as e:
+            result = f"vault_error: {e}"
+    else:
+        # Fallback: direct subprocess (legacy mode)
+        try:
+            if _IS_WINDOWS:
+                r = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command", cmd],
+                    capture_output=True, text=True, timeout=timeout,
+                )
+            else:
+                r = subprocess.run(
+                    ["bash", "-c", cmd],
+                    capture_output=True, text=True, timeout=timeout,
+                )
+            result = (r.stdout.strip() or r.stderr.strip())[:2000]
+        except subprocess.TimeoutExpired:
+            result = "timed_out"
+        except Exception as e:
+            result = f"error: {e}"
 
     if result and use_cache:
         with _LOCK:

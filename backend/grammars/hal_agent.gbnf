@@ -1,0 +1,56 @@
+# GBNF Grammar for JARVIS HAL Agent
+# Enforces strict JSON schema for hardware/IoT control
+
+root ::= space "{" space fields "}" space
+
+fields ::= field (space "," space field)*
+
+field ::= device_field | network_field | ui_field
+
+device_field ::= "\"device_telemetry_payload\":" space device_val
+network_field ::= "\"network_state\":" space network_val
+ui_field ::= "\"frontend_ui_mutation\":" space ui_val
+
+# Device telemetry
+device_val ::= "{" space device_fields "}" space
+device_fields ::= device_field_item (space "," space device_field_item)*
+device_field_item ::= domain | unique_id | method_sig | exec_payload
+domain ::= "\"target_domain\":" space domain_val
+unique_id ::= "\"unique_id\":" space string_val
+method_sig ::= "\"method_signature\":" space string_val
+exec_payload ::= "\"execution_payload\":" space payload_val
+
+domain_val ::= "\"zigbee\"" | "\"zwave\"" | "\"wifi\"" | "\"bluetooth\"" | "\"usb_serial\"" | "\"cloud_api\"" | "\"mdns\"" | "\"mqtt\"" | "\"http\""
+
+payload_val ::= "{" space (kv (space "," space kv)*)? space "}" space
+kv ::= string_val space ":" space val
+val ::= string_val | int_val | float_val | bool_val | "null" | array_val | payload_val
+
+# Network state
+network_val ::= "{" space net_fields "}" space
+net_fields ::= net_field (space "," space net_field)*
+net_field ::= relay_status | disc_count | scan_epoch
+relay_status ::= "\"relay_status\":" space relay_val
+disc_count ::= "\"discovered_count\":" space int_val
+scan_epoch ::= "\"last_scan_epoch\":" space int_val
+
+relay_val ::= "\"ONLINE\"" | "\"OFFLINE_BRIDGE_ERROR\"" | "\"CONNECTING\""
+
+# Frontend UI mutation
+ui_val ::= "{" space ui_fields "}" space
+ui_fields ::= ui_field_item (space "," space ui_field_item)*
+ui_field_item ::= target_node | ui_flag | state_delta | trouble_steps
+target_node ::= "\"target_node\":" space string_val
+ui_flag ::= "\"ui_status_flag\":" space flag_val
+state_delta ::= "\"state_delta\":" space payload_val
+trouble_steps ::= "\"troubleshooting_steps\":" space array_val
+
+flag_val ::= "\"OPTIMAL\"" | "\"WARNING\"" | "\"CRITICAL\"" | "\"OFFLINE\"" | "\"UNKNOWN\""
+
+# Primitives
+array_val ::= "[" space (val (space "," space val)*)? space "]"
+int_val ::= "0" | "-"? [1-9] [0-9]*
+float_val ::= "-"? "0." [0-9]+ | "-"? [1-9] [0-9]* "." [0-9]+
+bool_val ::= "true" | "false"
+string_val ::= "\"" [^"\\]* "\""
+space ::= [ \t\n\r]*

@@ -128,6 +128,10 @@ def get_router() -> "RouterEngine":
 class RouterEngine:
     """Sovereign Cognitive Operating System Router for JARVIS."""
 
+    # Latency SLA: supervisor must route in <50ms
+    SUPERVISOR_SLA_MS = 50.0
+    WORKER_SLA_MS = 2000.0
+
     def __init__(self):
         from groq_agent import _get_client
         self._get_client = _get_client
@@ -136,16 +140,25 @@ class RouterEngine:
         self.grammar = None
         self.model_source = "CLOUD_GROQ"
 
-        # Try to initialize local model and grammar schema for sub-50ms routing
+        # Load grammars for all agents
+        self.grammars = {}
+        self._load_grammars()
+
+        # Latency tracking
+        self._latency_history = {"supervisor": [], "worker": [], "total": []}
+        self._sla_violations = 0
+
+        # Vault and self-healing
+        self._vault = None
+        self._healer = None
+        self._init_vault_and_healing()
+
+        # Try to initialize local model
         try:
             from llama_cpp import Llama, LlamaGrammar
             model_path = "./models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"
-            grammar_path = "./backend/grammars/router.gbnf"
             
-            if not os.path.exists(grammar_path):
-                grammar_path = "./grammars/router.gbnf"
-                
-            if os.path.exists(model_path) and os.path.exists(grammar_path):
+            if os.path.exists(model_path):
                 self.local_model = Llama(
                     model_path=model_path,
                     n_ctx=512,
@@ -153,10 +166,40 @@ class RouterEngine:
                     flash_attn=True,
                     verbose=False
                 )
-                self.grammar = LlamaGrammar.from_string(open(grammar_path).read())
+                if "router" in self.grammars:
+                    self.grammar = self.grammars["router"]
                 self.model_source = "LOCAL_LLAMA"
         except Exception:
-            # Fail silently, fallback to high-speed cloud APIs
+            pass
+
+    def _load_grammars(self):
+        """Load all GBNF grammar files."""
+        grammar_dir = "./backend/grammars"
+        if not os.path.isdir(grammar_dir):
+            grammar_dir = "./grammars"
+        
+        if os.path.isdir(grammar_dir):
+            for fname in os.listdir(grammar_dir):
+                if fname.endswith(".gbnf"):
+                    name = fname.replace(".gbnf", "")
+                    try:
+                        from llama_cpp import LlamaGrammar
+                        with open(os.path.join(grammar_dir, fname)) as f:
+                            self.grammars[name] = LlamaGrammar.from_string(f.read())
+                    except Exception:
+                        pass
+
+    def _init_vault_and_healing(self):
+        """Initialize execution vault and self-healing engine."""
+        try:
+            from execution_vault import get_vault
+            self._vault = get_vault()
+        except ImportError:
+            pass
+        try:
+            from self_healing import healer
+            self._healer = healer
+        except ImportError:
             pass
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -181,6 +224,13 @@ class RouterEngine:
         routing_packet = self._run_supervisor(user_text)
         supervisor_ms = round((time.monotonic() - start) * 1000, 1)
 
+        # Track latency & SLA
+        self._latency_history["supervisor"].append(supervisor_ms)
+        if len(self._latency_history["supervisor"]) > 100:
+            self._latency_history["supervisor"] = self._latency_history["supervisor"][-100:]
+        if supervisor_ms > self.SUPERVISOR_SLA_MS:
+            self._sla_violations += 1
+
         target = routing_packet.get("target_agent", "OS_AGENT")
 
         # ── Stage 2: Domain worker ────────────────────────────────────────────
@@ -197,6 +247,12 @@ class RouterEngine:
 
         worker_ms = round((time.monotonic() - worker_start) * 1000, 1)
         total_ms = round((time.monotonic() - start) * 1000, 1)
+
+        self._latency_history["worker"].append(worker_ms)
+        self._latency_history["total"].append(total_ms)
+        for key in self._latency_history:
+            if len(self._latency_history[key]) > 100:
+                self._latency_history[key] = self._latency_history[key][-100:]
 
         # ── Stage 3: Enterprise Security Inspection ────────────────────────────
         security_check = vault.inspect_payload(agent_response)
@@ -217,6 +273,29 @@ class RouterEngine:
                 }
             }
 
+        # ── Stage 4: Self-healing (if script execution failed) ────────────────
+        healed = False
+        if (agent_response.get("execution_status") in ("CRITICAL_ERROR", "FAILED")
+                and self._healer
+                and agent_response.get("os_action_payload", {}).get("payload_data", {}).get("script_body")):
+            script = agent_response["os_action_payload"]["payload_data"]["script_body"]
+            try:
+                repair = self._healer.generate_repair(
+                    agent_response.get("error_detail", "unknown error"),
+                    "",
+                    script,
+                    context=user_text,
+                )
+                if repair and self._vault:
+                    vr = self._vault.execute_script(repair, language="python")
+                    if not vr.blocked and vr.exit_code == 0:
+                        agent_response["os_action_payload"]["payload_data"]["script_body"] = repair
+                        agent_response["execution_status"] = "PENDING"
+                        healed = True
+                        self._healer.register_tool(f"healed_{target}", repair, metadata={"source": user_text[:100]})
+            except Exception:
+                pass
+
         return {
             "routing": routing_packet,
             "agent_response": agent_response,
@@ -228,8 +307,32 @@ class RouterEngine:
             "user_id": user_id,
             "target_agent": target,
             "model_source": self.model_source,
-            "security_status": "PASSED" if security_check.get("safe", True) else "BLOCKED"
+            "security_status": "PASSED" if security_check.get("safe", True) else "BLOCKED",
+            "healed": healed,
         }
+
+    def get_latency_stats(self) -> dict:
+        """Get latency statistics including P95."""
+        stats = {}
+        for key, values in self._latency_history.items():
+            if values:
+                sorted_v = sorted(values)
+                p50_idx = len(sorted_v) // 2
+                p95_idx = int(len(sorted_v) * 0.95)
+                stats[key] = {
+                    "current": values[-1],
+                    "avg": round(sum(values) / len(values), 1),
+                    "p50": round(sorted_v[p50_idx], 1),
+                    "p95": round(sorted_v[min(p95_idx, len(sorted_v) - 1)], 1),
+                    "min": round(min(values), 1),
+                    "max": round(max(values), 1),
+                    "samples": len(values),
+                }
+            else:
+                stats[key] = {"current": 0, "avg": 0, "p50": 0, "p95": 0, "min": 0, "max": 0, "samples": 0}
+        stats["sla_violations"] = self._sla_violations
+        stats["supervisor_sla_ms"] = self.SUPERVISOR_SLA_MS
+        return stats
 
     # ── Agent runners ─────────────────────────────────────────────────────────
 

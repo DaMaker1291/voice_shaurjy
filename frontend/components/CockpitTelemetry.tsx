@@ -320,6 +320,91 @@ function DeviceCard({ device, onAction }: { device: DeviceNode; onAction?: (id: 
   );
 }
 
+function PlatformStats() {
+  const [stats, setStats] = useState<any>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const base = typeof window !== "undefined"
+          ? (localStorage.getItem("backend_url") || "https://dgfhgjhj-jarvis-ai-brain.hf.space")
+          : "";
+        const [lat, vault, healing, grammar] = await Promise.allSettled([
+          fetch(`${base}/api/platform/latency`).then(r => r.json()),
+          fetch(`${base}/api/platform/vault`).then(r => r.json()),
+          fetch(`${base}/api/platform/healing`).then(r => r.json()),
+          fetch(`${base}/api/platform/grammars`).then(r => r.json()),
+        ]);
+        setStats({
+          latency: lat.status === "fulfilled" ? lat.value : null,
+          vault: vault.status === "fulfilled" ? vault.value : null,
+          healing: healing.status === "fulfilled" ? healing.value : null,
+          grammars: grammar.status === "fulfilled" ? grammar.value : null,
+        });
+      } catch {}
+    };
+    load();
+    const i = setInterval(load, 8000);
+    return () => clearInterval(i);
+  }, []);
+
+  if (!stats) return null;
+
+  const sup = stats.latency?.supervisor || {};
+
+  return (
+    <div
+      style={{
+        padding: "8px 10px",
+        background: "rgba(0,0,0,0.2)",
+        borderRadius: "8px",
+        border: "1px solid rgba(139,92,246,0.15)",
+        flexShrink: 0,
+      }}
+    >
+      <div style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.35)", letterSpacing: "0.08em", marginBottom: "6px" }}>
+        PLATFORM
+      </div>
+
+      {/* Latency */}
+      {sup && (
+        <div style={{ display: "flex", gap: "12px", marginBottom: "4px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.4)" }}>
+            Route: <span style={{ color: sup.current > 50 ? "#f59e0b" : "#34d399" }}>{sup.current || 0}ms</span>
+          </span>
+          <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
+            P50: {sup.p50 || 0}ms
+          </span>
+          <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
+            P95: <span style={{ color: sup.p95 > 50 ? "#f59e0b" : "#34d399" }}>{sup.p95 || 0}ms</span>
+          </span>
+          {stats.latency?.sla_violations > 0 && (
+            <span style={{ fontSize: "9px", fontFamily: "monospace", color: "#f87171" }}>
+              SLA breaks: {stats.latency.sla_violations}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Vault + Healing + Grammars */}
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
+          Vault: <span style={{ color: "#22d3ee" }}>{stats.vault?.method || "—"}</span>
+        </span>
+        <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
+          Tools: <span style={{ color: "#a78bfa" }}>{stats.healing?.total_tools || 0}</span>
+        </span>
+        <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
+          Heals: <span style={{ color: stats.healing?.successful_heals > 0 ? "#34d399" : "rgba(255,255,255,0.3)" }}>{stats.healing?.successful_heals || 0}/{stats.healing?.total_attempts || 0}</span>
+        </span>
+        <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
+          Grammars: <span style={{ color: "#fbbf24" }}>{stats.grammars?.count || 0}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function CockpitTelemetry({
   relayOnline = false,
   devices = [],
@@ -519,6 +604,9 @@ export default function CockpitTelemetry({
           )}
         </div>
       )}
+
+      {/* Platform Stats — Latency, Vault, Healing */}
+      <PlatformStats />
 
       {/* Device tree */}
       <div
