@@ -1562,9 +1562,8 @@ async def pool_events(limit: int = 50):
 @app.post("/api/nl/parse")
 async def parse_nl_command(req: NLCommandRequest):
     try:
-        from smart_home_manager import get_manager
-        mgr = get_manager()
-        devices = [{"id": d.id, "name": d.name, "type": d.type, "ip": d.ip, "protocol": d.protocol} for d in mgr.devices.values()]
+        from smart_home_manager import get_all_devices
+        devices = [{"id": d.id, "name": d.name, "type": d.type, "ip": d.ip, "protocol": d.protocol} for d in get_all_devices()]
     except Exception:
         devices = []
 
@@ -1589,9 +1588,8 @@ async def parse_nl_command(req: NLCommandRequest):
 @app.post("/api/nl/execute")
 async def execute_nl_command(req: NLCommandRequest):
     try:
-        from smart_home_manager import get_manager
-        mgr = get_manager()
-        devices = [{"id": d.id, "name": d.name, "type": d.type, "ip": d.ip, "protocol": d.protocol} for d in mgr.devices.values()]
+        from smart_home_manager import get_all_devices
+        devices = [{"id": d.id, "name": d.name, "type": d.type, "ip": d.ip, "protocol": d.protocol} for d in get_all_devices()]
     except Exception:
         devices = []
 
@@ -1641,18 +1639,19 @@ async def device_command_log(limit: int = 50):
 @app.post("/api/devices/control")
 async def control_device_direct(req: DeviceControlRequest):
     try:
-        from smart_home_manager import get_manager
-        mgr = get_manager()
+        from smart_home_manager import get_all_devices
+        all_devices = get_all_devices()
     except Exception:
         raise HTTPException(500, "Smart home manager not available")
 
     device = None
     if req.device_id:
-        device_obj = mgr.devices.get(req.device_id)
-        if device_obj:
-            device = {"id": device_obj.id, "name": device_obj.name, "type": device_obj.type, "ip": device_obj.ip, "protocol": device_obj.protocol}
+        for d in all_devices:
+            if d.id == req.device_id:
+                device = {"id": d.id, "name": d.name, "type": d.type, "ip": d.ip, "protocol": d.protocol}
+                break
     if not device and req.device_ip:
-        for d in mgr.devices.values():
+        for d in all_devices:
             if d.ip == req.device_ip:
                 device = {"id": d.id, "name": d.name, "type": d.type, "ip": d.ip, "protocol": d.protocol}
                 break
