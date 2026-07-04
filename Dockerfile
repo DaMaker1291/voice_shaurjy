@@ -41,7 +41,7 @@ RUN pip install --no-cache-dir -r requirements-render.txt
 
 # Install Playwright browsers (optional — don't block build)
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
-RUN python3 -m playwright install chromium --with-deps 2>/dev/null || echo "Playwright install skipped"
+RUN python3 -m playwright install chromium 2>/dev/null || echo "Playwright install skipped"
 
 # Copy application code
 COPY backend/ ./backend/
