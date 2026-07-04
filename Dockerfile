@@ -39,9 +39,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/requirements-render.txt .
 RUN pip install --no-cache-dir -r requirements-render.txt
 
-# Install Playwright browsers
+# Install Playwright browsers (optional — don't block build)
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
-RUN python3 -m playwright install chromium
+RUN python3 -m playwright install chromium --with-deps 2>/dev/null || echo "Playwright install skipped"
 
 # Copy application code
 COPY backend/ ./backend/
