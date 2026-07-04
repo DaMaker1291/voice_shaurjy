@@ -76,3 +76,4 @@ JARVIS is fully equipped to interact with the world outside your home as an inde
 ```
 
 JARVIS bridges the gap between software automation, physical computing, and daily life, putting a fully realized, responsive digital entity at the wheel of your technological world.
+
