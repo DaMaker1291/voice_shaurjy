@@ -104,7 +104,7 @@ COLOR_MAP = {
 def parse_command(text: str, devices: Optional[List[Dict]] = None) -> ParsedCommand:
     """Parse natural language into a structured device command."""
     text_lower = text.lower().strip()
-    result = ParsedCommand(raw_text=text, confidence=0.0)
+    result = ParsedCommand(intent="unknown", raw_text=text, confidence=0.0)
 
     # Try LLM-based parsing first
     llm_result = _parse_with_llm(text)
@@ -186,7 +186,7 @@ Return ONLY valid JSON. If the input is not a device command, return {"intent": 
 
 def _parse_with_regex(text: str) -> ParsedCommand:
     """Regex-based intent extraction (fast, no API call)."""
-    result = ParsedCommand(raw_text=text)
+    result = ParsedCommand(intent="unknown", raw_text=text)
 
     # Detect device type
     for dtype, keywords in DEVICE_TYPES.items():
