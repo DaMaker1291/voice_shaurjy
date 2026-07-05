@@ -221,40 +221,54 @@ class NetworkScanner:
         This is the fastest, most reliable first-pass discovery method.
         """
         devices = []
+        output = ""
         try:
-            # Try system ARP command
+            # Try system ARP command with longer timeout
             result = subprocess.run(
                 ["arp", "-a"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=15
             )
             output = result.stdout
         except Exception:
             try:
                 result = subprocess.run(
                     ["ip", "neigh"],
-                    capture_output=True, text=True, timeout=5
+                    capture_output=True, text=True, timeout=15
                 )
                 output = result.stdout
             except Exception:
-                return devices
+                pass
+
+        if not output:
+            return devices
 
         for line in output.splitlines():
-            parts = line.split()
-            if not parts:
-                continue
-
-            # Parse IP and MAC from ARP output
+            # macOS ARP format: "hostname (ip) at mac on interface [type]"
+            # Linux ARP format: "ip hwtype mac address mask interface"
             ip = ""
             mac = ""
             hostname = ""
 
-            for i, p in enumerate(parts):
-                if self._is_ip(p):
-                    ip = p
-                elif self._is_mac(p):
-                    mac = p.upper()
-                elif p.startswith("(") and p.endswith(")"):
-                    hostname = p[1:-1]
+            # Try macOS format first: hostname (ip) at mac
+            import re
+            macos_match = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([0-9a-fA-F:]+)', line)
+            if macos_match:
+                ip = macos_match.group(1)
+                mac = macos_match.group(2).upper()
+                # Extract hostname (everything before the parenthesis)
+                paren_pos = line.find("(")
+                if paren_pos > 0:
+                    hostname = line[:paren_pos].strip()
+            else:
+                # Try Linux format
+                parts = line.split()
+                if not parts:
+                    continue
+                for p in parts:
+                    if self._is_ip(p):
+                        ip = p
+                    elif self._is_mac(p):
+                        mac = p.upper()
 
             if not ip or ip in ("255.255.255.255", "0.0.0.0", "(incomplete)"):
                 continue
