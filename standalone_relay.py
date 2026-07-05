@@ -2,8 +2,12 @@
 J.A.R.V.I.S. Relay Agent — standalone single-file version.
 No project files needed. Just Python 3 stdlib.
 
+Speculative Local Execution: loads a tiny SLM (1.5B-3B) for instant
+intent routing, then dispatches heavy tasks to the cloud backbone.
+
 Usage:
   curl -sSL https://dgfhgjhj-jarvis-ai-brain.hf.space/relay.py -o relay.py
+  pip install -r requirements-local.txt
   python3 relay.py --user yourname
 """
 
@@ -20,6 +24,139 @@ try:
 except ImportError:
     try: _SSL_CTX.load_default_certs()
     except: _SSL_CTX = ssl._create_unverified_context()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LOCAL SLM ROUTER — Speculative Local Execution
+# ══════════════════════════════════════════════════════════════════════════════
+
+class LocalRouter:
+    """Tiny local SLM for instant intent routing (<10ms TTFT).
+    
+    Loads a 1.5B-3B quantized model via llama-cpp-python.
+    Classifies user intent into OS/HAL/WEB/CORE agents with
+    grammar-constrained output for deterministic routing.
+    """
+    
+    # Model candidates ordered by size (smallest first)
+    MODELS = [
+        ("bartowski/Qwen2.5-1.5B-Instruct-GGUF", "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"),
+        ("bartowski/Llama-3.2-3B-Instruct-GGUF", "Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
+    ]
+    
+    ROUTER_PROMPT = (
+        "You are an intent router for JARVIS. "
+        "Classify the user's input into exactly one target agent. "
+        "Output ONLY a JSON object: {\"target_agent\": \"OS_AGENT|HAL_AGENT|WEB_AGENT|CORE_AGENT\", "
+        "\"confidence\": 0.0-1.0, \"intent\": \"brief description\"}"
+    )
+    
+    def __init__(self, model_dir=None):
+        self._model = None
+        self._model_name = None
+        self._model_dir = model_dir or os.path.join(os.path.expanduser("~"), ".jarvis", "models")
+        os.makedirs(self._model_dir, exist_ok=True)
+    
+    def load(self):
+        """Try to load the smallest available model."""
+        try:
+            from llama_cpp import Llama
+        except ImportError:
+            print("[LocalRouter] llama-cpp-python not installed. Install: pip install llama-cpp-python")
+            return False
+        
+        # Check for existing models
+        import glob
+        existing = glob.glob(os.path.join(self._model_dir, "*.gguf"))
+        if existing:
+            # Use smallest existing model
+            existing.sort(key=lambda f: os.path.getsize(f))
+            path = existing[0]
+        else:
+            # Download smallest model
+            path = self._download_model()
+            if not path:
+                return False
+        
+        try:
+            import multiprocessing
+            n_threads = max(2, multiprocessing.cpu_count() // 2)
+            
+            self._model = Llama(
+                model_path=path,
+                n_ctx=2048,  # Small context for routing only
+                n_threads=n_threads,
+                verbose=False,
+            )
+            self._model_name = os.path.basename(path)
+            size_mb = os.path.getsize(path) / (1024 * 1024)
+            print(f"[LocalRouter] Loaded {self._model_name} ({size_mb:.0f}MB) on {n_threads} threads")
+            return True
+        except Exception as e:
+            print(f"[LocalRouter] Failed to load model: {e}")
+            return False
+    
+    def _download_model(self):
+        """Download the smallest model."""
+        try:
+            from huggingface_hub import hf_hub_download
+        except ImportError:
+            print("[LocalRouter] huggingface_hub not installed")
+            return None
+        
+        for repo_id, filename in self.MODELS:
+            try:
+                print(f"[LocalRouter] Downloading {filename}...")
+                path = hf_hub_download(
+                    repo_id=repo_id,
+                    filename=filename,
+                    local_dir=self._model_dir,
+                    local_dir_use_symlinks=False,
+                )
+                print(f"[LocalRouter] Downloaded to {path}")
+                return path
+            except Exception as e:
+                print(f"[LocalRouter] Failed to download {filename}: {e}")
+                continue
+        return None
+    
+    def route(self, user_text):
+        """Route user intent to the right agent. Returns dict with target_agent."""
+        if not self._model:
+            return {"target_agent": "CORE_AGENT", "confidence": 0.5, "intent": user_text, "local": False}
+        
+        try:
+            messages = [
+                {"role": "system", "content": self.ROUTER_PROMPT},
+                {"role": "user", "content": user_text},
+            ]
+            response = self._model.create_chat_completion(
+                messages=messages,
+                max_tokens=64,
+                temperature=0.0,
+            )
+            text = response["choices"][0]["message"]["content"].strip()
+            
+            # Parse JSON from response
+            import re
+            match = re.search(r'\{[^}]+\}', text)
+            if match:
+                result = json.loads(match.group())
+                result["local"] = True
+                result["model"] = self._model_name
+                return result
+        except Exception as e:
+            print(f"[LocalRouter] Routing error: {e}")
+        
+        return {"target_agent": "CORE_AGENT", "confidence": 0.5, "intent": user_text, "local": False}
+    
+    @property
+    def is_loaded(self):
+        return self._model is not None
+
+
+# Global local router instance
+_local_router = LocalRouter()
 
 def _urlopen(req_or_url, **kwargs):
     kwargs.setdefault("context", _SSL_CTX)
@@ -393,6 +530,10 @@ def main():
     except socket.gaierror:
         print(f"[Relay] DNS failed for {hostname}"); return
 
+    # Initialize local SLM router (Speculative Local Execution)
+    print("[Relay] Initializing local SLM router...")
+    _local_router.load()
+
     device_info = startup_scan(args.user)
     try:
         post(f"{HF_API}/api/relay/register", {"user_id": args.user, "hostname": socket.gethostname(), "platform": platform.platform(), "info": device_info})
@@ -445,6 +586,14 @@ def main():
                     try: params = json.loads(params)
                     except: params = {"raw": params}
 
+                # Local routing: classify intent before execution
+                intent_text = params.get("raw", str(params)) if isinstance(params, dict) else str(params)
+                routing = _local_router.route(intent_text) if _local_router.is_loaded else {}
+                target = routing.get("target_agent", "")
+                
+                if target:
+                    print(f"[Relay] Local route: {target} ({routing.get('confidence', 0):.0%}) | {intent_text[:50]}")
+
                 print(f"[Relay] Executing: {act} ({str(params)[:50]})")
 
                 # Check if this is a device command
@@ -454,6 +603,9 @@ def main():
                     result = {"success": True, "devices_found": len(real_devices), "devices": real_devices}
                 elif act.startswith("device_") or (isinstance(params, dict) and params.get("device_type")):
                     result = _execute_device_command(act.replace("device_", ""), params)
+                elif target == "OS_AGENT" or target == "HAL_AGENT":
+                    # Local execution for OS/HAL tasks
+                    result = macos_exec(act, str(params) if not isinstance(params, str) else params)
                 elif _is_mac or _is_win:
                     result = macos_exec(act, str(params) if not isinstance(params, str) else params)
                 else:

@@ -38,6 +38,5 @@ edge-tts>=7.0.0
 # Web automation (Playwright)
 playwright>=1.40.0
 
-# Local SLM inference (Speculative Local Execution)
-llama-cpp-python>=0.3.0
+# huggingface-hub (for model downloads on relay)
 huggingface-hub>=0.20.0

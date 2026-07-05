@@ -1,0 +1,17 @@
+# JARVIS Local Relay — Requirements
+# Run on user's machine for Speculative Local Execution
+# Install: pip install -r requirements-local.txt
+
+# Core
+requests>=2.31.0
+psutil>=5.9.0
+huggingface-hub>=0.20.0
+
+# Local SLM inference (the magic)
+llama-cpp-python>=0.3.0
+
+# Network scanning
+netifaces>=0.11.0
+
+# Smart home protocols
+python-tapo>=0.9.0
