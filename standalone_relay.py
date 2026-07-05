@@ -520,6 +520,7 @@ def main():
     parser = argparse.ArgumentParser(description="J.A.R.V.I.S. Standalone Relay Agent")
     parser.add_argument("--user", default="local", help="Your user ID")
     parser.add_argument("--hf-url", default=HF_API, help="HF Space URL")
+    parser.add_argument("--local-model", action="store_true", help="Download and run local SLM (optional, 986MB)")
     args = parser.parse_args()
     HF_API = args.hf_url.rstrip("/")
 
@@ -530,9 +531,12 @@ def main():
     except socket.gaierror:
         print(f"[Relay] DNS failed for {hostname}"); return
 
-    # Initialize local SLM router (Speculative Local Execution)
-    print("[Relay] Initializing local SLM router...")
-    _local_router.load()
+    # Initialize local SLM router (Optional — downloads in background)
+    if args.local_model:
+        print("[Relay] Downloading local SLM (background)...")
+        threading.Thread(target=_local_router.load, daemon=True).start()
+    else:
+        print("[Relay] Local SLM disabled (using cloud routing). Use --local-model to enable.")
 
     device_info = startup_scan(args.user)
     try:
