@@ -40,6 +40,14 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const newChat = useCallback(() => {
+    setMessages([]);
+    setShowSuggestions(true);
+    setInput("");
+    setThinking(false);
+    setExecuting(false);
+  }, []);
+
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   useEffect(() => {
@@ -117,7 +125,7 @@ export default function Home() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--void)", color: "var(--text-primary)", overflow: "hidden" }}>
-      <TopBar />
+      <TopBar onNewChat={newChat} />
       <ExecutionOverlay active={executing} agent={execAgent} task={execTask} />
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
