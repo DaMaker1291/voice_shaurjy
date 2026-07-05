@@ -1155,21 +1155,28 @@ def execute_action(action: str, user_text: str = "") -> str:
         return f"Failed: {e}"
 
 
-RELAY_INSTRUCTIONS = """J.A.R.V.I.S. Relay Agent is not running on your computer.
+RELAY_INSTRUCTIONS = """I need your computer's relay agent to execute that command.
 
-To run J.A.R.V.I.S locally, execute the following command in your terminal:
+**Quick setup (takes 30 seconds):**
 
-**Mac/Linux:**
+Open your terminal and run:
+```bash
+python3 relay.py --user $USER
+```
+
+Or install fresh:
 ```bash
 curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user $USER
 ```
 
-**Windows (PowerShell):**
-```powershell
-powershell -c "curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user $env:USERNAME"
-```
+Keep the terminal open — I'll auto-discover your devices and you can control them by voice.
 
-Keep that window open. Then ask me again!"""
+**What I can control once connected:**
+  • Smart plugs (TP-Link Tapo, etc.)
+  • Lights (Philips Hue, WLED, smart bulbs)
+  • Your phone (Samsung, Android)
+  • Printers (HP, etc.)
+  • Any device on your network"""
 
 def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
     """Queue a desktop action and return relay_id. Frontend polls for result."""

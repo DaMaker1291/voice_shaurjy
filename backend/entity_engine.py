@@ -467,6 +467,50 @@ class Entity:
             self._set_mood("focused")
             if result.startswith("__NEEDS_RELAY__:"):
                 msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
+
+                # Smart clarification for device commands without relay
+                lower_text = text.lower().strip()
+                device_keywords = ["light", "lights", "plug", "switch", "turn on", "turn off", "toggle"]
+                is_device_cmd = any(kw in lower_text for kw in device_keywords)
+
+                if is_device_cmd:
+                    # Check for known devices in sovereign registry
+                    known_devices = []
+                    try:
+                        from device_manager import DeviceManager
+                        dm = DeviceManager()
+                        devices = dm.get_all_devices()
+                        for d in devices:
+                            if d.get("device_type") in ("SWITCH", "LIGHT"):
+                                known_devices.append(d)
+                    except Exception:
+                        pass
+
+                    if known_devices:
+                        device_list = "\n".join(f"  • {d['name']} ({d['ip']}) — {d.get('device_type', 'device')}" for d in known_devices)
+                        return {"action": "ask_clarify", "text": (
+                            f"I can control your smart devices, but my relay isn't connected yet.\n\n"
+                            f"**Known devices:**\n{device_list}\n\n"
+                            f"To enable control, start the relay on your Mac:\n"
+                            f"```bash\npython3 relay.py --user {self.user_id}\n```\n\n"
+                            f"Or tell me the **device name or IP** and I'll queue the command for when the relay is online."
+                        )}
+
+                    return {"action": "ask_clarify", "text": (
+                        f"I understand you want to **{lower_text.replace('turn off', 'turn off').replace('turn on', 'turn on')}** — "
+                        f"but I don't see any smart devices connected yet.\n\n"
+                        f"**What I can control:**\n"
+                        f"  • TP-Link Tapo smart plugs (P100/P110)\n"
+                        f"  • Philips Hue lights\n"
+                        f"  • WLED/ESPHome devices\n"
+                        f"  • Any HTTP-controllable device\n\n"
+                        f"**To set up:**\n"
+                        f"1. Start the relay: `python3 relay.py --user {self.user_id}`\n"
+                        f"2. I'll auto-discover devices on your network\n"
+                        f"3. Then just say *'turn off living room'* and I'll handle it\n\n"
+                        f"Would you like me to scan for devices once the relay is running?"
+                    )}
+
                 return {"text": f"{msg}", "action": "__needs_relay__"}
             if result.startswith("__RELAY__:"):
                 parts = result.split(":", 2)
@@ -687,7 +731,13 @@ Action library:
 
 The user said: {user_input}
 
-Respond. If you need more info to complete this, ask one clear question. If you can do it, just do it and report the result. Be concise."""
+Respond as JARVIS. Guidelines:
+- If you need more info to complete a task, ask ONE clear, specific question (not a list)
+- If you can do it, do it and report the result concisely
+- For device/smart home commands, mention what devices are available if known
+- Never dump raw code blocks or terminal commands unless explicitly asked
+- Be conversational but efficient — like a competent AI assistant
+- If something isn't possible, briefly explain why and suggest an alternative"""
         return self._groq_with_timeout(prompt, max_tokens=300)
 
     def _generate_combined_response(self, user_input: str, context: str, act_prompt: str) -> dict:
