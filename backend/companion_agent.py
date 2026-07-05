@@ -909,6 +909,28 @@ class CompanionAgent:
         self.memory = memory or MemoryEngine()
         self.education = EducationEngine(self.memory)
         self.empathy = EmpathyEngine(self.memory)
+        self._graph = None
+        self._cortex = None
+        self._orchestrator = None
+        self._init_memory_systems()
+
+    def _init_memory_systems(self):
+        """Initialize all memory subsystems."""
+        try:
+            from graph_memory import memory as graph_mem
+            self._graph = graph_mem
+        except ImportError:
+            pass
+        try:
+            from advanced_cortex import cortex
+            self._cortex = cortex
+        except ImportError:
+            pass
+        try:
+            from context_orchestrator import orchestrator
+            self._orchestrator = orchestrator
+        except ImportError:
+            pass
 
     def process(self, text: str, context: dict | None = None) -> dict:
         """Main entry point. Routes input through the companion pipeline.
@@ -1192,7 +1214,7 @@ class CompanionAgent:
     # ── Helpers ───────────────────────────────────────────────────────────
 
     def _store_interaction(self, text: str, response: dict) -> None:
-        """Persist the interaction as a memory entry."""
+        """Persist the interaction as a memory entry + graph memory entities."""
         try:
             importance = 6 if response.get("crisis_detected") else 4
             category = "concern" if response.get("crisis_detected") else "fact"
@@ -1217,6 +1239,42 @@ class CompanionAgent:
 
             self.memory.store(content, category, importance, source=text[:500])
             response["memory_stored"] = True
+
+            # Graph memory: extract and store entities
+            if self._graph:
+                try:
+                    self._graph.extract_and_store(text, role="user")
+                except Exception:
+                    pass
+
+            # Cortex: record temporal event
+            if self._cortex:
+                try:
+                    event_id = self._cortex.record_event(
+                        summary=text[:200],
+                        full_content=text,
+                        event_type="conversation",
+                        importance=importance,
+                    )
+                    # Auto-learn emotional state from user text
+                    if mode == "SUPPORTIVE":
+                        self._cortex.update_user_profile(
+                            "current_emotional_state",
+                            response.get("reply", "")[:100],
+                            confidence=0.6,
+                        )
+                except Exception:
+                    pass
+
+            # Orchestrator: learn from interaction
+            if self._orchestrator:
+                try:
+                    self._orchestrator.learn_from_interaction(
+                        text, response.get("reply", "")
+                    )
+                except Exception:
+                    pass
+
         except Exception:
             response["memory_stored"] = False
 

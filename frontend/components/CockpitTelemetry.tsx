@@ -329,18 +329,12 @@ function PlatformStats() {
         const base = typeof window !== "undefined"
           ? (localStorage.getItem("backend_url") || "https://dgfhgjhj-jarvis-ai-brain.hf.space")
           : "";
-        const [lat, vault, healing, grammar] = await Promise.allSettled([
-          fetch(`${base}/api/platform/latency`).then(r => r.json()),
-          fetch(`${base}/api/platform/vault`).then(r => r.json()),
-          fetch(`${base}/api/platform/healing`).then(r => r.json()),
-          fetch(`${base}/api/platform/grammars`).then(r => r.json()),
-        ]);
-        setStats({
-          latency: lat.status === "fulfilled" ? lat.value : null,
-          vault: vault.status === "fulfilled" ? vault.value : null,
-          healing: healing.status === "fulfilled" ? healing.value : null,
-          grammars: grammar.status === "fulfilled" ? grammar.value : null,
-        });
+        const res = await fetch(`${base}/api/platform/latency`).then(r => r.json()).catch(() => null);
+        const vox = await fetch(`${base}/api/platform/vault`).then(r => r.json()).catch(() => null);
+        const hel = await fetch(`${base}/api/platform/healing`).then(r => r.json()).catch(() => null);
+        const gra = await fetch(`${base}/api/platform/grammars`).then(r => r.json()).catch(() => null);
+        const cor = await fetch(`${base}/api/cortex/analytics`).then(r => r.json()).catch(() => null);
+        setStats({ latency: res, vault: vox, healing: hel, grammars: gra, cortex: cor });
       } catch {}
     };
     load();
@@ -352,54 +346,30 @@ function PlatformStats() {
 
   const sup = stats.latency?.supervisor || {};
 
+  const items = [];
+  if (sup.current) items.push({ label: "Route", value: `${sup.current}ms`, color: sup.current > 50 ? "#f59e0b" : "#34d399" });
+  if (sup.p50) items.push({ label: "P50", value: `${sup.p50}ms`, color: "rgba(255,255,255,0.3)" });
+  if (sup.p95) items.push({ label: "P95", value: `${sup.p95}ms`, color: sup.p95 > 50 ? "#f59e0b" : "#34d399" });
+  if (stats.vault?.method) items.push({ label: "Vault", value: stats.vault.method, color: "#22d3ee" });
+  if (stats.healing?.total_tools) items.push({ label: "Tools", value: String(stats.healing.total_tools), color: "#a78bfa" });
+  if (stats.grammars?.count) items.push({ label: "Grammars", value: String(stats.grammars.count), color: "#fbbf24" });
+  if (stats.cortex?.entities) items.push({ label: "Entities", value: String(stats.cortex.entities), color: "#c084fc" });
+  if (stats.cortex?.events) items.push({ label: "Events", value: String(stats.cortex.events), color: "#67e8f9" });
+  if (stats.cortex?.predictive_patterns) items.push({ label: "Patterns", value: String(stats.cortex.predictive_patterns), color: "#fbbf24" });
+  if (stats.cortex?.cross_domain_links) items.push({ label: "Cross", value: String(stats.cortex.cross_domain_links), color: "#34d399" });
+  if (stats.cortex?.emotional_points) items.push({ label: "Emotions", value: String(stats.cortex.emotional_points), color: "#f472b6" });
+
   return (
-    <div
-      style={{
-        padding: "8px 10px",
-        background: "rgba(0,0,0,0.2)",
-        borderRadius: "8px",
-        border: "1px solid rgba(139,92,246,0.15)",
-        flexShrink: 0,
-      }}
-    >
+    <div style={{ padding: "8px 10px", background: "rgba(0,0,0,0.2)", borderRadius: "8px", border: "1px solid rgba(139,92,246,0.15)", flexShrink: 0 }}>
       <div style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.35)", letterSpacing: "0.08em", marginBottom: "6px" }}>
         PLATFORM
       </div>
-
-      {/* Latency */}
-      {sup && (
-        <div style={{ display: "flex", gap: "12px", marginBottom: "4px", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.4)" }}>
-            Route: <span style={{ color: sup.current > 50 ? "#f59e0b" : "#34d399" }}>{sup.current || 0}ms</span>
-          </span>
-          <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
-            P50: {sup.p50 || 0}ms
-          </span>
-          <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
-            P95: <span style={{ color: sup.p95 > 50 ? "#f59e0b" : "#34d399" }}>{sup.p95 || 0}ms</span>
-          </span>
-          {stats.latency?.sla_violations > 0 && (
-            <span style={{ fontSize: "9px", fontFamily: "monospace", color: "#f87171" }}>
-              SLA breaks: {stats.latency.sla_violations}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Vault + Healing + Grammars */}
       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-        <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
-          Vault: <span style={{ color: "#22d3ee" }}>{stats.vault?.method || "—"}</span>
-        </span>
-        <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
-          Tools: <span style={{ color: "#a78bfa" }}>{stats.healing?.total_tools || 0}</span>
-        </span>
-        <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
-          Heals: <span style={{ color: stats.healing?.successful_heals > 0 ? "#34d399" : "rgba(255,255,255,0.3)" }}>{stats.healing?.successful_heals || 0}/{stats.healing?.total_attempts || 0}</span>
-        </span>
-        <span style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
-          Grammars: <span style={{ color: "#fbbf24" }}>{stats.grammars?.count || 0}</span>
-        </span>
+        {items.map((it, i) => (
+          <span key={i} style={{ fontSize: "9px", fontFamily: "monospace", color: "rgba(255,255,255,0.3)" }}>
+            {it.label}: <span style={{ color: it.color }}>{it.value}</span>
+          </span>
+        ))}
       </div>
     </div>
   );

@@ -57,3 +57,6 @@ hf-temp/
 backend/.browser_profiles/
 .scheduled_messages.json
 backend/.entity_data/memory_test.json
+*.db
+*.db-shm
+*.db-wal

@@ -2052,3 +2052,414 @@ async def companion_crisis_resources(country: str = "US"):
         return companion.empathy.get_crisis_resources(country)
     except Exception as e:
         return {"error": str(e)}
+
+
+# ── Hybrid Graph Memory Routes ──────────────────────────────────
+
+@app.get("/api/graph/stats")
+async def graph_stats():
+    try:
+        from graph_memory import memory
+        return memory.get_stats()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/graph/search")
+async def graph_search(query: str, limit: int = 20):
+    try:
+        from graph_memory import memory
+        return {"results": memory.search(query, limit)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/graph/traverse")
+async def graph_traverse(start: str, max_hops: int = 3, node_type: str = None):
+    try:
+        from graph_memory import memory
+        return {"results": memory.multi_hop_recall(start, max_hops, node_type)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/graph/context")
+async def graph_context(agent_type: str, user_text: str):
+    try:
+        from graph_memory import memory
+        return {"context": memory.inject_context(agent_type, user_text)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/graph/profile")
+async def graph_profile():
+    try:
+        from graph_memory import memory
+        return memory.get_user_profile()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/graph/worktree")
+async def graph_worktree(root: str = None):
+    try:
+        from graph_memory import memory
+        if root:
+            return {"tree": memory.get_worktree(root)}
+        return {"due": memory.get_due_reviews()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/graph/worktree/create")
+async def graph_worktree_create(root_concept: str, branch_name: str, parent_id: str = None):
+    try:
+        from graph_memory import memory
+        branch_id = memory.create_branch(root_concept, branch_name, parent_id)
+        return {"created": True, "id": branch_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/graph/worktree/grow")
+async def graph_worktree_grow(branch_id: str, child_concept: str):
+    try:
+        from graph_memory import memory
+        child_id = memory.grow_branch(branch_id, child_concept)
+        return {"grown": True, "child_id": child_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/graph/worktree/review")
+async def graph_worktree_review(branch_id: str, quality: int):
+    try:
+        from graph_memory import memory
+        memory.update_mastery(branch_id, quality)
+        return {"reviewed": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/graph/extract")
+async def graph_extract(text: str, role: str = "user"):
+    try:
+        from graph_memory import memory
+        entities = memory.extract_and_store(text, role)
+        return {"extracted": entities, "count": len(entities)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/graph/nodes")
+async def graph_nodes(type: str = None, limit: int = 50):
+    try:
+        from graph_memory import memory
+        return {"nodes": memory.find_nodes(type=type, limit=limit)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/graph/edges")
+async def graph_edges(node_id: str, direction: str = "both"):
+    try:
+        from graph_memory import memory
+        return {"edges": memory.get_edges(node_id, direction)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/graph/shortest-path")
+async def graph_shortest_path(source: str, target: str):
+    try:
+        from graph_memory import memory
+        return {"path": memory.shortest_path(source, target)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── Advanced Cortex Routes ──────────────────────────────────────
+
+@app.get("/api/cortex/analytics")
+async def cortex_analytics():
+    try:
+        from advanced_cortex import cortex
+        return cortex.get_analytics()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/context")
+async def cortex_context(user_text: str, agent_type: str = "CORE_AGENT",
+                         max_tokens: int = 2000):
+    try:
+        from advanced_cortex import cortex
+        return {"context": cortex.assemble_context(user_text, agent_type, max_tokens=max_tokens)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/emotional/arc")
+async def cortex_emotional_arc(hours: float = 168, domain: str = None):
+    try:
+        from advanced_cortex import cortex
+        return {"arc": cortex.get_emotional_arc(hours, domain)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/emotional/summary")
+async def cortex_emotional_summary(hours: float = 168):
+    try:
+        from advanced_cortex import cortex
+        return cortex.get_emotional_summary(hours)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/emotional/shifts")
+async def cortex_emotional_shifts(threshold: float = 0.3):
+    try:
+        from advanced_cortex import cortex
+        return {"shifts": cortex.detect_emotional_shifts(threshold)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/cortex/events/record")
+async def cortex_record_event(summary: str, event_type: str = "observation",
+                              cause_event_id: str = None, domain: str = None,
+                              importance: float = 5.0):
+    try:
+        from advanced_cortex import cortex
+        eid = cortex.record_event(summary, event_type=event_type,
+                                  cause_event_id=cause_event_id,
+                                  domain=domain, importance=importance)
+        return {"event_id": eid, "recorded": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/events/chain")
+async def cortex_causal_chain(event_id: str, max_depth: int = 10):
+    try:
+        from advanced_cortex import cortex
+        return {"chain": cortex.get_causal_chain(event_id, max_depth)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/events/timeline")
+async def cortex_timeline(domain: str = None, hours: float = 168):
+    try:
+        from advanced_cortex import cortex
+        return {"events": cortex.get_temporal_context(hours=hours, domain=domain)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/cortex/predictions/learn")
+async def cortex_learn_prediction(trigger: str, outcome: str,
+                                  domain: str = "general", confidence: float = 0.5):
+    try:
+        from advanced_cortex import cortex
+        pid = cortex.learn_predictive_pattern(trigger, outcome, domain, confidence)
+        return {"pattern_id": pid, "learned": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/predictions/anticipate")
+async def cortex_anticipate(context: str, limit: int = 5):
+    try:
+        from advanced_cortex import cortex
+        return {"predictions": cortex.anticipate(context, limit)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/cortex/abstractions/create")
+async def cortex_create_abstraction(level: str, name: str, description: str = "",
+                                    parent_id: str = None):
+    try:
+        from advanced_cortex import cortex
+        aid = cortex.create_abstraction(level, name, description, parent_id)
+        return {"abstraction_id": aid, "created": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/abstractions/tree")
+async def cortex_abstraction_tree():
+    try:
+        from advanced_cortex import cortex
+        return {"tree": cortex.get_abstraction_tree()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/cortex/cross-domain/link")
+async def cortex_cross_domain_link(source_domain: str, target_domain: str,
+                                   insight: str):
+    try:
+        from advanced_cortex import cortex
+        lid = cortex.create_cross_domain_link(source_domain, target_domain, insight)
+        return {"link_id": lid, "created": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/cross-domain/insights")
+async def cortex_cross_domain_insights(domain: str = None):
+    try:
+        from advanced_cortex import cortex
+        return {"insights": cortex.get_cross_domain_insights(domain)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/cross-domain/synthesize")
+async def cortex_synthesize_domains():
+    try:
+        from advanced_cortex import cortex
+        return cortex.synthesize_domains()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/profile")
+async def cortex_user_profile():
+    try:
+        from advanced_cortex import cortex
+        return cortex.get_user_profile()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/profile/personality")
+async def cortex_personality_summary():
+    try:
+        from advanced_cortex import cortex
+        return {"personality": cortex.get_personality_summary()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/cortex/consolidate")
+async def cortex_consolidate(force: bool = False):
+    try:
+        from advanced_cortex import cortex
+        return cortex.consolidate_memories(force)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/drift")
+async def cortex_concept_drift():
+    try:
+        from advanced_cortex import cortex
+        return {"drifts": cortex.detect_concept_drift()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/cortex/privacy/set")
+async def cortex_set_privacy(entity_id: str = None, domain: str = None,
+                             rule_type: str = "allow", target: str = "all"):
+    try:
+        from advanced_cortex import cortex
+        cortex.set_privacy(entity_id, domain, rule_type, target)
+        return {"set": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/privacy/check")
+async def cortex_check_privacy(entity_id: str = None, domain: str = None,
+                               action: str = "read"):
+    try:
+        from advanced_cortex import cortex
+        allowed = cortex.check_privacy(entity_id, domain, action)
+        return {"allowed": allowed}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/privacy/shared-context")
+async def cortex_shared_context(privacy_level: int = 1, domain: str = None):
+    try:
+        from advanced_cortex import cortex
+        return cortex.get_shared_context(privacy_level, domain)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/domain/timeline")
+async def cortex_domain_timeline(domain: str, limit: int = 100):
+    try:
+        from advanced_cortex import cortex
+        return {"events": cortex.get_domain_timeline(domain, limit)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/cortex/entities/upsert")
+async def cortex_upsert_entity(name: str, entity_type: str, description: str = "",
+                               importance: float = 5.0, privacy: int = 1):
+    try:
+        from advanced_cortex import cortex
+        eid = cortex.upsert_entity(name, entity_type, description,
+                                   importance=importance, privacy=privacy)
+        return {"entity_id": eid, "upserted": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/entities/search")
+async def cortex_search_entities(query: str, limit: int = 20):
+    try:
+        from advanced_cortex import cortex
+        return {"results": cortex.search_entities(query, limit)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/cortex/entities/{entity_id}/context")
+async def cortex_entity_context(entity_id: str):
+    try:
+        from advanced_cortex import cortex
+        return cortex.get_entity_context(entity_id)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── Context Orchestrator Routes ──────────────────────────────────
+
+@app.get("/api/orchestrator/context")
+async def orchestrator_context(user_text: str, agent_type: str = "CORE_AGENT",
+                                privacy_level: int = 1):
+    try:
+        from context_orchestrator import orchestrator
+        return {"context": orchestrator.assemble_context(user_text, agent_type, privacy_level=privacy_level)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/orchestrator/analytics")
+async def orchestrator_analytics():
+    try:
+        from context_orchestrator import orchestrator
+        return orchestrator.get_context_analytics()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/orchestrator/learn")
+async def orchestrator_learn(user_text: str, agent_response: str):
+    try:
+        from context_orchestrator import orchestrator
+        orchestrator.learn_from_interaction(user_text, agent_response)
+        return {"learned": True}
+    except Exception as e:
+        return {"error": str(e)}

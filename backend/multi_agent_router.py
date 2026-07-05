@@ -553,6 +553,31 @@ class RouterEngine:
             f"PRIMARY_TARGETS: {json.dumps(routing_packet.get('execution_context', {}).get('primary_targets', []))}",
             f"VARIABLES: {json.dumps(routing_packet.get('execution_context', {}).get('actionable_variables', {}))}",
         ]
+
+        # Use Context Orchestrator for multi-layer context assembly
+        try:
+            from context_orchestrator import orchestrator
+            target = routing_packet.get("target_agent", "OS_AGENT")
+            user_text = routing_packet.get("extracted_intent", "")
+            ctx_str = orchestrator.assemble_context(
+                user_text=user_text,
+                agent_type=target,
+                max_tokens=1500,
+            )
+            if ctx_str:
+                lines.append(f"[CORTEX_CONTEXT]:\n{ctx_str[:2000]}")
+        except Exception:
+            # Fallback to graph memory
+            try:
+                from graph_memory import memory as graph_mem
+                target = routing_packet.get("target_agent", "OS_AGENT")
+                user_text = routing_packet.get("extracted_intent", "")
+                ctx_str = graph_mem.inject_context(target, user_text)
+                if ctx_str:
+                    lines.append(f"[USER_CONTEXT]: {ctx_str[:500]}")
+            except Exception:
+                pass
+
         if context:
             lines.append(f"RELAY_CONTEXT: {json.dumps(context)[:800]}")
         return "\n".join(lines)
