@@ -203,8 +203,38 @@ def _mac_search(query, base_url):
 def _open_app(name):
     if _is_win:
         return run(f"start \"\" \"{name}\"")
-    run(f'open -a "{name}"', timeout=10)
-    return f"Opened {name}"
+
+    # Map common names to actual macOS app names
+    APP_MAP = {
+        "vs code": "Visual Studio Code", "vscode": "Visual Studio Code", "visual studio code": "Visual Studio Code",
+        "appcleaner": "AppCleaner", "app cleaner": "AppCleaner",
+        "spotify": "Spotify", "chrome": "Google Chrome", "firefox": "Firefox",
+        "safari": "Safari", "terminal": "Terminal", "iterm": "iTerm2", "iterm2": "iTerm2",
+        "slack": "Slack", "discord": "Discord", "zoom": "zoom.us",
+        "figma": "Figma", "notion": "Notion", "obsidian": "Obsidian",
+        "finder": "Finder", "preview": "Preview", "calculator": "Calculator",
+        "textedit": "TextEdit", "pages": "Pages", "numbers": "Numbers", "keynote": "Keynote",
+        "xcode": "Xcode", "android studio": "Android Studio", "intellij": "IntelliJ IDEA",
+        "pycharm": "PyCharm", "webstorm": "WebStorm", "sublime": "Sublime Text",
+        "word": "Microsoft Word", "excel": "Microsoft Excel", "powerpoint": "Microsoft PowerPoint",
+        "outlook": "Microsoft Outlook", "teams": "Microsoft Teams",
+        "photoshop": "Adobe Photoshop 2024", "illustrator": "Adobe Illustrator 2024",
+        "lightroom": "Adobe Lightroom Classic", "premiere": "Adobe Premiere Pro 2024",
+    }
+
+    name_lower = name.lower().strip()
+    resolved = APP_MAP.get(name_lower, name)
+
+    # Try the resolved name first
+    result = run(f'open -a "{resolved}"', timeout=10)
+    if "Unable to find" in result or "does not exist" in result:
+        # Try original name
+        result = run(f'open -a "{name}"', timeout=10)
+    if "Unable to find" in result or "does not exist" in result:
+        # Try opening as a URL/file
+        result = run(f'open "{name}"', timeout=10)
+
+    return f"Opened {resolved}"
 
 def _send_wol(mac):
     mac = mac.replace(":","").replace("-","")
@@ -601,7 +631,13 @@ def main():
                 intent_text = params.get("raw", str(params)) if isinstance(params, dict) else str(params)
                 routing = _local_router.route(intent_text) if _local_router.is_loaded else {}
                 target = routing.get("target_agent", "")
-                
+
+                # Extract clean params for macos_exec (avoid passing dict as string)
+                if isinstance(params, dict):
+                    clean_params = params.get("raw", params.get("text", str(params)))
+                else:
+                    clean_params = str(params)
+
                 if target:
                     print(f"[Relay] Local route: {target} ({routing.get('confidence', 0):.0%}) | {intent_text[:50]}")
 
@@ -616,9 +652,9 @@ def main():
                     result = _execute_device_command(act.replace("device_", ""), params)
                 elif target == "OS_AGENT" or target == "HAL_AGENT":
                     # Local execution for OS/HAL tasks
-                    result = macos_exec(act, str(params) if not isinstance(params, str) else params)
+                    result = macos_exec(act, clean_params)
                 elif _is_mac or _is_win:
-                    result = macos_exec(act, str(params) if not isinstance(params, str) else params)
+                    result = macos_exec(act, clean_params)
                 else:
                     result = f"Unknown action: {act}"
 
