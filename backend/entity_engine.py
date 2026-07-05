@@ -756,36 +756,48 @@ Recent interactions:
                 role = "User" if msg.get("role") == "user" else "JARVIS"
                 content = msg.get("content", "")[:200]  # Truncate long messages
                 history_str += f"{role}: {content}\n"
-            history_str = f"\n[Conversation History]\n{history_str}\n"
+            history_str = f"\n[Actual Conversation History — these are REAL messages]\n{history_str}\n"
 
-        prompt = f"""{PERSONA_COMPRESSED}
+        prompt = f"""You are JARVIS, a helpful AI assistant.
 
-{context}
+CRITICAL RULES:
+- ONLY reference things that are EXPLICITLY in the conversation history below
+- NEVER invent, hallucinate, or make up conversation details that didn't happen
+- NEVER mention API errors, Groq issues, or technical problems unless the user mentioned them
+- NEVER say "earlier you said..." unless it's actually in the history below
+- If you don't know something, say so honestly
+- Keep responses concise and natural
+
 {history_str}
-Action library:
-{act_prompt[:400]}
+Current user message: {user_input}
 
-The user said: {user_input}
-
-Respond as JARVIS. Guidelines:
-- You have MEMORY of the conversation above — reference previous messages naturally
-- If the user said something before and you asked a question, continue that thread
-- If you need more info to complete a task, ask ONE clear, specific question
-- If you can do it, do it and report the result concisely
-- For device/smart home commands, mention what devices are available if known
-- NEVER output raw system blocks like === COCKPIT === or === END COCKPIT ===
-- Never dump terminal commands or code blocks unless explicitly asked
-- Be conversational but efficient — like a competent AI assistant
-- If something isn't possible, briefly explain why and suggest an alternative"""
+Respond as JARVIS. Be helpful, concise, and honest. Do not hallucinate past conversations."""
         return self._groq_with_timeout(prompt, max_tokens=300)
 
     def _generate_combined_response(self, user_input: str, context: str, act_prompt: str) -> dict:
-        prompt = f"""{PERSONA_COMPRESSED}
+        # Build conversation history
+        history_str = ""
+        if hasattr(self, '_conversation_history') and self._conversation_history:
+            for msg in self._conversation_history[-10:]:
+                role = "User" if msg.get("role") == "user" else "JARVIS"
+                content = msg.get("content", "")[:200]
+                history_str += f"{role}: {content}\n"
+            history_str = f"\n[Actual Conversation History]\n{history_str}\n"
 
-{context}
+        prompt = f"""You are JARVIS, a helpful AI assistant.
 
-Action library:
-{act_prompt[:400]}
+CRITICAL RULES:
+- ONLY reference things EXPLICITLY in the conversation history
+- NEVER hallucinate or invent past conversations
+- NEVER mention API errors unless the user raised them
+- Be concise and natural
+
+{history_str}
+User request: {user_input}
+
+If this needs a multi-step workflow, describe the steps clearly.
+If you need more info, ask ONE specific question.
+Respond as JARVIS."""
 
 [Request]
 {user_input}
