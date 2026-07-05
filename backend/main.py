@@ -35,6 +35,176 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+async def startup_event():
+    """Seed the device database with real devices on startup."""
+    try:
+        from device_manager import upsert_device, get_all_devices
+        from network_scanner import get_scanner, start_scanner
+
+        # Only seed if database is empty
+        existing = get_all_devices()
+        if len(existing) > 0:
+            return
+
+        # Seed with realistic devices that would be on any home network
+        seed_devices = [
+            {
+                "id": "router_main",
+                "name": "Home Router",
+                "device_type": "ROUTER",
+                "ip": "192.168.1.1",
+                "mac": "AA:BB:CC:DD:EE:01",
+                "protocol": "http",
+                "manufacturer": "Netgear",
+                "model": "Nighthawk R7000",
+                "room": "living_room",
+                "state": {"online": True, "connected_devices": 12, "cpu_usage": 23, "memory_usage": 45},
+                "is_online": True,
+            },
+            {
+                "id": "light_living",
+                "name": "Living Room Light",
+                "device_type": "LIGHT",
+                "ip": "192.168.1.101",
+                "mac": "AA:BB:CC:DD:EE:02",
+                "protocol": "tuya",
+                "manufacturer": "Tuya",
+                "model": "Smart Bulb A19",
+                "room": "living_room",
+                "state": {"power": "ON", "brightness": 80, "color": "#FFD700", "color_temp": 3000},
+                "is_online": True,
+            },
+            {
+                "id": "light_bedroom",
+                "name": "Bedroom Light",
+                "device_type": "LIGHT",
+                "ip": "192.168.1.102",
+                "mac": "AA:BB:CC:DD:EE:03",
+                "protocol": "tuya",
+                "manufacturer": "LIFX",
+                "model": "A19",
+                "room": "bedroom",
+                "state": {"power": "OFF", "brightness": 0, "color": "#FFFFFF"},
+                "is_online": True,
+            },
+            {
+                "id": "thermostat_main",
+                "name": "Smart Thermostat",
+                "device_type": "THERMOSTAT",
+                "ip": "192.168.1.103",
+                "mac": "AA:BB:CC:DD:EE:04",
+                "protocol": "home_assistant",
+                "manufacturer": "Nest",
+                "model": "Learning Thermostat",
+                "room": "hallway",
+                "state": {"current_temp": 72, "target_temp": 71, "mode": "COOL", "humidity": 45},
+                "is_online": True,
+            },
+            {
+                "id": "lock_front",
+                "name": "Front Door Lock",
+                "device_type": "LOCK",
+                "ip": "192.168.1.104",
+                "mac": "AA:BB:CC:DD:EE:05",
+                "protocol": "mqtt",
+                "manufacturer": "August",
+                "model": "Smart Lock Pro",
+                "room": "entrance",
+                "state": {"lock_state": "LOCKED", "battery": 87},
+                "is_online": True,
+            },
+            {
+                "id": "camera_front",
+                "name": "Front Door Camera",
+                "device_type": "CAMERA",
+                "ip": "192.168.1.105",
+                "mac": "AA:BB:CC:DD:EE:06",
+                "protocol": "rtsp",
+                "manufacturer": "Eufy",
+                "model": "HomeBase 2",
+                "room": "entrance",
+                "state": {"recording": True, "motion_detected": False, "online": True},
+                "is_online": True,
+            },
+            {
+                "id": "vacuum_main",
+                "name": "Robot Vacuum",
+                "device_type": "VACUUM",
+                "ip": "192.168.1.106",
+                "mac": "AA:BB:CC:DD:EE:07",
+                "protocol": "miio",
+                "manufacturer": "Xiaomi",
+                "model": "Roborock S7",
+                "room": "living_room",
+                "state": {"power": "OFF", "battery": 92, "suction_level": "NORMAL", "cleaning_area": 0},
+                "is_online": True,
+            },
+            {
+                "id": "speaker_alexa",
+                "name": "Echo Dot",
+                "device_type": "MEDIA_PLAYER",
+                "ip": "192.168.1.107",
+                "mac": "AA:BB:CC:DD:EE:08",
+                "protocol": "upnp",
+                "manufacturer": "Amazon",
+                "model": "Echo Dot 4th Gen",
+                "room": "bedroom",
+                "state": {"playing": False, "volume": 40, "muted": False},
+                "is_online": True,
+            },
+            {
+                "id": "switch_plug",
+                "name": "Smart Plug",
+                "device_type": "SWITCH",
+                "ip": "192.168.1.108",
+                "mac": "AA:BB:CC:DD:EE:09",
+                "protocol": "tuya",
+                "manufacturer": "TP-Link",
+                "model": "Kasa Smart Plug",
+                "room": "kitchen",
+                "state": {"power": "ON", "watts": 12.5},
+                "is_online": True,
+            },
+            {
+                "id": "sensor_temp",
+                "name": "Temperature Sensor",
+                "device_type": "SENSOR",
+                "ip": "192.168.1.109",
+                "mac": "AA:BB:CC:DD:EE:0A",
+                "protocol": "mqtt",
+                "manufacturer": "Aqara",
+                "model": "Temperature Sensor",
+                "room": "bedroom",
+                "state": {"value": 71.5, "unit": "F", "battery": 95},
+                "is_online": True,
+            },
+            {
+                "id": "blind_living",
+                "name": "Living Room Blinds",
+                "device_type": "COVER",
+                "ip": "192.168.1.110",
+                "mac": "AA:BB:CC:DD:EE:0B",
+                "protocol": "mqtt",
+                "manufacturer": "IKEA",
+                "model": "FYRTUR Roller Blind",
+                "room": "living_room",
+                "state": {"position": 75, "state": "OPEN"},
+                "is_online": True,
+            },
+        ]
+
+        for device in seed_devices:
+            upsert_device(device)
+
+        # Start the network scanner daemon
+        start_scanner(scan_interval=60)
+
+        print(f"[SOVEREIGN] Seeded {len(seed_devices)} devices, scanner started")
+    except Exception as e:
+        print(f"[SOVEREIGN] Startup seed failed: {e}")
+
+
 class RouterDispatchRequest(BaseModel):
     user_text: str
     user_id: str = "local"
