@@ -799,19 +799,6 @@ If this needs a multi-step workflow, describe the steps clearly.
 If you need more info, ask ONE specific question.
 Respond as JARVIS."""
 
-[Request]
-{user_input}
-
-Respond with ONLY a JSON object:
-- "text": your response (dry, witty, 1-2 sentences)
-- "strategies": array of strategy objects with: name, description, pros, cons, complexity (1-10), key_steps
-- "follow_up": array of 1-3 follow-up question strings
-- "task": optional task plan object (type=ask|notify|complete, question, text)
-
-For complex requests like planning, research, building: ALWAYS include strategies with pros/cons.
-Simple requests can omit strategies.
-
-JSON:"""
         raw = self._groq_with_timeout(prompt, max_tokens=600)
         m = re.search(r'\{.*\}', raw, re.DOTALL)
         if m:
