@@ -7,6 +7,7 @@ const TopBar = dynamic(() => import("@/components/cockpit/TopBar"), { ssr: false
 const AgentGraph = dynamic(() => import("@/components/cockpit/AgentGraph"), { ssr: false });
 const TelemetryPanel = dynamic(() => import("@/components/cockpit/TelemetryPanel"), { ssr: false });
 const InterceptBar = dynamic(() => import("@/components/cockpit/InterceptBar"), { ssr: false });
+const KineticOrb = dynamic(() => import("@/components/cockpit/KineticOrb"), { ssr: false });
 
 interface Message { role: string; content: string; ts: number }
 
@@ -101,24 +102,11 @@ export default function Home() {
           {/* Messages */}
           <div style={{ flex: 1, overflowY: "auto", padding: "24px 32px", position: "relative", zIndex: 1 }}>
             {messages.length === 0 && (
-              <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-                {/* Kinetic Orb */}
-                <div style={{ position: "relative", width: 80, height: 80 }}>
-                  <div style={{
-                    width: 80, height: 80, borderRadius: "50%",
-                    background: "radial-gradient(circle, rgba(0,255,102,0.12) 0%, transparent 70%)",
-                    border: "1px solid rgba(0,255,102,0.15)",
-                    animation: "orb-breathe 3s ease-in-out infinite",
-                    boxShadow: "0 0 40px rgba(0,255,102,0.08)",
-                  }} />
-                  <div style={{
-                    position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
-                    width: 40, height: 40, borderRadius: "50%",
-                    background: "radial-gradient(circle, rgba(0,255,102,0.2) 0%, transparent 70%)",
-                    animation: "orb-breathe 3s ease-in-out infinite 0.5s",
-                  }} />
-                </div>
+              <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+                {/* WebGL Kinetic Orb */}
+                <KineticOrb size={280} particleCount={600} speed={0.4} />
                 <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em" }}>AWAITING INPUT</div>
+                <div style={{ fontSize: 9, color: "var(--text-muted)", opacity: 0.4, fontFamily: "var(--font-mono)" }}>Move mouse over orb to interact</div>
               </div>
             )}
 

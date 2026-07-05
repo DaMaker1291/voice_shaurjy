@@ -2,6 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const PulseMap = dynamic(() => import("@/components/cockpit/PulseMap"), { ssr: false });
 
 const API = "";
 
@@ -19,22 +22,22 @@ interface Device {
 }
 
 const DEVICE_META: Record<string, { icon: string; color: string; label: string }> = {
-  ROUTER: { icon: "🌐", color: "#6366f1", label: "Router" },
-  SWITCH: { icon: "🔌", color: "#a78bfa", label: "Smart Plug" },
-  PRINTER: { icon: "🖨️", color: "#f59e0b", label: "Printer" },
-  PHONE: { icon: "📱", color: "#ec4899", label: "Phone" },
-  SENSOR: { icon: "📡", color: "#22c55e", label: "Sensor" },
-  HUB: { icon: "💻", color: "#06b6d4", label: "Hub" },
-  LIGHT: { icon: "💡", color: "#eab308", label: "Light" },
-  THERMOSTAT: { icon: "🌡️", color: "#ef4444", label: "Thermostat" },
-  LOCK: { icon: "🔒", color: "#22c55e", label: "Lock" },
-  CAMERA: { icon: "📷", color: "#f59e0b", label: "Camera" },
-  VACUUM: { icon: "🤖", color: "#a78bfa", label: "Vacuum" },
-  MEDIA_PLAYER: { icon: "📺", color: "#ec4899", label: "Media" },
-  COVER: { icon: "🪟", color: "#06b6d4", label: "Cover" },
+  ROUTER: { icon: "🌐", color: "#667085", label: "Router" },
+  SWITCH: { icon: "🔌", color: "#00FF66", label: "Smart Plug" },
+  PRINTER: { icon: "🖨️", color: "#FFB300", label: "Printer" },
+  PHONE: { icon: "📱", color: "#00FF66", label: "Phone" },
+  SENSOR: { icon: "📡", color: "#667085", label: "Sensor" },
+  HUB: { icon: "💻", color: "#667085", label: "Hub" },
+  LIGHT: { icon: "💡", color: "#FFB300", label: "Light" },
+  THERMOSTAT: { icon: "🌡️", color: "#FF3333", label: "Thermostat" },
+  LOCK: { icon: "🔒", color: "#00FF66", label: "Lock" },
+  CAMERA: { icon: "📷", color: "#FFB300", label: "Camera" },
+  VACUUM: { icon: "🤖", color: "#667085", label: "Vacuum" },
+  MEDIA_PLAYER: { icon: "📺", color: "#00FF66", label: "Media" },
+  COVER: { icon: "🪟", color: "#667085", label: "Cover" },
 };
 
-const getMeta = (type: string) => DEVICE_META[type] || { icon: "📡", color: "#71717a", label: type };
+const getMeta = (type: string) => DEVICE_META[type] || { icon: "📡", color: "#667085", label: type };
 
 export default function SovereignPage() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -92,167 +95,169 @@ export default function SovereignPage() {
   const offline = devices.filter(d => !d.is_online);
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "var(--font-inter), system-ui, sans-serif" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--void)", color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>
       <style jsx global>{`
-        @keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .device-card { animation: fade-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
-        .device-card:nth-child(1) { animation-delay: 0ms; }
-        .device-card:nth-child(2) { animation-delay: 30ms; }
-        .device-card:nth-child(3) { animation-delay: 60ms; }
-        .device-card:nth-child(4) { animation-delay: 90ms; }
-        .device-card:nth-child(5) { animation-delay: 120ms; }
-        .card-hover { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
-        .card-hover:hover { border-color: rgba(139,92,246,0.2); background: rgba(139,92,246,0.03); }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.2); border-radius: 2px; }
+        @keyframes fade-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes node-activate { 0% { box-shadow: 0 0 0 0 rgba(0,255,102,0.4); } 100% { box-shadow: 0 0 0 8px rgba(0,255,102,0); } }
+        .animate-fade { animation: fade-in 0.25s cubic-bezier(0.16,1,0.3,1) both; }
+        .device-node { animation: fade-in 0.3s cubic-bezier(0.16,1,0.3,1) both; }
+        .device-node:nth-child(1) { animation-delay: 0ms; }
+        .device-node:nth-child(2) { animation-delay: 30ms; }
+        .device-node:nth-child(3) { animation-delay: 60ms; }
+        .device-node:nth-child(4) { animation-delay: 90ms; }
+        .device-node:nth-child(5) { animation-delay: 120ms; }
+        .device-node:nth-child(6) { animation-delay: 150ms; }
+        .device-node:nth-child(7) { animation-delay: 180ms; }
+        .device-node:nth-child(8) { animation-delay: 210ms; }
+        .device-node:nth-child(9) { animation-delay: 240ms; }
+        .device-node:nth-child(10) { animation-delay: 270ms; }
       `}</style>
 
       {/* Header */}
-      <header style={{ position: "sticky", top: 0, zIndex: 100, borderBottom: "1px solid var(--border-subtle)", background: "rgba(9,9,11,0.85)", backdropFilter: "blur(20px) saturate(180%)" }}>
-        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 24px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <Link href="/" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", color: "var(--text-muted)", textDecoration: "none", transition: "all 0.15s", fontSize: 14 }}>
-              ←
-            </Link>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: online.length > 0 ? "var(--success)" : "var(--error)", boxShadow: `0 0 12px ${online.length > 0 ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}`, transition: "all 0.3s" }} />
-              <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em" }}>Network</span>
-            </div>
-            <span style={{ fontSize: 11, color: "var(--text-muted)", padding: "3px 8px", borderRadius: 6, background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)" }}>
-              {online.length} online · {devices.length} total
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {msg && <span style={{ fontSize: 11, color: "var(--accent)", fontWeight: 500 }}>{msg}</span>}
-            <button onClick={scan} disabled={scanning} style={{ padding: "6px 16px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: scanning ? 0.5 : 1, transition: "all 0.15s", display: "flex", alignItems: "center", gap: 6 }}>
-              {scanning && <span style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
-              Scan
-            </button>
-          </div>
+      <header style={{ height: 32, background: "var(--surface)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Link href="/" style={{ fontSize: 10, color: "var(--text-muted)", textDecoration: "none" }}>← BACK</Link>
+          <div style={{ width: 1, height: 14, background: "var(--border)" }} />
+          <span style={{ fontSize: 10, color: "var(--neon-green)", letterSpacing: "0.1em", fontWeight: 600 }}>NETWORK</span>
+          <span style={{ fontSize: 9, color: "var(--text-muted)" }}>{online.length}/{devices.length}</span>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {msg && <span style={{ fontSize: 9, color: "var(--neon-green)" }}>{msg}</span>}
+          <button onClick={scan} disabled={scanning} style={{ padding: "3px 10px", borderRadius: 3, fontSize: 9, fontWeight: 600, fontFamily: "var(--font-mono)", cursor: "pointer", background: scanning ? "var(--neon-green-dim)" : "var(--surface-raised)", color: scanning ? "var(--neon-green)" : "var(--text-muted)", border: "1px solid var(--border)", letterSpacing: "0.05em", opacity: scanning ? 0.5 : 1 }}>
+            {scanning ? "SCAN..." : "SCAN"}
+          </button>
+          <Link href="/agents" style={{ padding: "3px 8px", borderRadius: 3, fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--text-muted)", textDecoration: "none", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>AGENTS →</Link>
         </div>
       </header>
 
       {/* Content */}
-      <main style={{ flex: 1, overflow: "auto", padding: 24 }}>
-        {devices.length === 0 && !loading && (
-          <div style={{ textAlign: "center", padding: "80px 20px", animation: "fade-up 0.4s ease both" }}>
-            <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.2 }}>📡</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8 }}>No devices found</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>Run the relay on your machine to discover real devices</div>
-            <button onClick={scan} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Scan Network</button>
-          </div>
-        )}
+      <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          {/* Empty state */}
+          {devices.length === 0 && !loading && (
+            <div style={{ textAlign: "center", padding: "80px 20px" }}>
+              <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.3 }}>📡</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6, fontWeight: 600 }}>NO DEVICES DETECTED</div>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", opacity: 0.6, marginBottom: 16 }}>Run the relay on your machine to discover real devices</div>
+              <button onClick={scan} style={{ padding: "6px 16px", borderRadius: 4, fontSize: 10, fontWeight: 600, fontFamily: "var(--font-mono)", cursor: "pointer", background: "var(--neon-green)", color: "#000", border: "none" }}>SCAN NETWORK</button>
+            </div>
+          )}
 
-        {devices.length > 0 && (
-          <div style={{ maxWidth: 900, margin: "0 auto" }}>
-            {/* Online devices */}
-            {online.length > 0 && (
-              <div style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success)" }} />
-                  Online ({online.length})
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-                  {online.map(device => {
-                    const meta = getMeta(device.device_type);
-                    const isOn = device.state?.is_on ?? device.state?.power_on ?? null;
-                    return (
-                      <div key={device.id} className="device-card card-hover" style={{ padding: "16px 18px", borderRadius: 12, background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)" }}>
-                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 36, height: 36, borderRadius: 10, background: `${meta.color}10`, border: `1px solid ${meta.color}20`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{meta.icon}</div>
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 600 }}>{device.name}</div>
-                              <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>{device.ip}</div>
-                            </div>
-                          </div>
-                          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--success)", boxShadow: "0 0 8px rgba(34,197,94,0.4)" }} />
-                        </div>
-
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                          {device.device_type === "SWITCH" && (
-                            <>
-                              <button onClick={() => cmd(device, "turn_on")} style={{ flex: 1, padding: "7px 0", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", background: "var(--success-dim)", color: "var(--success)", border: "1px solid rgba(34,197,94,0.2)" }}>ON</button>
-                              <button onClick={() => cmd(device, "turn_off")} style={{ flex: 1, padding: "7px 0", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", background: "var(--error-dim)", color: "var(--error)", border: "1px solid rgba(239,68,68,0.2)" }}>OFF</button>
-                            </>
-                          )}
-                          {device.device_type === "PHONE" && (
-                            <>
-                              <button onClick={() => cmd(device, "battery")} style={{ padding: "7px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer", background: "var(--bg-tertiary)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>🔋 Battery</button>
-                              <button onClick={() => cmd(device, "lock")} style={{ padding: "7px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer", background: "var(--bg-tertiary)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>🔒 Lock</button>
-                            </>
-                          )}
-                          {device.device_type === "PRINTER" && (
-                            <button onClick={() => cmd(device, "status")} style={{ flex: 1, padding: "7px 0", borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer", background: "var(--bg-tertiary)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>Status</button>
-                          )}
-                        </div>
-
-                        <div style={{ display: "flex", gap: 6, fontSize: 10, color: "var(--text-muted)" }}>
-                          <span style={{ padding: "2px 6px", borderRadius: 4, background: "var(--bg-tertiary)" }}>{meta.label}</span>
-                          <span style={{ padding: "2px 6px", borderRadius: 4, background: "var(--bg-tertiary)" }}>{device.protocol}</span>
-                          {device.manufacturer && <span style={{ padding: "2px 6px", borderRadius: 4, background: "var(--bg-tertiary)" }}>{device.manufacturer}</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+          {/* Pulse Map */}
+          {devices.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 9, color: "var(--neon-green)", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--neon-green)", boxShadow: "0 0 6px rgba(0,255,102,0.4)" }} />
+                NETWORK PULSE MAP
               </div>
-            )}
+              <PulseMap devices={devices} size={360} />
+            </div>
+          )}
 
-            {/* Offline devices */}
-            {offline.length > 0 && (
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--text-muted)" }} />
-                  Offline ({offline.length})
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-                  {offline.map(device => {
-                    const meta = getMeta(device.device_type);
-                    return (
-                      <div key={device.id} className="device-card card-hover" style={{ padding: "16px 18px", borderRadius: 12, background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", opacity: 0.5 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--bg-tertiary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, opacity: 0.5 }}>{meta.icon}</div>
+          {/* Online */}
+          {online.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 9, color: "var(--neon-green)", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--neon-green)", boxShadow: "0 0 6px rgba(0,255,102,0.4)" }} />
+                ONLINE ({online.length})
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
+                {online.map(device => {
+                  const meta = getMeta(device.device_type);
+                  return (
+                    <div key={device.id} className="device-node" style={{ padding: 14, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: 4, background: "var(--surface-raised)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>{meta.icon}</div>
                           <div>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-muted)" }}>{device.name}</div>
-                            <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>{device.ip}</div>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)" }}>{device.name}</div>
+                            <div style={{ fontSize: 9, color: "var(--text-muted)" }}>{device.ip}</div>
                           </div>
                         </div>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--neon-green)", boxShadow: "0 0 6px rgba(0,255,102,0.4)", animation: "node-activate 2s ease infinite" }} />
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
-            {/* Command Result */}
-            {result && (
-              <div style={{ marginTop: 24, padding: 18, borderRadius: 12, background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", animation: "fade-up 0.25s ease both" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{result.who}</span>
-                    <span style={{ fontSize: 11, color: "var(--accent)", padding: "2px 8px", borderRadius: 5, background: "var(--accent-dim)" }}>{result.action}</span>
-                  </div>
-                  <button onClick={() => setResult(null)} style={{ padding: "4px 8px", borderRadius: 4, fontSize: 11, cursor: "pointer", background: "var(--bg-tertiary)", color: "var(--text-muted)", border: "1px solid var(--border-subtle)" }}>✕</button>
-                </div>
-                <pre style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "monospace", whiteSpace: "pre-wrap", lineHeight: 1.6, margin: 0, padding: 12, borderRadius: 8, background: "var(--bg-tertiary)", border: "1px solid var(--border-subtle)" }}>
-                  {result.error ? `Error: ${result.error}` : JSON.stringify(result.data, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
-        )}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                        {device.device_type === "SWITCH" && (
+                          <>
+                            <button onClick={() => cmd(device, "turn_on")} style={{ flex: 1, padding: "5px 0", borderRadius: 3, fontSize: 9, fontWeight: 600, fontFamily: "var(--font-mono)", cursor: "pointer", background: "var(--neon-green-dim)", color: "var(--neon-green)", border: "1px solid rgba(0,255,102,0.2)" }}>ON</button>
+                            <button onClick={() => cmd(device, "turn_off")} style={{ flex: 1, padding: "5px 0", borderRadius: 3, fontSize: 9, fontWeight: 600, fontFamily: "var(--font-mono)", cursor: "pointer", background: "var(--crimson-dim)", color: "var(--crimson)", border: "1px solid rgba(255,51,51,0.2)" }}>OFF</button>
+                          </>
+                        )}
+                        {device.device_type === "PHONE" && (
+                          <>
+                            <button onClick={() => cmd(device, "battery")} style={{ padding: "5px 8px", borderRadius: 3, fontSize: 9, fontFamily: "var(--font-mono)", cursor: "pointer", background: "var(--surface-raised)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>🔋 BATT</button>
+                            <button onClick={() => cmd(device, "lock")} style={{ padding: "5px 8px", borderRadius: 3, fontSize: 9, fontFamily: "var(--font-mono)", cursor: "pointer", background: "var(--surface-raised)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>🔒 LOCK</button>
+                          </>
+                        )}
+                        {device.device_type === "PRINTER" && (
+                          <button onClick={() => cmd(device, "status")} style={{ flex: 1, padding: "5px 0", borderRadius: 3, fontSize: 9, fontFamily: "var(--font-mono)", cursor: "pointer", background: "var(--surface-raised)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>STATUS</button>
+                        )}
+                      </div>
 
-        {loading && (
-          <div style={{ textAlign: "center", padding: "80px 20px" }}>
-            <div style={{ width: 24, height: 24, border: "2px solid var(--border-subtle)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} />
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading devices...</div>
-          </div>
-        )}
-      </main>
+                      <div style={{ display: "flex", gap: 4, fontSize: 8, color: "var(--text-muted)" }}>
+                        <span style={{ padding: "2px 5px", borderRadius: 3, background: "var(--surface-raised)", border: "1px solid var(--border)" }}>{meta.label}</span>
+                        <span style={{ padding: "2px 5px", borderRadius: 3, background: "var(--surface-raised)", border: "1px solid var(--border)" }}>{device.protocol}</span>
+                        {device.manufacturer && <span style={{ padding: "2px 5px", borderRadius: 3, background: "var(--surface-raised)", border: "1px solid var(--border)" }}>{device.manufacturer}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Offline */}
+          {offline.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 9, color: "var(--text-muted)", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--steel)" }} />
+                OFFLINE ({offline.length})
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
+                {offline.map(device => {
+                  const meta = getMeta(device.device_type);
+                  return (
+                    <div key={device.id} className="device-node" style={{ padding: 14, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, opacity: 0.4 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 4, background: "var(--surface-raised)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, opacity: 0.5 }}>{meta.icon}</div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>{device.name}</div>
+                          <div style={{ fontSize: 9, color: "var(--text-muted)" }}>{device.ip}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Command Result */}
+          {result && (
+            <div style={{ padding: 14, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600 }}>{result.who}</span>
+                  <span style={{ fontSize: 8, padding: "2px 6px", borderRadius: 3, background: "var(--neon-green-dim)", color: "var(--neon-green)", fontWeight: 600 }}>{result.action}</span>
+                </div>
+                <button onClick={() => setResult(null)} style={{ padding: "3px 6px", borderRadius: 3, fontSize: 9, cursor: "pointer", background: "var(--surface-raised)", color: "var(--text-muted)", border: "1px solid var(--border)", fontFamily: "var(--font-mono)" }}>✕</button>
+              </div>
+              <pre style={{ fontSize: 10, color: "var(--text-secondary)", fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", lineHeight: 1.6, margin: 0, padding: 10, borderRadius: 4, background: "var(--surface-raised)", border: "1px solid var(--border)" }}>
+                {result.error ? `Error: ${result.error}` : JSON.stringify(result.data, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {/* Loading */}
+          {loading && (
+            <div style={{ textAlign: "center", padding: "60px 20px" }}>
+              <div style={{ width: 18, height: 18, border: "2px solid var(--border)", borderTopColor: "var(--neon-green)", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 10px" }} />
+              <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Scanning...</div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
