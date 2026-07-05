@@ -37,172 +37,158 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Seed the device database with real devices on startup."""
+    """
+    Real device discovery on startup.
+    Scans the actual local network via ARP and registers real devices.
+    """
     try:
         from device_manager import upsert_device, get_all_devices
         from network_scanner import get_scanner, start_scanner
-
-        # Only seed if database is empty
-        existing = get_all_devices()
-        if len(existing) > 0:
-            return
-
-        # Seed with realistic devices that would be on any home network
-        seed_devices = [
-            {
-                "id": "router_main",
-                "name": "Home Router",
-                "device_type": "ROUTER",
-                "ip": "192.168.1.1",
-                "mac": "AA:BB:CC:DD:EE:01",
-                "protocol": "http",
-                "manufacturer": "Netgear",
-                "model": "Nighthawk R7000",
-                "room": "living_room",
-                "state": {"online": True, "connected_devices": 12, "cpu_usage": 23, "memory_usage": 45},
-                "is_online": True,
-            },
-            {
-                "id": "light_living",
-                "name": "Living Room Light",
-                "device_type": "LIGHT",
-                "ip": "192.168.1.101",
-                "mac": "AA:BB:CC:DD:EE:02",
-                "protocol": "tuya",
-                "manufacturer": "Tuya",
-                "model": "Smart Bulb A19",
-                "room": "living_room",
-                "state": {"power": "ON", "brightness": 80, "color": "#FFD700", "color_temp": 3000},
-                "is_online": True,
-            },
-            {
-                "id": "light_bedroom",
-                "name": "Bedroom Light",
-                "device_type": "LIGHT",
-                "ip": "192.168.1.102",
-                "mac": "AA:BB:CC:DD:EE:03",
-                "protocol": "tuya",
-                "manufacturer": "LIFX",
-                "model": "A19",
-                "room": "bedroom",
-                "state": {"power": "OFF", "brightness": 0, "color": "#FFFFFF"},
-                "is_online": True,
-            },
-            {
-                "id": "thermostat_main",
-                "name": "Smart Thermostat",
-                "device_type": "THERMOSTAT",
-                "ip": "192.168.1.103",
-                "mac": "AA:BB:CC:DD:EE:04",
-                "protocol": "home_assistant",
-                "manufacturer": "Nest",
-                "model": "Learning Thermostat",
-                "room": "hallway",
-                "state": {"current_temp": 72, "target_temp": 71, "mode": "COOL", "humidity": 45},
-                "is_online": True,
-            },
-            {
-                "id": "lock_front",
-                "name": "Front Door Lock",
-                "device_type": "LOCK",
-                "ip": "192.168.1.104",
-                "mac": "AA:BB:CC:DD:EE:05",
-                "protocol": "mqtt",
-                "manufacturer": "August",
-                "model": "Smart Lock Pro",
-                "room": "entrance",
-                "state": {"lock_state": "LOCKED", "battery": 87},
-                "is_online": True,
-            },
-            {
-                "id": "camera_front",
-                "name": "Front Door Camera",
-                "device_type": "CAMERA",
-                "ip": "192.168.1.105",
-                "mac": "AA:BB:CC:DD:EE:06",
-                "protocol": "rtsp",
-                "manufacturer": "Eufy",
-                "model": "HomeBase 2",
-                "room": "entrance",
-                "state": {"recording": True, "motion_detected": False, "online": True},
-                "is_online": True,
-            },
-            {
-                "id": "vacuum_main",
-                "name": "Robot Vacuum",
-                "device_type": "VACUUM",
-                "ip": "192.168.1.106",
-                "mac": "AA:BB:CC:DD:EE:07",
-                "protocol": "miio",
-                "manufacturer": "Xiaomi",
-                "model": "Roborock S7",
-                "room": "living_room",
-                "state": {"power": "OFF", "battery": 92, "suction_level": "NORMAL", "cleaning_area": 0},
-                "is_online": True,
-            },
-            {
-                "id": "speaker_alexa",
-                "name": "Echo Dot",
-                "device_type": "MEDIA_PLAYER",
-                "ip": "192.168.1.107",
-                "mac": "AA:BB:CC:DD:EE:08",
-                "protocol": "upnp",
-                "manufacturer": "Amazon",
-                "model": "Echo Dot 4th Gen",
-                "room": "bedroom",
-                "state": {"playing": False, "volume": 40, "muted": False},
-                "is_online": True,
-            },
-            {
-                "id": "switch_plug",
-                "name": "Smart Plug",
-                "device_type": "SWITCH",
-                "ip": "192.168.1.108",
-                "mac": "AA:BB:CC:DD:EE:09",
-                "protocol": "tuya",
-                "manufacturer": "TP-Link",
-                "model": "Kasa Smart Plug",
-                "room": "kitchen",
-                "state": {"power": "ON", "watts": 12.5},
-                "is_online": True,
-            },
-            {
-                "id": "sensor_temp",
-                "name": "Temperature Sensor",
-                "device_type": "SENSOR",
-                "ip": "192.168.1.109",
-                "mac": "AA:BB:CC:DD:EE:0A",
-                "protocol": "mqtt",
-                "manufacturer": "Aqara",
-                "model": "Temperature Sensor",
-                "room": "bedroom",
-                "state": {"value": 71.5, "unit": "F", "battery": 95},
-                "is_online": True,
-            },
-            {
-                "id": "blind_living",
-                "name": "Living Room Blinds",
-                "device_type": "COVER",
-                "ip": "192.168.1.110",
-                "mac": "AA:BB:CC:DD:EE:0B",
-                "protocol": "mqtt",
-                "manufacturer": "IKEA",
-                "model": "FYRTUR Roller Blind",
-                "room": "living_room",
-                "state": {"position": 75, "state": "OPEN"},
-                "is_online": True,
-            },
-        ]
-
-        for device in seed_devices:
-            upsert_device(device)
+        import subprocess, re, socket
 
         # Start the network scanner daemon
-        start_scanner(scan_interval=60)
+        start_scanner(scan_interval=30)
 
-        print(f"[SOVEREIGN] Seeded {len(seed_devices)} devices, scanner started")
+        # Only scan if database is empty
+        existing = get_all_devices()
+        if len(existing) > 0:
+            print(f"[SOVEREIGN] Database has {len(existing)} devices, skipping scan")
+            return
+
+        print("[SOVEREIGN] Scanning real local network...")
+
+        # Get local subnet
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            local_subnet = ".".join(local_ip.split(".")[:3])
+        except Exception:
+            local_ip = "127.0.0.1"
+            local_subnet = "192.168.1"
+
+        # Real ARP scan
+        try:
+            result = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=15)
+            arp_output = result.stdout
+        except Exception:
+            arp_output = ""
+
+        registered = 0
+
+        # Parse ARP and register real devices
+        for line in arp_output.splitlines():
+            mac_match = re.search(r'at\s+([0-9a-fA-F:]{17})', line)
+            ip_match = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)', line)
+            if not mac_match or not ip_match:
+                continue
+
+            ip = ip_match.group(1)
+            mac = mac_match.group(1).upper()
+
+            # Skip broadcasts, multicast, incomplete
+            if "FF:FF:FF:FF:FF:FF" in mac or "1:0:5E" in mac or "(incomplete)" in line:
+                continue
+
+            hostname = line.split("(")[0].strip() if "(" in line else ""
+            hostname = hostname.replace("?", "").strip()
+
+            # Identify device type from hostname/MAC
+            device_type = "UNKNOWN"
+            protocol = "unknown"
+            manufacturer = ""
+            model = ""
+            device_name = hostname or ip
+
+            hl = hostname.lower()
+
+            # Router/Gateway
+            if "skysr213" in hl or ip.endswith(".1") and "router" in hl:
+                device_type = "ROUTER"
+                protocol = "http"
+                manufacturer = "Sky"
+                model = "SR213"
+            # TP-Link Tapo Smart Plugs
+            elif "tapo" in hl or "p100" in hl or "p110" in hl or "p125" in hl:
+                device_type = "SWITCH"
+                protocol = "tapo"
+                manufacturer = "TP-Link"
+                if "p110" in hl:
+                    model = "Tapo P110"
+                elif "p100" in hl:
+                    model = "Tapo P100"
+                elif "p125" in hl:
+                    model = "Tapo P125"
+                else:
+                    model = "Tapo Smart Plug"
+            # HP Printer
+            elif "hp" in hl or "printer" in hl:
+                device_type = "PRINTER"
+                protocol = "ipp"
+                manufacturer = "HP"
+                model = "Printer"
+            # Samsung phones
+            elif "samsung" in hl or "galaxy" in hl or "note20" in hl or "s24" in hl or "gargi" in hl or "suprotim" in hl:
+                device_type = "PHONE"
+                protocol = "adb"
+                manufacturer = "Samsung"
+                if "note20" in hl:
+                    model = "Galaxy Note20"
+                elif "s24 ultra" in hl:
+                    model = "Galaxy S24 Ultra"
+                elif "s24" in hl:
+                    model = "Galaxy S24"
+            # Range extender
+            elif "re200" in hl or "extender" in hl or "repeater" in hl:
+                device_type = "ROUTER"
+                protocol = "http"
+                manufacturer = "TP-Link"
+                model = "RE200"
+            # iMac / Apple
+            elif "imac" in hl or "macbook" in hl or "apple" in hl:
+                device_type = "HUB"
+                protocol = "ssh"
+                manufacturer = "Apple"
+                model = "iMac"
+            # Generic laptop
+            elif "laptop" in hl or "nbkw" in hl:
+                device_type = "HUB"
+                protocol = "ssh"
+                manufacturer = "Unknown"
+                model = "Laptop"
+            # lwip devices (likely IoT)
+            elif "lwip" in hl:
+                device_type = "SENSOR"
+                protocol = "mqtt"
+                manufacturer = "Unknown"
+                model = "IoT Device"
+
+            if device_type == "UNKNOWN":
+                continue  # Skip unidentifiable devices
+
+            device_id = f"real_{ip.replace('.', '_')}"
+
+            upsert_device({
+                "id": device_id,
+                "name": device_name,
+                "device_type": device_type,
+                "ip": ip,
+                "mac": mac,
+                "protocol": protocol,
+                "manufacturer": manufacturer,
+                "model": model,
+                "room": "unknown",
+                "state": {"power": "UNKNOWN"},
+                "is_online": True,
+            })
+            registered += 1
+
+        print(f"[SOVEREIGN] Registered {registered} real devices from local network")
+        print(f"[SOVEREIGN] Local IP: {local_ip}, Subnet: {local_subnet}")
+
     except Exception as e:
-        print(f"[SOVEREIGN] Startup seed failed: {e}")
+        print(f"[SOVEREIGN] Startup scan failed: {e}")
 
 
 class RouterDispatchRequest(BaseModel):
@@ -3004,3 +2990,388 @@ async def sovereign_stats():
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+# ── Real Device Control Routes ──────────────────────────────────
+# These routes control REAL hardware on the local network.
+# No simulations. No placeholders. Real commands, real results.
+
+
+@app.post("/api/real/tapo/turn_on")
+async def real_tapo_turn_on(ip: str):
+    """Turn ON a real TP-Link Tapo smart plug."""
+    try:
+        from tapo_client import get_tapo_client
+        client = get_tapo_client()
+        client.add_device(ip)
+        return client.turn_on(ip)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/real/tapo/turn_off")
+async def real_tapo_turn_off(ip: str):
+    """Turn OFF a real TP-Link Tapo smart plug."""
+    try:
+        from tapo_client import get_tapo_client
+        client = get_tapo_client()
+        client.add_device(ip)
+        return client.turn_off(ip)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/real/tapo/toggle")
+async def real_tapo_toggle(ip: str):
+    """Toggle a real TP-Link Tapo smart plug."""
+    try:
+        from tapo_client import get_tapo_client
+        client = get_tapo_client()
+        client.add_device(ip)
+        return client.toggle(ip)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/real/tapo/info")
+async def real_tapo_info(ip: str):
+    """Get real device info from a Tapo plug."""
+    try:
+        from tapo_client import get_tapo_client
+        client = get_tapo_client()
+        client.add_device(ip)
+        info = client.get_device_info(ip)
+        return info or {"error": "Could not reach device"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/real/tapo/energy")
+async def real_tapo_energy(ip: str):
+    """Get real energy usage from a Tapo P110."""
+    try:
+        from tapo_client import get_tapo_client
+        client = get_tapo_client()
+        client.add_device(ip)
+        energy = client.get_energy_usage(ip)
+        return energy or {"error": "Could not read energy data"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/real/tapo/set_brightness")
+async def real_tapo_brightness(ip: str, brightness: int):
+    """Set brightness on a Tapo dimmable plug."""
+    try:
+        from tapo_client import get_tapo_client
+        client = get_tapo_client()
+        client.add_device(ip)
+        return client.set_brightness(ip, brightness)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/real/tapo/credentials")
+async def real_tapo_set_credentials(username: str, password: str):
+    """Set Tapo device credentials."""
+    try:
+        from tapo_client import get_tapo_client
+        client = get_tapo_client()
+        client.set_credentials(username, password)
+        return {"success": True, "message": "Credentials set"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/real/printer/status")
+async def real_printer_status(ip: str):
+    """Get real printer status via IPP."""
+    try:
+        from printer_client import get_printer_client
+        client = get_printer_client()
+        client.add_printer(ip)
+        return client.get_printer_status(ip) or {"error": "Printer not reachable"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/real/printer/ink")
+async def real_printer_ink(ip: str):
+    """Get real ink levels from an HP printer."""
+    try:
+        from printer_client import get_printer_client
+        client = get_printer_client()
+        client.add_printer(ip)
+        return client.get_ink_levels(ip) or {"error": "Could not read ink levels"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/real/printer/print")
+async def real_printer_print(ip: str, file_path: str, copies: int = 1):
+    """Send a real print job to the printer."""
+    try:
+        from printer_client import get_printer_client
+        client = get_printer_client()
+        client.add_printer(ip)
+        return client.print_file(ip, file_path, copies)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/real/printer/queue")
+async def real_printer_queue(ip: str):
+    """Get the current print queue."""
+    try:
+        from printer_client import get_printer_client
+        client = get_printer_client()
+        client.add_printer(ip)
+        return {"jobs": client.get_queue(ip)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/real/printer/cancel")
+async def real_printer_cancel(ip: str):
+    """Cancel all pending print jobs."""
+    try:
+        from printer_client import get_printer_client
+        client = get_printer_client()
+        client.add_printer(ip)
+        return client.cancel_jobs(ip)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/real/phone/connect")
+async def real_phone_connect(ip: str, port: int = 5555):
+    """Connect to a phone via ADB over WiFi."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.connect_adb(ip, port)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/real/phone/info")
+async def real_phone_info(ip: str):
+    """Get real device info from a phone."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        info = client.get_device_info(ip)
+        return info or {"error": "Could not reach phone"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/real/phone/battery")
+async def real_phone_battery(ip: str):
+    """Get real battery level from a phone."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.get_battery_state(ip)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/real/phone/screen")
+async def real_phone_screen(ip: str):
+    """Get real screen state from a phone."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.get_screen_state(ip)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/real/phone/lock")
+async def real_phone_lock(ip: str):
+    """Lock a real phone screen."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.lock_screen(ip)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/real/phone/unlock")
+async def real_phone_unlock(ip: str):
+    """Unlock a real phone screen."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.unlock_screen(ip)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/real/phone/launch")
+async def real_phone_launch(ip: str, package: str):
+    """Launch an app on a real phone."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.launch_app(ip, package)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/real/phone/screenshot")
+async def real_phone_screenshot(ip: str):
+    """Take a real screenshot from a phone."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.take_screenshot(ip)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/real/phone/volume")
+async def real_phone_volume(ip: str, level: int):
+    """Set volume on a real phone."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.set_volume(ip, "music", level)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/real/phone/brightness")
+async def real_phone_brightness(ip: str, level: int):
+    """Set brightness on a real phone."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.set_brightness(ip, level)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/real/phone/wifi")
+async def real_phone_wifi(ip: str):
+    """Get WiFi info from a real phone."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.get_wifi_info(ip)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/real/phone/apps")
+async def real_phone_apps(ip: str):
+    """Get running apps on a real phone."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return {"apps": client.get_running_apps(ip)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/real/notify")
+async def real_send_notification(ip: str, title: str, message: str):
+    """Send a notification to a real phone."""
+    try:
+        from phone_client import get_phone_client
+        client = get_phone_client()
+        client.add_phone(ip)
+        return client.send_notification(ip, title, message)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/real/scan")
+async def real_network_scan():
+    """Scan the real local network and register discovered devices."""
+    try:
+        from device_manager import upsert_device
+        from network_scanner import get_scanner
+        from tapo_client import get_tapo_client
+        from printer_client import get_printer_client
+        from phone_client import get_phone_client
+        import subprocess, re, socket
+
+        scanner = get_scanner()
+        tapo = get_tapo_client()
+        printer = get_printer_client()
+        phone = get_phone_client()
+
+        # Discover Tapo devices
+        tapo_devices = tapo.discover_on_network()
+        for d in tapo_devices:
+            upsert_device({
+                "id": f"real_{d['ip'].replace('.', '_')}",
+                "name": d["name"],
+                "device_type": d["device_type"],
+                "ip": d["ip"],
+                "protocol": d["protocol"],
+                "manufacturer": d["manufacturer"],
+                "room": "unknown",
+                "state": {"power": "UNKNOWN"},
+                "is_online": True,
+            })
+
+        # Discover printers
+        printers = printer.discover_printers()
+        for d in printers:
+            if "ip" in d:
+                upsert_device({
+                    "id": f"real_{d['ip'].replace('.', '_')}",
+                    "name": d["name"],
+                    "device_type": "PRINTER",
+                    "ip": d["ip"],
+                    "protocol": "ipp",
+                    "manufacturer": d.get("manufacturer", "HP"),
+                    "room": "unknown",
+                    "state": {"status": "discovered"},
+                    "is_online": True,
+                })
+
+        # Discover phones
+        phones = phone.discover_phones()
+        for d in phones:
+            upsert_device({
+                "id": f"real_{d['ip'].replace('.', '_')}",
+                "name": d["name"],
+                "device_type": d["device_type"],
+                "ip": d["ip"],
+                "protocol": d["protocol"],
+                "manufacturer": d.get("manufacturer", "Samsung"),
+                "model": d.get("model", ""),
+                "room": "unknown",
+                "state": {"power": "UNKNOWN"},
+                "is_online": True,
+            })
+
+        # Run network scanner
+        net_devices = scanner.full_scan()
+
+        return {
+            "success": True,
+            "tapo_found": len(tapo_devices),
+            "printers_found": len(printers),
+            "phones_found": len(phones),
+            "network_devices": len(net_devices),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
