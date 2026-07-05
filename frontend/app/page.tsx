@@ -185,7 +185,6 @@ export default function Home() {
     setTextInput(""); setShowSuggestions(false);
     setMessages(p => [...p, { role: "user", content: text }]);
     setThinking(true); addBotEvent("action", "processing");
-    dispatchToRouter(text);
     if (taskSession && taskQuestion) {
       try {
         const res = await fetch(`${BASE}/api/task/respond`, {
@@ -209,22 +208,56 @@ export default function Home() {
       }
       setThinking(false); return;
     }
+
+    let routed = false;
     try {
-      const data = await entityProcess(text, "local");
-      const reply = data?.text || data?.message || "Acknowledged.";
-      setMessages(p => [...p, { role: "assistant", content: reply }]);
-      addLog("Response received", "success");
-      if (data?.type === "ask" && data?.session_id) {
-        setTaskSession(data.session_id); setTaskQuestion(data.question);
-        setTaskStep(data.step || 0); setTaskTotal(data.total || 0);
+      const routerResult = await dispatchToRouter(text);
+      if (routerResult?.target_agent && routerResult?.agent_response) {
+        routed = true;
+        const resp = routerResult.agent_response;
+        const target = routerResult.target_agent;
+        let reply = "";
+        if (target === "HAL_AGENT") {
+          const devices = resp.device_telemetry_payload || [];
+          const status = resp.execution_status || "PENDING";
+          reply = resp.frontend_ui_mutation?.display_text
+            || (devices.length > 0
+              ? `Devices: ${devices.map((d: any) => `${d.device_alias || d.unique_id} → ${d.method_signature}`).join(", ")}`
+              : `Hardware task ${status}. ${resp.frontend_ui_mutation?.troubleshooting_steps?.join(" ") || ""}`);
+        } else if (target === "OS_AGENT") {
+          const action = resp.os_action_payload;
+          reply = resp.frontend_ui_mutation?.display_text
+            || (action ? `${action.action_type}: ${action.target_identifier}` : `OS task: ${resp.system_state_update?.execution_status || "PENDING"}`);
+        } else if (target === "WEB_AGENT") {
+          reply = resp.frontend_ui_mutation?.display_text
+            || (resp.web_operation_payload?.url ? `Opening ${resp.web_operation_payload.url}` : "Web task queued.");
+        } else {
+          reply = resp.text || resp.message || "Task routed to " + target;
+        }
+        setMessages(p => [...p, { role: "assistant", content: reply }]);
+        addLog(`→ ${target} | ${Math.round((routerResult.routing?.routing_confidence ?? 0) * 100)}% | ${routerResult.latency_ms?.total}ms`, "success");
+        if (reply.length < 300) speak(reply).catch(() => {});
       }
-      if (data?.action_feedback) addBotEvent("action", data.action_feedback);
-      if (reply.length < 300) speak(reply).catch(() => {});
-    } catch (err: any) {
-      const errMsg = `Connection error: ${err.message}`;
-      setMessages(p => [...p, { role: "assistant", content: errMsg }]);
-      addLog(errMsg, "error");
-      retryCountRef.current += 1;
+    } catch {}
+
+    if (!routed) {
+      try {
+        const data = await entityProcess(text, "local");
+        const reply = data?.text || data?.message || "Acknowledged.";
+        setMessages(p => [...p, { role: "assistant", content: reply }]);
+        addLog("Response received", "success");
+        if (data?.type === "ask" && data?.session_id) {
+          setTaskSession(data.session_id); setTaskQuestion(data.question);
+          setTaskStep(data.step || 0); setTaskTotal(data.total || 0);
+        }
+        if (data?.action_feedback) addBotEvent("action", data.action_feedback);
+        if (reply.length < 300) speak(reply).catch(() => {});
+      } catch (err: any) {
+        const errMsg = `Connection error: ${err.message}`;
+        setMessages(p => [...p, { role: "assistant", content: errMsg }]);
+        addLog(errMsg, "error");
+        retryCountRef.current += 1;
+      }
     }
     setThinking(false);
   }, [textInput, taskSession, taskQuestion, dispatchToRouter, speak, addBotEvent, addLog]);
