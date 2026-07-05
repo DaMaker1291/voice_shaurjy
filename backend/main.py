@@ -3392,3 +3392,47 @@ async def real_network_scan():
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# ── Autonomous Task Endpoints ────────────────────────────────────────
+
+@app.get("/api/autonomous/tasks")
+async def autonomous_tasks():
+    """List all active autonomous tasks."""
+    from autonomous_loop import get_task_loop
+    loop = get_task_loop()
+    return {"tasks": loop.list_tasks()}
+
+@app.get("/api/autonomous/tasks/{task_id}")
+async def autonomous_task_status(task_id: str):
+    """Get status of a specific autonomous task."""
+    from autonomous_loop import get_task_loop
+    loop = get_task_loop()
+    return loop.get_status(task_id)
+
+@app.post("/api/autonomous/tasks/stop/{task_id}")
+async def autonomous_task_stop(task_id: str):
+    """Stop a running autonomous task."""
+    from autonomous_loop import get_task_loop
+    loop = get_task_loop()
+    return loop.stop_task(task_id)
+
+@app.post("/api/autonomous/start")
+async def autonomous_start(req: dict):
+    """Start an autonomous task."""
+    from autonomous_loop import get_task_loop
+    import uuid
+    loop = get_task_loop()
+    task_id = str(uuid.uuid4())[:8]
+    intent = req.get("intent", "")
+    user_id = req.get("user_id", "local")
+    result = loop.start_task(task_id, intent, user_id)
+    return result
+
+@app.get("/api/headless/status")
+async def headless_status():
+    """Check if headless browser is running."""
+    from headless_browser import get_browser
+    browser = get_browser()
+    running = browser.chrome_proc is not None and browser.chrome_proc.poll() is None
+    return {"running": running, "pid": browser.chrome_proc.pid if running else None}

@@ -580,20 +580,35 @@ class Entity:
             "boost", "research", "investigate", "compare", "contrast",
         }
         if first_word in ACTION_FIRST_WORDS and not lower.startswith(QUESTION_STARTS):
-            result = cloud_safe_execute("ai_computer_task", text, user_id=self.user_id)
-            label = _ACTION_LABELS.get("ai_computer_task", "🤖 AI Computer Agent")
-            self._set_mood("focused")
-            if result.startswith("__NEEDS_RELAY__:"):
-                msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
-                return {"text": f"{msg}", "action": "__needs_relay__"}
-            if result.startswith("__RELAY__:"):
-                parts = result.split(":", 2)
-                relay_id = parts[1] if len(parts) > 1 else ""
-                return {"text": f"{label}\n⏳ AI agent working on your computer...", "action": "ai_computer_task", "relay_id": relay_id, "async": True}
-            if result.startswith("__ASK__:"):
-                question = result.split(":", 1)[1] if ":" in result else "Could you clarify?"
-                return {"action": "ask_clarify", "text": question}
-            return {"text": f"{label}\n{result}", "action": "ai_computer_task"}
+            # Route through Autonomous Task Loop — never stops until done
+            try:
+                from autonomous_loop import get_task_loop
+                loop = get_task_loop()
+                import uuid
+                task_id = str(uuid.uuid4())[:8]
+                loop.start_task(task_id, text, user_id=self.user_id)
+                return {
+                    "text": f"🤖 **Autonomous Agent Activated**\n\nTask: *{text}*\nTask ID: `{task_id}`\n\nI'm now working through this step-by-step and won't stop until it's done. You can check progress anytime.",
+                    "action": "autonomous_task",
+                    "task_id": task_id,
+                    "async": True,
+                }
+            except Exception as e:
+                # Fallback to single-step execution
+                result = cloud_safe_execute("ai_computer_task", text, user_id=self.user_id)
+                label = _ACTION_LABELS.get("ai_computer_task", "🤖 AI Computer Agent")
+                self._set_mood("focused")
+                if result.startswith("__NEEDS_RELAY__:"):
+                    msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
+                    return {"text": f"{msg}", "action": "__needs_relay__"}
+                if result.startswith("__RELAY__:"):
+                    parts = result.split(":", 2)
+                    relay_id = parts[1] if len(parts) > 1 else ""
+                    return {"text": f"{label}\n⏳ AI agent working on your computer...", "action": "ai_computer_task", "relay_id": relay_id, "async": True}
+                if result.startswith("__ASK__:"):
+                    question = result.split(":", 1)[1] if ":" in result else "Could you clarify?"
+                    return {"action": "ask_clarify", "text": question}
+                return {"text": f"{label}\n{result}", "action": "ai_computer_task"}
 
         return None
 
