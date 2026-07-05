@@ -2463,3 +2463,374 @@ async def orchestrator_learn(user_text: str, agent_response: str):
         return {"learned": True}
     except Exception as e:
         return {"error": str(e)}
+
+
+# ── Sovereign Network Routes ────────────────────────────────────
+# The $70B layer: Universal device discovery, control, and telemetry.
+# Zero-cloud. The Wi-Fi router becomes a unified hardware bus.
+
+
+@app.get("/api/sovereign/network/scan")
+async def sovereign_network_scan():
+    """Trigger a full network scan (mDNS, SSDP, ARP, TCP probe)."""
+    try:
+        from network_scanner import get_scanner
+        scanner = get_scanner()
+        devices = scanner.full_scan()
+        return {
+            "scanned": True,
+            "devices_found": len(devices),
+            "devices": [d.to_dict() for d in devices.values()],
+            "stats": scanner.get_stats(),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/network/devices")
+async def sovereign_network_devices(only_alive: bool = True):
+    """Get all discovered network devices."""
+    try:
+        from network_scanner import get_scanner
+        scanner = get_scanner()
+        devices = scanner.get_alive() if only_alive else scanner.get_all()
+        return {
+            "count": len(devices),
+            "devices": [d.to_dict() for d in devices],
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/network/topology")
+async def sovereign_network_topology():
+    """Get the full network topology map."""
+    try:
+        from network_scanner import get_scanner
+        scanner = get_scanner()
+        return scanner.get_network_topology()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/network/stats")
+async def sovereign_network_stats():
+    """Get network scanner statistics."""
+    try:
+        from network_scanner import get_scanner
+        scanner = get_scanner()
+        return scanner.get_stats()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sovereign/network/start")
+async def sovereign_network_start(scan_interval: int = 30):
+    """Start the background network scanning daemon."""
+    try:
+        from network_scanner import start_scanner
+        scanner = start_scanner(scan_interval)
+        return {"started": True, "scan_interval": scan_interval}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/devices")
+async def sovereign_devices():
+    """Get all registered devices from the device manager."""
+    try:
+        from device_manager import get_all_devices
+        devices = get_all_devices()
+        return {"count": len(devices), "devices": devices}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/devices/online")
+async def sovereign_devices_online():
+    """Get all online devices."""
+    try:
+        from device_manager import get_online_devices
+        devices = get_online_devices()
+        return {"count": len(devices), "devices": devices}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/devices/{device_id}")
+async def sovereign_device_detail(device_id: str):
+    """Get detailed info for a single device."""
+    try:
+        from device_manager import get_device
+        device = get_device(device_id)
+        if not device:
+            return {"error": "Device not found"}
+        return device
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/devices/type/{device_type}")
+async def sovereign_devices_by_type(device_type: str):
+    """Get all devices of a given type (LIGHT, SWITCH, VACUUM, etc.)."""
+    try:
+        from device_manager import get_devices_by_type
+        devices = get_devices_by_type(device_type)
+        return {"count": len(devices), "devices": devices}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/devices/room/{room}")
+async def sovereign_devices_by_room(room: str):
+    """Get all devices in a given room."""
+    try:
+        from device_manager import get_devices_by_room
+        devices = get_devices_by_room(room)
+        return {"count": len(devices), "devices": devices}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sovereign/devices")
+async def sovereign_register_device(device: dict):
+    """Register a new device in the sovereign registry."""
+    try:
+        from device_manager import upsert_device
+        result = upsert_device(device)
+        return {"registered": True, "device": result}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.delete("/api/sovereign/devices/{device_id}")
+async def sovereign_delete_device(device_id: str):
+    """Delete a device from the sovereign registry."""
+    try:
+        from device_manager import delete_device
+        deleted = delete_device(device_id)
+        return {"deleted": deleted}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sovereign/devices/{device_id}/state")
+async def sovereign_update_state(device_id: str, state: dict):
+    """Update a device's state."""
+    try:
+        from device_manager import update_device_state
+        updated = update_device_state(device_id, state)
+        return {"updated": updated}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/devices/{device_id}/history")
+async def sovereign_device_history(device_id: str, hours: int = 24):
+    """Get state change history for a device."""
+    try:
+        from device_manager import get_state_history
+        history = get_state_history(device_id, hours)
+        return {"count": len(history), "history": history}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sovereign/command")
+async def sovereign_execute_command(
+    device_id: str, action: str, params: dict = {},
+    initiated_by: str = "user"
+):
+    """Execute a command on a device via the sovereign command engine."""
+    try:
+        from command_engine import get_command_engine
+        engine = get_command_engine()
+        result = engine.execute(device_id, action, params, initiated_by)
+        return result.to_dict()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sovereign/command/batch")
+async def sovereign_batch_commands(commands: list):
+    """Execute multiple commands in parallel."""
+    try:
+        from command_engine import get_command_engine
+        engine = get_command_engine()
+        results = engine.execute_batch(commands, parallel=True)
+        return {"count": len(results), "results": [r.to_dict() for r in results]}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/command/history")
+async def sovereign_command_history(device_id: str = None, limit: int = 50):
+    """Get command execution history."""
+    try:
+        from device_manager import get_command_history
+        history = get_command_history(device_id, limit)
+        return {"count": len(history), "history": history}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/command/stats")
+async def sovereign_command_stats():
+    """Get command execution statistics."""
+    try:
+        from command_engine import get_command_engine
+        return get_command_engine().get_stats()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/hal/types")
+async def sovereign_hal_types():
+    """Get all supported device type definitions."""
+    try:
+        from universal_hal import get_hal
+        hal = get_hal()
+        return hal.get_all_types()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sovereign/hal/normalize")
+async def sovereign_hal_normalize(device: dict):
+    """Normalize a raw device into the universal JSON contract."""
+    try:
+        from universal_hal import get_hal
+        hal = get_hal()
+        return hal.normalize_device(device)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/scenes")
+async def sovereign_scenes():
+    """Get all saved scenes."""
+    try:
+        from device_manager import get_all_scenes
+        scenes = get_all_scenes()
+        return {"count": len(scenes), "scenes": scenes}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sovereign/scenes")
+async def sovereign_create_scene(name: str, icon: str = "🎬", device_states: list = []):
+    """Create a new scene."""
+    try:
+        from device_manager import create_scene
+        scene = create_scene(name, icon, device_states)
+        return {"created": True, "scene": scene}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sovereign/scenes/{scene_id}/activate")
+async def sovereign_activate_scene(scene_id: str):
+    """Activate a scene and return commands to execute."""
+    try:
+        from device_manager import activate_scene
+        result = activate_scene(scene_id)
+        if not result:
+            return {"error": "Scene not found"}
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/security/stats")
+async def sovereign_security_stats():
+    """Get sovereign security statistics."""
+    try:
+        from sovereign_security import get_security
+        return get_security().get_stats()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sovereign/security/auth")
+async def sovereign_authenticate(source_ip: str):
+    """Authenticate a command source by network pinning."""
+    try:
+        from sovereign_security import get_security
+        security = get_security()
+        session = security.network_auth.authenticate_source(source_ip)
+        return {
+            "authenticated": session.authenticated,
+            "session_id": session.session_id,
+            "method": session.auth_method,
+            "permissions": session.permissions,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/security/keys")
+async def sovereign_keys():
+    """List all security keys (without material)."""
+    try:
+        from sovereign_security import get_security
+        security = get_security()
+        return {"keys": security.key_manager.get_all_keys()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sovereign/security/keys/generate")
+async def sovereign_generate_key(purpose: str = "signing", device_id: str = ""):
+    """Generate a new security key."""
+    try:
+        from sovereign_security import get_security
+        security = get_security()
+        key = security.key_manager.generate_key(purpose, device_id)
+        return {"key_id": key.key_id[:8] + "...", "purpose": purpose}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/dashboard")
+async def sovereign_dashboard():
+    """Get the full sovereign network dashboard."""
+    try:
+        from device_manager import get_dashboard
+        from network_scanner import get_scanner
+        from command_engine import get_command_engine
+        from sovereign_security import get_security
+
+        dashboard = get_dashboard()
+        scanner = get_scanner()
+        engine_stats = get_command_engine().get_stats()
+        sec_stats = get_security().get_stats()
+
+        return {
+            "devices": dashboard["devices"],
+            "by_type": dashboard["by_type"],
+            "by_room": dashboard["by_room"],
+            "by_protocol": dashboard["by_protocol"],
+            "commands": dashboard["commands"],
+            "recent_commands": dashboard["recent_commands"],
+            "network": scanner.get_stats(),
+            "security": sec_stats,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/sovereign/stats")
+async def sovereign_stats():
+    """Get overall sovereign system statistics."""
+    try:
+        from device_manager import get_stats
+        from network_scanner import get_scanner
+        from command_engine import get_command_engine
+
+        return {
+            "registry": get_stats(),
+            "network": get_scanner().get_stats(),
+            "commands": get_command_engine().get_stats(),
+        }
+    except Exception as e:
+        return {"error": str(e)}
