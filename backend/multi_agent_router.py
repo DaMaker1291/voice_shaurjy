@@ -35,16 +35,18 @@ You are the JARVIS Cognitive Supervisor Router — the zero-latency gateway of a
 - "OS_AGENT"  → Desktop automation, UI accessibility tree manipulation, app-native scripting (Teams, OneNote, AutoCAD, Blender, VS Code, Finder/Explorer, system processes, keyboard/mouse emulation)
 - "HAL_AGENT" → Hardware Abstraction Layer: IoT networking, smart home (Zigbee/Z-Wave/BLE/mDNS), relay bridge comms, local device state mutations, microcontrollers, serial/USB protocols
 - "WEB_AGENT" → Autonomous web operations: Playwright browser automation, SaaS API handshakes, web research, flight/hotel booking, financial workflows, domain registration, form-fill automation
+- "CORE_AGENT" → Personal companion: memory retention, reminders, study/revision, empathetic support, emotional well-being, life context management, proactive scheduling
 
 ### STRICT OUTPUT SCHEMA — emit exactly this, no wrapping, no explanation:
-{"target_agent":"OS_AGENT|HAL_AGENT|WEB_AGENT","routing_confidence":0.00,"extracted_intent":"concise action statement","execution_context":{"primary_targets":["string"],"actionable_variables":{"key":"value"},"downstream_dependencies":["string"]}}
+{"target_agent":"OS_AGENT|HAL_AGENT|WEB_AGENT|CORE_AGENT","routing_confidence":0.00,"extracted_intent":"concise action statement","execution_context":{"primary_targets":["string"],"actionable_variables":{"key":"value"},"downstream_dependencies":["string"]}}
 
 ### RESOLUTION LAWS
 1. SINGLE AGENT RULE: Every request routes to exactly one agent — the owner of the PRIMARY execution roadblock. Multi-system requests route to the agent that must act first.
-2. AMBIGUITY HANDLING: If input spans multiple domains (e.g., "grab the Excel data and post to Slack"), route to the domain of the first blocking action (OS_AGENT for file extraction), and append "downstream_dependencies" listing deferred agents.
-3. STRUCTURAL CONTRADICTION: If the intent contains a logical impossibility or dangerous self-reference, route to the most probable target and set actionable_variables["anomaly_check"] = "true".
-4. CONFIDENCE FLOOR: routing_confidence must reflect genuine semantic certainty. Never emit 1.00 unless the mapping is absolutely unambiguous.
-5. ZERO VERBOSITY: Do not add fields. Do not omit fields. Do not explain. Emit only the schema."""
+2. CORE_AGENT PRIORITY: If the user expresses emotions, stress, anxiety, loneliness, sadness, asks for comfort, mentions forgetting something personal, wants to study or revise, or discusses personal life matters → route to CORE_AGENT.
+3. AMBIGUITY HANDLING: If input spans multiple domains (e.g., "grab the Excel data and post to Slack"), route to the domain of the first blocking action (OS_AGENT for file extraction), and append "downstream_dependencies" listing deferred agents.
+4. STRUCTURAL CONTRADICTION: If the intent contains a logical impossibility or dangerous self-reference, route to the most probable target and set actionable_variables["anomaly_check"] = "true".
+5. CONFIDENCE FLOOR: routing_confidence must reflect genuine semantic certainty. Never emit 1.00 unless the mapping is absolutely unambiguous.
+6. ZERO VERBOSITY: Do not add fields. Do not omit fields. Do not explain. Emit only the schema."""
 
 OS_AGENT_PROMPT = """### ROLE & ARCHITECTURAL DIRECTIVE
 You are the JARVIS Desktop and Creative Application Execution Agent — the sovereign controller of the local host operating system. You do not simulate, guess, or describe UI elements via visual inference. You interface exclusively with native OS accessibility trees (Win32 UIAutomation, macOS AXUIElement), or you drive software directly through internal scripting runtimes (Blender Python API, AutoCAD AutoLISP, VS Code extension API, PowerShell/.NET interop).
@@ -291,6 +293,8 @@ class RouterEngine:
                 agent_response = self._run_hal_agent(routing_packet, relay_context)
             elif target == "WEB_AGENT":
                 agent_response = self._run_web_agent(routing_packet, relay_context)
+            elif target == "CORE_AGENT":
+                agent_response = self._run_core_agent(routing_packet, relay_context)
             else:
                 agent_response = self._run_os_agent(routing_packet, relay_context)
         except Exception as e:
@@ -519,6 +523,26 @@ class RouterEngine:
             "error_detail": "Agent parse failure",
             "results_summary": {"extracted_data": {}, "confirmation_message": None},
         })
+
+    def _run_core_agent(self, routing_packet: dict, context: dict) -> dict:
+        """Run CORE_AGENT — companion, memory, education, empathy."""
+        try:
+            from companion_agent import companion
+            user_text = routing_packet.get("extracted_intent", "")
+            result = companion.process(user_text, context)
+            return result
+        except Exception as e:
+            return {
+                "mode": "CONVERSATIONAL",
+                "empathy_note": None,
+                "revision_data": None,
+                "reminders": [],
+                "memory_stored": False,
+                "crisis_detected": False,
+                "crisis_resources": None,
+                "reply": f"I'm here for you. (Companion agent error: {str(e)[:100]})",
+                "confidence": 0.5,
+            }
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

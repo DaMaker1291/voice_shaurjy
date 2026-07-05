@@ -1942,3 +1942,113 @@ async def audit_export(format: str = "json"):
         return {"exported": True, "path": filepath, "format": format}
     except Exception as e:
         return {"error": str(e)}
+
+
+# ── Companion Agent Routes ──────────────────────────────────────
+
+class CompanionRequest(BaseModel):
+    text: str
+    context: Optional[Dict[str, Any]] = None
+
+
+@app.post("/api/companion/process")
+async def companion_process(req: CompanionRequest):
+    try:
+        from companion_agent import companion
+        return companion.process(req.text, req.context)
+    except Exception as e:
+        return {"error": str(e), "mode": "CONVERSATIONAL", "reply": "I'm here for you."}
+
+
+@app.get("/api/companion/memory")
+async def companion_memory(limit: int = 20):
+    try:
+        from companion_agent import companion
+        return {"memories": companion.memory.get_recent(limit), "stats": companion.memory.get_stats()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/companion/memory/store")
+async def companion_memory_store(content: str, category: str = "fact", importance: int = 5):
+    try:
+        from companion_agent import companion
+        entry_id = companion.memory.store(content, category, importance)
+        return {"stored": True, "id": entry_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/companion/memory/recall")
+async def companion_memory_recall(query: str, limit: int = 10):
+    try:
+        from companion_agent import companion
+        return {"results": companion.memory.recall(query, limit)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/companion/reminders")
+async def companion_reminders():
+    try:
+        from companion_agent import companion
+        return {"reminders": companion.memory.get_active_reminders()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/companion/reminders/create")
+async def companion_reminder_create(trigger_text: str, recurring: Optional[str] = None):
+    try:
+        from companion_agent import companion
+        reminder_id = companion.memory.create_reminder(trigger_text, recurring)
+        return {"created": True, "id": reminder_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/companion/education/stats")
+async def companion_education_stats():
+    try:
+        from companion_agent import companion
+        return companion.education.get_retention_stats()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/companion/education/due")
+async def companion_education_due(field: str = None, limit: int = 10):
+    try:
+        from companion_agent import companion
+        return {"cards": companion.education.get_due_cards(field, limit)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/companion/education/add")
+async def companion_education_add(concept: str, summary: str, quiz_question: str, answer: str, field: str = "general"):
+    try:
+        from companion_agent import companion
+        card_id = companion.education.add_concept(concept, summary, quiz_question, answer, field)
+        return {"created": True, "id": card_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/companion/education/review")
+async def companion_education_review(card_id: int, quality: int):
+    try:
+        from companion_agent import companion
+        result = companion.education.review_card(card_id, quality)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/companion/crisis/resources")
+async def companion_crisis_resources(country: str = "US"):
+    try:
+        from companion_agent import companion
+        return companion.empathy.get_crisis_resources(country)
+    except Exception as e:
+        return {"error": str(e)}

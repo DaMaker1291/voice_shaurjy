@@ -1,7 +1,7 @@
 # Strict GBNF Grammar for JARVIS Supervisor Router
 root ::= space "{" space "\"target_agent\":" space agent_val "," space "\"routing_confidence\":" space float_val "," space "\"extracted_intent\":" space string_val "}" space
 
-agent_val ::= "\"OS_AGENT\"" | "\"HAL_AGENT\"" | "\"WEB_AGENT\""
+agent_val ::= "\"OS_AGENT\"" | "\"HAL_AGENT\"" | "\"WEB_AGENT\"" | "\"CORE_AGENT\""
 float_val ::= "0." [0-9] [0-9] | "1.00"
 string_val ::= "\"" [^"\\]* "\""
 

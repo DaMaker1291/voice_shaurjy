@@ -1,0 +1,19 @@
+root ::= root_object
+
+string ::= '"' chars '"'
+
+chars ::= (escape | [^"\\])*
+
+escape ::= '\\' ["\\/bfnrt] | unicode
+
+unicode ::= 'u' hex hex hex hex
+
+hex ::= [0-9a-fA-F]
+
+root_object ::= '{' '"is_crisis"' ':' bool_val ',' '"severity"' ':' severity_val ',' '"category"' ':' category_val ',' '"helpline"' ':' string ',' '"response"' ':' string '}'
+
+bool_val ::= "true" | "false"
+
+severity_val ::= '"LOW"' | '"MEDIUM"' | '"HIGH"' | '"CRITICAL"'
+
+category_val ::= '"self_harm"' | '"suicide"' | '"violence"' | '"illegal"' | '"none"'
