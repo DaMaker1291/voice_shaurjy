@@ -9,6 +9,10 @@ Usage:
 
 import argparse, json, os, platform, socket, subprocess, sys, threading, time, urllib.request, urllib.error, urllib.parse, ssl, re, datetime
 
+# Add backend to path for device clients
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_script_dir, "backend"))
+
 _SSL_CTX = ssl.create_default_context()
 try:
     import certifi
