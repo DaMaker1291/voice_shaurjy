@@ -562,11 +562,20 @@ def main():
         hb += 1
         device_push_hb += 1
 
-        # Heartbeat every 30 cycles (15s)
+        # Heartbeat every 30 cycles (15s), re-register if needed
         if hb >= 30:
             hb = 0
-            try: post(f"{HF_API}/api/relay/heartbeat", {"user_id": args.user})
-            except: pass
+            try:
+                resp = post(f"{HF_API}/api/relay/heartbeat", {"user_id": args.user})
+                if resp.get("status") != "ok":
+                    raise Exception("heartbeat rejected")
+            except Exception:
+                # HF Space restarted — re-register
+                try:
+                    post(f"{HF_API}/api/relay/register", {"user_id": args.user, "hostname": socket.gethostname(), "platform": platform.platform(), "info": device_info})
+                    print("[Relay] Re-registered with HF Space")
+                except Exception:
+                    pass
 
         # Re-discover and push devices every 5 minutes
         if device_push_hb >= 600:
