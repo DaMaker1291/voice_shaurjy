@@ -245,6 +245,118 @@ def _send_wol(mac):
     s.close()
     return f"WoL sent to {mac}"
 
+# ── Autonomous Task Engine ───────────────────────────────────────────
+
+def _get_active_browser():
+    result = run("osascript -e 'tell application \"System Events\" to get name of first application process whose frontmost is true'")
+    if "Safari" in result: return "Safari"
+    if "Chrome" in result: return "Google Chrome"
+    if "Firefox" in result: return "Firefox"
+    return "Safari"
+
+def _browser_open(url):
+    """Open URL in the active browser."""
+    b = _get_active_browser()
+    url = url.strip()
+    if not url.startswith("http"):
+        url = "https://" + url
+    if b == "Safari":
+        run(f"osascript -e 'tell application \"Safari\" to activate' -e 'tell application \"Safari\" to set URL of front document to \"{url}\"'")
+    elif b == "Google Chrome":
+        run(f"osascript -e 'tell application \"Google Chrome\" to activate' -e 'tell application \"Google Chrome\" to set URL of active tab of front window to \"{url}\"'")
+    else:
+        run(f'open -a "{b}" "{url}"')
+    time.sleep(2)
+    return f"Opened {url}"
+
+def _browser_get_text():
+    """Get text from the active browser tab."""
+    b = _get_active_browser()
+    if b == "Safari":
+        return run('osascript -e \'tell application "Safari" to get text of front document\'', timeout=10)
+    elif b == "Google Chrome":
+        return run("""osascript -e 'tell application "Google Chrome" to execute active tab of front window javascript "document.body.innerText"'""", timeout=10)
+    return ""
+
+def _scan_emails_flights():
+    """Open Gmail and scan for flight-related emails."""
+    _browser_open("https://mail.google.com")
+    time.sleep(5)
+    text = _browser_get_text()
+    flight_kw = ["flight", "boarding", "check-in", "check in", "itinerary", "booking", "airline", "departure", "reservation"]
+    matches = [line.strip() for line in text.split("\n") if any(kw in line.lower() for kw in flight_kw)]
+    return json.dumps({"found": len(matches) > 0, "items": matches[:10], "preview": text[:500]})
+
+def _scan_photos_passport():
+    """Open Google Photos and look for passport/ID photos."""
+    _browser_open("https://photos.google.com")
+    time.sleep(5)
+    text = _browser_get_text()
+    kw = ["passport", "id card", "identification", "photo id", "visa"]
+    matches = [line.strip() for line in text.split("\n") if any(k in line.lower() for k in kw)]
+    return json.dumps({"found": len(matches) > 0, "matches": matches[:10]})
+
+def _ai_computer_task(text):
+    """Handle complex autonomous tasks using browser + screen."""
+    lower = text.lower()
+
+    # Flight/check-in tasks
+    if any(kw in lower for kw in ["check in", "check-in", "flight", "boarding", "airline"]):
+        if any(kw in lower for kw in ["scan", "email", "find", "search", "look"]):
+            return _scan_emails_flights()
+        # Full check-in flow — open email first
+        result = _scan_emails_flights()
+        data = json.loads(result) if isinstance(result, str) else result
+        if data.get("found"):
+            return f"Found flight emails:\n{json.dumps(data['items'][:5], indent=2)}\n\nI'll now open the airline site. Which airline?"
+        return "No flight emails found. Provide the airline website and booking ref, or I'll scan your inbox."
+
+    # Passport/ID photo tasks
+    if any(kw in lower for kw in ["passport", "id photo", "identification", "visa photo"]):
+        return _scan_photos_passport()
+
+    # Email tasks
+    if any(kw in lower for kw in ["check email", "scan email", "read email", "inbox", "any emails"]):
+        return _scan_emails_flights()
+
+    # Browser navigation
+    if any(kw in lower for kw in ["go to", "open website", "navigate", "browse to"]):
+        url_match = re.search(r'https?://\S+', text)
+        if url_match:
+            return _browser_open(url_match.group())
+        site_match = re.search(r'(?:go to|open|navigate to|browse to)\s+(.+?)(?:\s+and|\s+then|$)', lower)
+        if site_match:
+            site = site_match.group(1).strip()
+            sites = {
+                "gmail": "https://mail.google.com", "google": "https://google.com",
+                "youtube": "https://youtube.com", "outlook": "https://outlook.live.com",
+                "photos": "https://photos.google.com", "drive": "https://drive.google.com",
+                "calendar": "https://calendar.google.com", "maps": "https://maps.google.com",
+                "github": "https://github.com", "twitter": "https://x.com",
+                "linkedin": "https://linkedin.com", "facebook": "https://facebook.com",
+                "reddit": "https://reddit.com", "netflix": "https://netflix.com",
+                "amazon": "https://amazon.com",
+            }
+            url = sites.get(site, f"https://{site}.com")
+            return _browser_open(url)
+        return "Where should I navigate?"
+
+    # Screenshot/analysis
+    if any(kw in lower for kw in ["screenshot", "what's on screen", "what do you see"]):
+        path = "/tmp/jarvis_screen.png"
+        run(f"screencapture -x {path}")
+        return f"Screenshot saved to {path}"
+
+    # Default: try to navigate to what they mentioned
+    _browser_open(text)
+    return f"Navigating to: {text}"
+
+def _screen_analyze(text):
+    """Capture screen and describe what's visible."""
+    path = "/tmp/jarvis_screen.png"
+    run(f"screencapture -x {path}")
+    return f"Screenshot captured at {path}. Analyzing: {text}"
+
 def macos_exec(action, params=""):
     if _is_win: return _win_exec(action, params)
     actions = {
@@ -289,6 +401,12 @@ def macos_exec(action, params=""):
         "ui_click": lambda: _ui_click(params),
         "ui_open_app": lambda: _open_app(params),
         "ui_activate_app": lambda: run(f"osascript -e 'tell app \"{params}\" to activate' 2>/dev/null"),
+        "ai_computer_task": lambda: _ai_computer_task(params),
+        "screen_analyze": lambda: _screen_analyze(params),
+        "browser_open": lambda: _browser_open(params),
+        "browser_text": lambda: _browser_get_text(),
+        "email_scan_flights": lambda: _scan_emails_flights(),
+        "photo_scan_passport": lambda: _scan_photos_passport(),
         "cognitive_scan": lambda: _cognitive_scan(),
     }
     fn = actions.get(action)
