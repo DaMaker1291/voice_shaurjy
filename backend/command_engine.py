@@ -566,7 +566,7 @@ class CommandEngine:
 
     def get_stats(self) -> dict:
         """Get command engine statistics."""
-        from .device_manager import get_command_stats
+        from device_manager import get_command_stats
         return {
             "protocols_supported": list(self._executors.keys()),
             "interceptors": len(self._interceptors),

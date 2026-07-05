@@ -417,7 +417,7 @@ class CommandValidator:
 
         # Validate params against device schema
         device_type = device.get("device_type", "UNKNOWN")
-        from .universal_hal import DEVICE_TYPES
+        from universal_hal import DEVICE_TYPES
         type_def = DEVICE_TYPES.get(device_type, {})
         actions = type_def.get("actions", {})
 
