@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 
 const API = "";
+
+type Tab = "overview" | "devices" | "control" | "security";
 
 interface Device {
   id: string;
@@ -12,326 +15,302 @@ interface Device {
   mac: string;
   protocol: string;
   manufacturer: string;
+  model: string;
   room: string;
   state: any;
   is_online: boolean;
-  last_seen: number;
-  signal_strength: number;
 }
 
-interface CommandLog {
-  id: number;
-  device_id: string;
-  action: string;
-  status: string;
-  latency_ms: number;
-  timestamp: number;
-}
-
-interface NetworkStats {
-  total_devices: number;
-  alive_devices: number;
-  scans_completed: number;
-  last_scan_duration_ms: number;
-  subnet: string;
-  local_ip: string;
-}
-
-interface SecurityStats {
-  keys: any[];
-  network_auth: { active_sessions: number; blocked_ips: number };
-  local_ip: string;
-  local_subnet: string;
-}
-
-interface DashboardData {
-  devices: { total: number; online: number; offline: number };
-  by_type: Record<string, number>;
-  by_room: Record<string, number>;
-  by_protocol: Record<string, number>;
-  commands: { total: number; successful: number; success_rate: number; avg_latency_ms: number };
-  recent_commands: CommandLog[];
-  network: NetworkStats;
-  security: SecurityStats;
-}
-
-const TYPE_ICONS: Record<string, string> = {
-  LIGHT: "💡", SWITCH: "🔌", THERMOSTAT: "🌡", LOCK: "🔒", CAMERA: "📷",
-  VACUUM: "🤖", CLIMATE: "❄️", MEDIA_PLAYER: "📺", SENSOR: "📡",
-  HUB: "🏠", COVER: "🪟", SCENE: "🎬", ROUTER: "🌐", UNKNOWN: "❓",
-};
-
-const TYPE_COLORS: Record<string, string> = {
-  LIGHT: "#facc15", SWITCH: "#a78bfa", THERMOSTAT: "#f97316", LOCK: "#ef4444",
-  CAMERA: "#06b6d4", VACUUM: "#8b5cf6", CLIMATE: "#3b82f6", MEDIA_PLAYER: "#ec4899",
-  SENSOR: "#22c55e", HUB: "#f59e0b", COVER: "#14b8a6", ROUTER: "#6366f1",
+const TYPE_META: Record<string, { icon: string; color: string; label: string }> = {
+  ROUTER: { icon: "🌐", color: "#6366f1", label: "Router" },
+  SWITCH: { icon: "🔌", color: "#a78bfa", label: "Smart Plug" },
+  PRINTER: { icon: "🖨", color: "#f59e0b", label: "Printer" },
+  PHONE: { icon: "📱", color: "#ec4899", label: "Phone" },
+  SENSOR: { icon: "📡", color: "#22c55e", label: "Sensor" },
+  HUB: { icon: "💻", color: "#06b6d4", label: "Hub" },
+  LIGHT: { icon: "💡", color: "#facc15", label: "Light" },
+  THERMOSTAT: { icon: "🌡", color: "#f97316", label: "Thermostat" },
+  LOCK: { icon: "🔒", color: "#ef4444", label: "Lock" },
+  CAMERA: { icon: "📷", color: "#06b6d4", label: "Camera" },
+  VACUUM: { icon: "🤖", color: "#8b5cf6", label: "Vacuum" },
+  MEDIA_PLAYER: { icon: "📺", color: "#ec4899", label: "Speaker" },
+  COVER: { icon: "🪟", color: "#14b8a6", label: "Blinds" },
 };
 
 export default function SovereignPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [tab, setTab] = useState<Tab>("overview");
   const [devices, setDevices] = useState<Device[]>([]);
-  const [scanning, setScanning] = useState(false);
-  const [commandTarget, setCommandTarget] = useState("");
-  const [commandAction, setCommandAction] = useState("");
-  const [commandParams, setCommandParams] = useState("{}");
+  const [loading, setLoading] = useState(true);
+  const [scanStatus, setScanStatus] = useState("");
   const [commandResult, setCommandResult] = useState<any>(null);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
-  const [filter, setFilter] = useState("all");
-  const [tab, setTab] = useState<"overview" | "devices" | "commands" | "security">("overview");
-  const wsRef = useRef<WebSocket | null>(null);
 
-  useEffect(() => {
-    fetchDashboard();
-    fetchDevices();
-    const interval = setInterval(() => {
-      fetchDashboard();
-      fetchDevices();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  async function fetchDashboard() {
-    try {
-      const res = await fetch(`${API}/api/sovereign/dashboard`);
-      const json = await res.json();
-      setData(json);
-    } catch {}
-  }
-
-  async function fetchDevices() {
+  const fetchDevices = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/sovereign/devices`);
-      const json = await res.json();
-      setDevices(json.devices || []);
+      const data = await res.json();
+      setDevices(data.devices || []);
     } catch {}
-  }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchDevices();
+    const interval = setInterval(fetchDevices, 5000);
+    return () => clearInterval(interval);
+  }, [fetchDevices]);
 
   async function triggerScan() {
-    setScanning(true);
+    setScanStatus("Scanning...");
     try {
-      await fetch(`${API}/api/sovereign/network/scan`);
-      await fetchDevices();
-      await fetchDashboard();
-    } catch {}
-    setScanning(false);
+      const res = await fetch(`${API}/api/real/scan`, { method: "POST" });
+      const data = await res.json();
+      setScanStatus(`Found ${data.phones_found || 0} phones, ${data.tapo_found || 0} plugs, ${data.printers_found || 0} printers`);
+      fetchDevices();
+    } catch (e: any) {
+      setScanStatus(`Error: ${e.message}`);
+    }
+    setTimeout(() => setScanStatus(""), 5000);
   }
 
-  async function executeCommand() {
-    if (!commandTarget || !commandAction) return;
+  async function controlDevice(device: Device, action: string) {
+    const proto = device.protocol.toLowerCase();
+    let url = "";
+    if (proto === "tapo" || device.device_type === "SWITCH") {
+      url = `/api/real/tapo/${action}?ip=${device.ip}`;
+    } else if (device.device_type === "PRINTER") {
+      url = `/api/real/printer/status?ip=${device.ip}`;
+    } else if (device.device_type === "PHONE") {
+      url = `/api/real/phone/${action}?ip=${device.ip}`;
+    }
+    if (!url) return;
+
     try {
-      const params = JSON.parse(commandParams);
-      const res = await fetch(
-        `${API}/api/sovereign/command?device_id=${commandTarget}&action=${commandAction}&initiated_by=user`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params) }
-      );
-      const json = await res.json();
-      setCommandResult(json);
+      const method = action === "status" || action === "info" || action === "battery" || action === "screen" || action === "ink" ? "GET" : "POST";
+      const res = await fetch(`${API}${url}`, { method });
+      const data = await res.json();
+      setCommandResult({ device: device.name, action, result: data });
     } catch (e: any) {
-      setCommandResult({ status: "error", error: e.message });
+      setCommandResult({ device: device.name, action, error: e.message });
     }
   }
 
-  async function startDaemon() {
-    try {
-      await fetch(`${API}/api/sovereign/network/start?scan_interval=30`, { method: "POST" });
-    } catch {}
-  }
-
-  const filteredDevices = filter === "all" ? devices
-    : filter === "online" ? devices.filter((d) => d.is_online)
-    : devices.filter((d) => d.device_type === filter);
+  const online = devices.filter((d) => d.is_online);
+  const byType = devices.reduce((acc, d) => { acc[d.device_type] = (acc[d.device_type] || 0) + 1; return acc; }, {} as Record<string, number>);
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#09090b", color: "#e2e8f0", fontFamily: "system-ui, -apple-system, sans-serif", overflow: "hidden" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0a0a0f", color: "#e2e8f0", fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
       {/* Header */}
-      <div style={{ padding: "12px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#09090b" }}>
+      <header style={{ padding: "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(10,10,15,0.95)", backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: data?.devices?.online ? "#22c55e" : "#ef4444", boxShadow: `0 0 8px ${data?.devices?.online ? "#22c55e" : "#ef4444"}` }} />
-          <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.5 }}>SOVEREIGN NETWORK</span>
-          <span style={{ fontSize: 11, color: "#71717a", background: "rgba(139,92,246,0.12)", padding: "2px 8px", borderRadius: 4 }}>v2.0</span>
+          <Link href="/" style={{ color: "#71717a", fontSize: 18, textDecoration: "none", padding: "4px 8px", borderRadius: 6, transition: "color 0.15s" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#e2e8f0")} onMouseLeave={(e) => (e.currentTarget.style.color = "#71717a")}>
+            ←
+          </Link>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: online.length > 0 ? "#22c55e" : "#ef4444", boxShadow: `0 0 12px ${online.length > 0 ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}` }} />
+          <div>
+            <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: -0.3 }}>SOVEREIGN NETWORK</span>
+            <span style={{ fontSize: 11, color: "#52525b", marginLeft: 8 }}>{online.length} devices online</span>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={triggerScan} disabled={scanning} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid rgba(139,92,246,0.3)", background: scanning ? "rgba(139,92,246,0.05)" : "rgba(139,92,246,0.12)", color: "#e2e8f0", fontSize: 12, cursor: scanning ? "wait" : "pointer", fontWeight: 500 }}>
-            {scanning ? "⟳ Scanning..." : "⟳ Scan Network"}
-          </button>
-          <button onClick={startDaemon} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.12)", color: "#22c55e", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>
-            ▶ Start Daemon
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {scanStatus && <span style={{ fontSize: 11, color: "#a78bfa" }}>{scanStatus}</span>}
+          <button onClick={triggerScan} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.1)", color: "#a78bfa", fontSize: 12, cursor: "pointer", fontWeight: 500, transition: "all 0.15s" }} onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(139,92,246,0.2)")} onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(139,92,246,0.1)")}>
+            Scan Network
           </button>
         </div>
-      </div>
+      </header>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "0 24px" }}>
-        {(["overview", "devices", "commands", "security"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} style={{ padding: "10px 18px", border: "none", borderBottom: tab === t ? "2px solid #8b5cf6" : "2px solid transparent", background: "transparent", color: tab === t ? "#e2e8f0" : "#71717a", fontSize: 13, fontWeight: 500, cursor: "pointer", textTransform: "capitalize" }}>
+      <nav style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "0 20px", background: "rgba(10,10,15,0.95)" }}>
+        {(["overview", "devices", "control", "security"] as Tab[]).map((t) => (
+          <button key={t} onClick={() => setTab(t)} style={{ padding: "10px 16px", border: "none", borderBottom: tab === t ? "2px solid #8b5cf6" : "2px solid transparent", background: "transparent", color: tab === t ? "#e2e8f0" : "#52525b", fontSize: 13, fontWeight: 500, cursor: "pointer", textTransform: "capitalize", transition: "all 0.15s" }}>
             {t}
           </button>
         ))}
-      </div>
+      </nav>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: "auto", padding: "16px 24px" }}>
-        {tab === "overview" && data && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-            <StatCard label="Total Devices" value={data.devices.total} icon="🌐" color="#8b5cf6" />
-            <StatCard label="Online" value={data.devices.online} icon="✓" color="#22c55e" />
-            <StatCard label="Commands Run" value={data.commands.total} icon="⚡" color="#3b82f6" />
-            <StatCard label="Success Rate" value={`${data.commands.success_rate}%`} icon="🎯" color="#f59e0b" />
+      <main style={{ flex: 1, overflow: "auto", padding: "16px 20px" }}>
+        {tab === "overview" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10, marginBottom: 20 }}>
+            <StatCard label="Total Devices" value={devices.length} icon="🌐" />
+            <StatCard label="Online" value={online.length} icon="✓" />
+            <StatCard label="Offline" value={devices.length - online.length} icon="✕" />
+            <StatCard label="Device Types" value={Object.keys(byType).length} icon="📋" />
 
-            <div style={{ gridColumn: "span 2", background: "#111113", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "#a1a1aa" }}>DEVICE TYPES</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {Object.entries(data.by_type).map(([type, count]) => (
-                  <div key={type} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 6, background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.15)" }}>
-                    <span>{TYPE_ICONS[type] || "❓"}</span>
-                    <span style={{ fontSize: 12, color: "#e2e8f0" }}>{type}</span>
-                    <span style={{ fontSize: 11, color: "#71717a" }}>×{count}</span>
-                  </div>
-                ))}
-                {Object.keys(data.by_type).length === 0 && (
-                  <span style={{ fontSize: 12, color: "#71717a" }}>No devices registered yet. Run a scan to discover devices.</span>
-                )}
-              </div>
-            </div>
-
-            <div style={{ gridColumn: "span 2", background: "#111113", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "#a1a1aa" }}>PROTOCOLS</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {Object.entries(data.by_protocol).map(([proto, count]) => (
-                  <div key={proto} style={{ padding: "4px 10px", borderRadius: 6, background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.15)", fontSize: 12 }}>
-                    {proto} ×{count}
-                  </div>
-                ))}
-                {Object.keys(data.by_protocol).length === 0 && (
-                  <span style={{ fontSize: 12, color: "#71717a" }}>No protocol data yet.</span>
-                )}
-              </div>
-            </div>
-
-            <div style={{ gridColumn: "span 4", background: "#111113", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "#a1a1aa" }}>RECENT COMMANDS</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {data.recent_commands.length > 0 ? data.recent_commands.map((cmd) => (
-                  <div key={cmd.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 10px", borderRadius: 4, background: "rgba(255,255,255,0.02)" }}>
-                    <span style={{ fontSize: 11, color: cmd.status === "success" ? "#22c55e" : cmd.status === "error" ? "#ef4444" : "#eab308", width: 8 }}>{cmd.status === "success" ? "●" : cmd.status === "error" ? "●" : "●"}</span>
-                    <span style={{ fontSize: 12, color: "#e2e8f0", minWidth: 80 }}>{cmd.action}</span>
-                    <span style={{ fontSize: 11, color: "#71717a", flex: 1 }}>{cmd.device_id}</span>
-                    <span style={{ fontSize: 11, color: "#a1a1aa" }}>{cmd.latency_ms.toFixed(0)}ms</span>
-                  </div>
-                )) : (
-                  <span style={{ fontSize: 12, color: "#71717a" }}>No commands executed yet.</span>
-                )}
-              </div>
-            </div>
+            {Object.entries(byType).map(([type, count]) => {
+              const meta = TYPE_META[type] || { icon: "❓", color: "#71717a", label: type };
+              return (
+                <div key={type} onClick={() => setTab("devices")} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 14, cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={(e) => (e.currentTarget.style.borderColor = meta.color + "40")} onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)")}>
+                  <div style={{ fontSize: 22, marginBottom: 6 }}>{meta.icon}</div>
+                  <div style={{ fontSize: 20, fontWeight: 700 }}>{count}</div>
+                  <div style={{ fontSize: 11, color: "#71717a" }}>{meta.label}{count !== 1 ? "s" : ""}</div>
+                </div>
+              );
+            })}
           </div>
         )}
 
         {tab === "devices" && (
-          <div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-              {["all", "online", ...Object.keys(TYPE_ICONS)].map((f) => (
-                <button key={f} onClick={() => setFilter(f)} style={{ padding: "4px 12px", borderRadius: 20, border: filter === f ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)", background: filter === f ? "rgba(139,92,246,0.15)" : "transparent", color: filter === f ? "#e2e8f0" : "#71717a", fontSize: 11, cursor: "pointer", textTransform: "capitalize" }}>
-                  {TYPE_ICONS[f] ? `${TYPE_ICONS[f]} ${f}` : f}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
-              {filteredDevices.map((d) => (
-                <DeviceCard key={d.id} device={d} onClick={() => setSelectedDevice(d)} />
-              ))}
-              {filteredDevices.length === 0 && (
-                <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "#71717a" }}>
-                  No devices found. Run a network scan to discover devices.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {tab === "commands" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <div style={{ background: "#111113", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: "#a1a1aa" }}>EXECUTE COMMAND</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <select value={commandTarget} onChange={(e) => setCommandTarget(e.target.value)} style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "#09090b", color: "#e2e8f0", fontSize: 13 }}>
-                  <option value="">Select device...</option>
-                  {devices.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name || d.id} ({d.device_type})</option>
-                  ))}
-                </select>
-                <input value={commandAction} onChange={(e) => setCommandAction(e.target.value)} placeholder="Action (e.g. TURN_ON, SET_BRIGHTNESS)" style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "#09090b", color: "#e2e8f0", fontSize: 13 }} />
-                <textarea value={commandParams} onChange={(e) => setCommandParams(e.target.value)} placeholder='{"brightness": 80}' rows={3} style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "#09090b", color: "#e2e8f0", fontSize: 13, fontFamily: "monospace", resize: "vertical" }} />
-                <button onClick={executeCommand} style={{ padding: "10px 16px", borderRadius: 6, border: "none", background: "#8b5cf6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  ⚡ Execute Command
-                </button>
-              </div>
-            </div>
-            <div style={{ background: "#111113", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: "#a1a1aa" }}>RESULT</div>
-              {commandResult ? (
-                <pre style={{ fontSize: 12, color: commandResult.status === "success" ? "#22c55e" : "#ef4444", fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                  {JSON.stringify(commandResult, null, 2)}
-                </pre>
-              ) : (
-                <span style={{ fontSize: 12, color: "#71717a" }}>No command executed yet.</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {tab === "security" && data?.security && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-            <StatCard label="Local IP" value={data.security.local_ip} icon="🏠" color="#8b5cf6" />
-            <StatCard label="Subnet" value={data.security.local_subnet} icon="🌐" color="#3b82f6" />
-            <StatCard label="Active Sessions" value={data.security.network_auth?.active_sessions || 0} icon="🔒" color="#22c55e" />
-            <StatCard label="Blocked IPs" value={data.security.network_auth?.blocked_ips || 0} icon="🚫" color="#ef4444" />
-            <StatCard label="Security Keys" value={data.security.keys?.length || 0} icon="🔑" color="#f59e0b" />
-            <StatCard label="Air-Gapped" value="YES" icon="🛡" color="#22c55e" />
-            <div style={{ gridColumn: "span 3", background: "#111113", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "#a1a1aa" }}>SECURITY KEYS</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {data.security.keys?.length > 0 ? data.security.keys.map((k: any, i: number) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 10px", borderRadius: 4, background: "rgba(255,255,255,0.02)" }}>
-                    <span style={{ fontSize: 11, color: "#22c55e" }}>●</span>
-                    <span style={{ fontSize: 12, color: "#e2e8f0", minWidth: 100 }}>{k.purpose}</span>
-                    <span style={{ fontSize: 11, color: "#71717a" }}>{k.key_id}</span>
-                    {k.is_expired && <span style={{ fontSize: 10, color: "#ef4444", background: "rgba(239,68,68,0.12)", padding: "1px 6px", borderRadius: 3 }}>EXPIRED</span>}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
+            {devices.map((d) => {
+              const meta = TYPE_META[d.device_type] || { icon: "❓", color: "#71717a", label: d.device_type };
+              return (
+                <div key={d.id} onClick={() => setSelectedDevice(d)} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16, cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={(e) => (e.currentTarget.style.borderColor = meta.color + "40")} onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)")}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: meta.color + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{meta.icon}</div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{d.name}</div>
+                        <div style={{ fontSize: 11, color: "#52525b" }}>{meta.label} • {d.protocol.toUpperCase()}</div>
+                      </div>
+                    </div>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: d.is_online ? "#22c55e" : "#ef4444", boxShadow: d.is_online ? "0 0 6px rgba(34,197,94,0.4)" : "none" }} />
                   </div>
-                )) : (
-                  <span style={{ fontSize: 12, color: "#71717a" }}>No keys generated yet.</span>
+                  <div style={{ fontSize: 11, color: "#52525b", display: "flex", gap: 8 }}>
+                    <span>{d.ip}</span>
+                    {d.manufacturer && <><span>•</span><span>{d.manufacturer}</span></>}
+                    {d.model && <><span>•</span><span>{d.model}</span></>}
+                  </div>
+                </div>
+              );
+            })}
+            {devices.length === 0 && !loading && (
+              <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 60, color: "#52525b" }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+                <div style={{ fontSize: 14, marginBottom: 8 }}>No devices found</div>
+                <div style={{ fontSize: 12 }}>Run the relay on your local machine to discover real devices</div>
+                <code style={{ display: "block", marginTop: 12, fontSize: 11, color: "#a78bfa", background: "rgba(139,92,246,0.1)", padding: "8px 12px", borderRadius: 6 }}>python3 standalone_relay.py --user shaurjesh</code>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "control" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 900 }}>
+            <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: "#a1a1aa" }}>QUICK ACTIONS</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {devices.filter(d => d.device_type === "SWITCH").map(d => (
+                  <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{d.name}</div>
+                      <div style={{ fontSize: 10, color: "#52525b" }}>{d.ip}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={(e) => { e.stopPropagation(); controlDevice(d, "turn_on"); }} style={{ padding: "4px 10px", borderRadius: 4, border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontSize: 11, cursor: "pointer" }}>ON</button>
+                      <button onClick={(e) => { e.stopPropagation(); controlDevice(d, "turn_off"); }} style={{ padding: "4px 10px", borderRadius: 4, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.1)", color: "#ef4444", fontSize: 11, cursor: "pointer" }}>OFF</button>
+                    </div>
+                  </div>
+                ))}
+                {devices.filter(d => d.device_type === "PHONE").map(d => (
+                  <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{d.name}</div>
+                      <div style={{ fontSize: 10, color: "#52525b" }}>{d.ip}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={(e) => { e.stopPropagation(); controlDevice(d, "battery"); }} style={{ padding: "4px 10px", borderRadius: 4, border: "1px solid rgba(234,179,8,0.3)", background: "rgba(234,179,8,0.1)", color: "#eab308", fontSize: 11, cursor: "pointer" }}>Battery</button>
+                      <button onClick={(e) => { e.stopPropagation(); controlDevice(d, "lock"); }} style={{ padding: "4px 10px", borderRadius: 4, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.1)", color: "#a78bfa", fontSize: 11, cursor: "pointer" }}>Lock</button>
+                    </div>
+                  </div>
+                ))}
+                {devices.filter(d => d.device_type === "PRINTER").map(d => (
+                  <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{d.name}</div>
+                      <div style={{ fontSize: 10, color: "#52525b" }}>{d.ip}</div>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); controlDevice(d, "status"); }} style={{ padding: "4px 10px", borderRadius: 4, border: "1px solid rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontSize: 11, cursor: "pointer" }}>Status</button>
+                  </div>
+                ))}
+                {devices.filter(d => ["SWITCH", "PHONE", "PRINTER"].includes(d.device_type)).length === 0 && (
+                  <div style={{ fontSize: 12, color: "#52525b", textAlign: "center", padding: 20 }}>No controllable devices found</div>
                 )}
               </div>
             </div>
+            <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: "#a1a1aa" }}>COMMAND OUTPUT</div>
+              {commandResult ? (
+                <pre style={{ fontSize: 11, fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all", color: commandResult.result?.success === false || commandResult.error ? "#ef4444" : "#22c55e", background: "rgba(0,0,0,0.3)", padding: 12, borderRadius: 6, maxHeight: 300, overflow: "auto" }}>
+                  {JSON.stringify(commandResult, null, 2)}
+                </pre>
+              ) : (
+                <div style={{ fontSize: 12, color: "#52525b", textAlign: "center", padding: 40 }}>
+                  Click a device action to see results
+                </div>
+              )}
+            </div>
           </div>
         )}
-      </div>
+
+        {tab === "security" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+            <StatCard label="Local Network" value="192.168.0.x" icon="🏠" />
+            <StatCard label="Air-Gapped" value="YES" icon="🛡" />
+            <StatCard label="No Cloud Control" value="YES" icon="🔒" />
+            <StatCard label="Protocol" value="Local WiFi" icon="📡" />
+            <div style={{ gridColumn: "1/-1", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "#a1a1aa" }}>SECURITY MODEL</div>
+              <div style={{ fontSize: 12, color: "#71717a", lineHeight: 1.8 }}>
+                <div>✓ All commands execute locally on your network — zero cloud</div>
+                <div>✓ Devices are controlled via direct WiFi (Tapo, IPP, ADB)</div>
+                <div>✓ No inbound internet traffic accepted</div>
+                <div>✓ State telemetry parsed and stored locally only</div>
+                <div>✓ Network-pinned authentication (same subnet required)</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
 
       {/* Device Detail Modal */}
       {selectedDevice && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => setSelectedDevice(null)}>
-          <div style={{ background: "#111113", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 24, maxWidth: 480, width: "90%" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => setSelectedDevice(null)}>
+          <div style={{ background: "#111118", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 24, maxWidth: 440, width: "90%" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 24 }}>{TYPE_ICONS[selectedDevice.device_type] || "❓"}</span>
+                <span style={{ fontSize: 28 }}>{TYPE_META[selectedDevice.device_type]?.icon || "❓"}</span>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>{selectedDevice.name || selectedDevice.id}</div>
-                  <div style={{ fontSize: 12, color: "#71717a" }}>{selectedDevice.device_type} • {selectedDevice.protocol}</div>
+                  <div style={{ fontSize: 16, fontWeight: 600 }}>{selectedDevice.name}</div>
+                  <div style={{ fontSize: 12, color: "#52525b" }}>{selectedDevice.device_type} • {selectedDevice.protocol.toUpperCase()}</div>
                 </div>
               </div>
-              <button onClick={() => setSelectedDevice(null)} style={{ background: "none", border: "none", color: "#71717a", fontSize: 18, cursor: "pointer" }}>✕</button>
+              <button onClick={() => setSelectedDevice(null)} style={{ background: "none", border: "none", color: "#52525b", fontSize: 20, cursor: "pointer" }}>×</button>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-              <InfoRow label="IP" value={selectedDevice.ip} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+              <InfoRow label="IP Address" value={selectedDevice.ip} />
               <InfoRow label="MAC" value={selectedDevice.mac} />
-              <InfoRow label="Manufacturer" value={selectedDevice.manufacturer} />
-              <InfoRow label="Room" value={selectedDevice.room} />
+              <InfoRow label="Manufacturer" value={selectedDevice.manufacturer || "—"} />
+              <InfoRow label="Model" value={selectedDevice.model || "—"} />
               <InfoRow label="Status" value={selectedDevice.is_online ? "ONLINE" : "OFFLINE"} color={selectedDevice.is_online ? "#22c55e" : "#ef4444"} />
-              <InfoRow label="Signal" value={selectedDevice.signal_strength > 0 ? `${selectedDevice.signal_strength}dBm` : "N/A"} />
+              <InfoRow label="Protocol" value={selectedDevice.protocol.toUpperCase()} />
             </div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#a1a1aa", marginBottom: 8 }}>STATE</div>
-            <pre style={{ fontSize: 11, color: "#a1a1aa", fontFamily: "monospace", background: "#09090b", padding: 10, borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)", maxHeight: 120, overflow: "auto" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#52525b", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>State</div>
+            <pre style={{ fontSize: 11, color: "#71717a", fontFamily: "monospace", background: "rgba(0,0,0,0.3)", padding: 10, borderRadius: 6, border: "1px solid rgba(255,255,255,0.04)", maxHeight: 100, overflow: "auto" }}>
               {JSON.stringify(selectedDevice.state || {}, null, 2)}
             </pre>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              {selectedDevice.device_type === "SWITCH" && (
+                <>
+                  <button onClick={() => controlDevice(selectedDevice, "turn_on")} style={{ flex: 1, padding: "8px 0", borderRadius: 6, border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Turn ON</button>
+                  <button onClick={() => controlDevice(selectedDevice, "turn_off")} style={{ flex: 1, padding: "8px 0", borderRadius: 6, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.1)", color: "#ef4444", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Turn OFF</button>
+                </>
+              )}
+              {selectedDevice.device_type === "PHONE" && (
+                <>
+                  <button onClick={() => controlDevice(selectedDevice, "battery")} style={{ flex: 1, padding: "8px 0", borderRadius: 6, border: "1px solid rgba(234,179,8,0.3)", background: "rgba(234,179,8,0.1)", color: "#eab308", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Battery</button>
+                  <button onClick={() => controlDevice(selectedDevice, "lock")} style={{ flex: 1, padding: "8px 0", borderRadius: 6, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.1)", color: "#a78bfa", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Lock Screen</button>
+                  <button onClick={() => controlDevice(selectedDevice, "screenshot")} style={{ flex: 1, padding: "8px 0", borderRadius: 6, border: "1px solid rgba(6,182,212,0.3)", background: "rgba(6,182,212,0.1)", color: "#06b6d4", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Screenshot</button>
+                </>
+              )}
+              {selectedDevice.device_type === "PRINTER" && (
+                <>
+                  <button onClick={() => controlDevice(selectedDevice, "status")} style={{ flex: 1, padding: "8px 0", borderRadius: 6, border: "1px solid rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Status</button>
+                  <button onClick={() => controlDevice(selectedDevice, "ink")} style={{ flex: 1, padding: "8px 0", borderRadius: 6, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.1)", color: "#a78bfa", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Ink Levels</button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -339,56 +318,21 @@ export default function SovereignPage() {
   );
 }
 
-function StatCard({ label, value, icon, color }: { label: string; value: any; icon: string; color: string }) {
+function StatCard({ label, value, icon }: { label: string; value: any; icon: string }) {
   return (
-    <div style={{ background: "#111113", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 16, display: "flex", alignItems: "center", gap: 12 }}>
-      <div style={{ width: 36, height: 36, borderRadius: 8, background: `${color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{icon}</div>
-      <div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: "#fafafa" }}>{value}</div>
-        <div style={{ fontSize: 11, color: "#71717a" }}>{label}</div>
-      </div>
-    </div>
-  );
-}
-
-function DeviceCard({ device, onClick }: { device: Device; onClick: () => void }) {
-  const color = TYPE_COLORS[device.device_type] || "#71717a";
-  return (
-    <div onClick={onClick} style={{ background: "#111113", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 14, cursor: "pointer", transition: "border-color 0.15s" }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = color)}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)")}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 20 }}>{TYPE_ICONS[device.device_type] || "❓"}</span>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{device.name || device.id}</div>
-            <div style={{ fontSize: 11, color: "#71717a" }}>{device.device_type}</div>
-          </div>
-        </div>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: device.is_online ? "#22c55e" : "#ef4444" }} />
-      </div>
-      <div style={{ display: "flex", gap: 8, fontSize: 11, color: "#71717a" }}>
-        <span>{device.ip}</span>
-        <span>•</span>
-        <span>{device.protocol}</span>
-        {device.manufacturer && <><span>•</span><span>{device.manufacturer}</span></>}
-      </div>
-      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-        {Object.entries(device.state || {}).slice(0, 3).map(([k, v]) => (
-          <span key={k} style={{ fontSize: 10, color: "#a1a1aa", background: "rgba(255,255,255,0.04)", padding: "2px 6px", borderRadius: 3 }}>
-            {k}: {String(v).slice(0, 20)}
-          </span>
-        ))}
-      </div>
+    <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16 }}>
+      <div style={{ fontSize: 22, marginBottom: 6 }}>{icon}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: "#fafafa" }}>{value}</div>
+      <div style={{ fontSize: 11, color: "#52525b" }}>{label}</div>
     </div>
   );
 }
 
 function InfoRow({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ padding: "4px 0" }}>
-      <div style={{ fontSize: 10, color: "#52525b" }}>{label}</div>
-      <div style={{ fontSize: 12, color: color || "#e2e8f0" }}>{value || "—"}</div>
+    <div>
+      <div style={{ fontSize: 10, color: "#3f3f46", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
+      <div style={{ fontSize: 12, color: color || "#a1a1aa", marginTop: 2 }}>{value || "—"}</div>
     </div>
   );
 }

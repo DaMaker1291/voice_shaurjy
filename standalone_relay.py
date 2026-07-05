@@ -312,11 +312,15 @@ def _execute_device_command(action, params):
     """Execute a real device command locally."""
     import re
 
+    if not isinstance(params, dict):
+        return {"success": False, "error": "Invalid params"}
+
     ip = params.get("ip", "")
     device_type = params.get("device_type", "")
+    protocol = params.get("protocol", "")
 
     # Tapo smart plug control
-    if device_type == "SWITCH" and ("tapo" in params.get("protocol", "").lower() or "p100" in ip or "p110" in ip):
+    if device_type == "SWITCH" and ("tapo" in protocol.lower() or "p100" in ip or "p110" in ip):
         try:
             from tapo_client import TapoClient
             client = TapoClient()
@@ -440,7 +444,11 @@ def main():
                 print(f"[Relay] Executing: {act} ({str(params)[:50]})")
 
                 # Check if this is a device command
-                if act.startswith("device_") or params.get("device_type"):
+                if act == "device_scan":
+                    real_devices = _discover_real_devices()
+                    _push_devices_to_hf(real_devices)
+                    result = {"success": True, "devices_found": len(real_devices), "devices": real_devices}
+                elif act.startswith("device_") or (isinstance(params, dict) and params.get("device_type")):
                     result = _execute_device_command(act.replace("device_", ""), params)
                 elif _is_mac or _is_win:
                     result = macos_exec(act, str(params) if not isinstance(params, str) else params)
