@@ -127,7 +127,7 @@ export default function Home() {
           <div style={{ flex: 1, overflowY: "auto", padding: "24px 32px", position: "relative", zIndex: 1 }}>
             {messages.length === 0 && (
               <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
-                <KineticOrb size={280} particleCount={600} speed={0.4} />
+                <KineticOrb size={280} speed={0.4} />
                 <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em" }}>AWAITING INPUT</div>
                 <div style={{ fontSize: 9, color: "var(--text-muted)", opacity: 0.4, fontFamily: "var(--font-mono)" }}>Move mouse over orb to interact</div>
               </div>
