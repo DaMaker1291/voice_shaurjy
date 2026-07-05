@@ -1722,3 +1722,223 @@ async def get_grammar_info():
                     "bytes": len(content),
                 })
     return {"grammars": grammars, "count": len(grammars)}
+
+
+# ── Local Model Routes ──────────────────────────────────────────
+
+@app.get("/api/local-model/info")
+async def local_model_info():
+    try:
+        from local_model import engine
+        return {
+            "is_loaded": engine.is_loaded(),
+            "model_info": engine.get_model_info(),
+            "available_models": engine.list_available_models(),
+            "stats": engine.get_stats(),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/local-model/load")
+async def local_model_load(model_name: str = None):
+    try:
+        from local_model import engine
+        ok = engine.load_model(model_name)
+        return {"loaded": ok, "model_info": engine.get_model_info()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/local-model/download")
+async def local_model_download(repo_id: str, filename: str = None, quantization: str = "Q4_K_M"):
+    try:
+        from local_model import engine
+        path = engine.download_model(repo_id, filename, quantization)
+        return {"downloaded": True, "path": path}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/local-model/unload")
+async def local_model_unload():
+    try:
+        from local_model import engine
+        engine.unload_model()
+        return {"unloaded": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── Production Sandbox Routes ───────────────────────────────────
+
+@app.get("/api/sandbox/info")
+async def sandbox_info():
+    try:
+        from production_sandbox import sandbox
+        return {
+            "backend": sandbox.get_backend(),
+            "stats": sandbox.get_stats(),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/sandbox/execute")
+async def sandbox_execute(command: str, language: str = "bash", timeout: int = 30, network: bool = False):
+    try:
+        from production_sandbox import sandbox
+        result = sandbox.execute(command, language=language, timeout=timeout, network=network)
+        return {
+            "stdout": result.stdout[:2000],
+            "stderr": result.stderr[:2000],
+            "exit_code": result.exit_code,
+            "execution_time_ms": result.execution_time_ms,
+            "backend": result.backend_used,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── IoT Protocol Routes ─────────────────────────────────────────
+
+@app.get("/api/iot/protocols")
+async def iot_protocols():
+    try:
+        from iot_protocols import manager
+        return {"available": manager.available}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/iot/discover")
+async def iot_discover():
+    try:
+        from iot_protocols import manager
+        devices = manager.discover()
+        return {"devices": devices, "count": len(devices)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/iot/control")
+async def iot_control(protocol: str, device_id: str, command: str, params: dict = None):
+    try:
+        from iot_protocols import manager
+        result = manager.control(protocol, device_id, command, params or {})
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── Economic API Routes ─────────────────────────────────────────
+
+@app.get("/api/economic/status")
+async def economic_status():
+    try:
+        from economic_apis import engine
+        return {
+            "apis_available": {
+                "amadeus": bool(os.getenv("AMADEUS_API_KEY")),
+                "stripe": bool(os.getenv("STRIPE_SECRET_KEY")),
+                "skyscanner": bool(os.getenv("SKYSCANNER_API_KEY")),
+                "namecheap": bool(os.getenv("NAMECHEAP_API_USER")),
+            }
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+class FlightSearchRequest(BaseModel):
+    origin: str
+    destination: str
+    date: str
+    return_date: Optional[str] = None
+    passengers: int = 1
+
+
+@app.post("/api/economic/flights/search")
+async def search_flights(req: FlightSearchRequest):
+    try:
+        from economic_apis import engine
+        results = engine.execute_transaction("flight_search", {
+            "origin": req.origin,
+            "destination": req.destination,
+            "date": req.date,
+            "return_date": req.return_date,
+            "passengers": req.passengers,
+        })
+        return results
+    except Exception as e:
+        return {"error": str(e)}
+
+
+class HotelSearchRequest(BaseModel):
+    location: str
+    checkin: str
+    checkout: str
+    guests: int = 1
+
+
+@app.post("/api/economic/hotels/search")
+async def search_hotels(req: HotelSearchRequest):
+    try:
+        from economic_apis import engine
+        results = engine.execute_transaction("hotel_search", {
+            "location": req.location,
+            "checkin": req.checkin,
+            "checkout": req.checkout,
+            "guests": req.guests,
+        })
+        return results
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── Audit Log Routes ────────────────────────────────────────────
+
+@app.get("/api/audit/events")
+async def audit_events(limit: int = 100, event_type: str = None, status: str = None, since: float = None):
+    try:
+        from audit_log import audit
+        events = audit.get_events(limit=limit, event_type=event_type, status=status, since=since)
+        return {"events": events, "count": len(events)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/audit/stats")
+async def audit_stats():
+    try:
+        from audit_log import audit
+        return audit.get_stats()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/audit/timeline")
+async def audit_timeline(hours: int = 24):
+    try:
+        from audit_log import audit
+        return {"timeline": audit.get_timeline(hours)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/audit/errors")
+async def audit_errors(limit: int = 20):
+    try:
+        from audit_log import audit
+        return {"errors": audit.get_recent_errors(limit)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/audit/export")
+async def audit_export(format: str = "json"):
+    try:
+        from audit_log import audit
+        filepath = audit.export_events(format=format)
+        return {"exported": True, "path": filepath, "format": format}
+    except Exception as e:
+        return {"error": str(e)}

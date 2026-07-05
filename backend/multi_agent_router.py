@@ -148,10 +148,15 @@ class RouterEngine:
         self._latency_history = {"supervisor": [], "worker": [], "total": []}
         self._sla_violations = 0
 
-        # Vault and self-healing
+        # Vault, self-healing, audit
         self._vault = None
         self._healer = None
-        self._init_vault_and_healing()
+        self._audit = None
+        self._local_model_engine = None
+        self._sandbox = None
+        self._iot = None
+        self._economic = None
+        self._init_platform()
 
         # Try to initialize local model
         try:
@@ -189,8 +194,8 @@ class RouterEngine:
                     except Exception:
                         pass
 
-    def _init_vault_and_healing(self):
-        """Initialize execution vault and self-healing engine."""
+    def _init_platform(self):
+        """Initialize all platform modules: vault, healing, audit, local model, sandbox, IoT, economic."""
         try:
             from execution_vault import get_vault
             self._vault = get_vault()
@@ -199,6 +204,35 @@ class RouterEngine:
         try:
             from self_healing import healer
             self._healer = healer
+        except ImportError:
+            pass
+        try:
+            from audit_log import audit
+            self._audit = audit
+        except ImportError:
+            pass
+        try:
+            from local_model import engine as local_engine
+            self._local_model_engine = local_engine
+            # Try to load local model
+            if local_engine.is_loaded() or local_engine.load_model():
+                self.local_model = local_engine
+                self.model_source = "LOCAL_LLAMA"
+        except ImportError:
+            pass
+        try:
+            from production_sandbox import sandbox as prod_sandbox
+            self._sandbox = prod_sandbox
+        except ImportError:
+            pass
+        try:
+            from iot_protocols import manager as iot_mgr
+            self._iot = iot_mgr
+        except ImportError:
+            pass
+        try:
+            from economic_apis import engine as econ_engine
+            self._economic = econ_engine
         except ImportError:
             pass
 
@@ -212,15 +246,32 @@ class RouterEngine:
     ) -> dict:
         """
         Cognitive pipeline cycle:
-          1. Supervisor Router triages input (attempts local weights first).
+          1. Supervisor Router triages input (local 8B model or cloud).
           2. Selected Worker generates execution JSON parameters.
-          3. Security Isolation Vault intercepts & checks for safety.
-          4. Returns merged telemetry and status parameters.
+          3. Production Sandbox executes scripts in isolation.
+          4. Security Vault inspects payloads.
+          5. Self-healing repairs failures.
+          6. Audit Log records everything.
         """
         relay_context = relay_context or {}
         start = time.monotonic()
 
-        # ── Stage 1: Supervisor routing ───────────────────────────────────────
+        # Audit: log dispatch start
+        audit_event_id = None
+        if self._audit:
+            try:
+                audit_event_id = self._audit.log_event(
+                    event_type="dispatch",
+                    action="route",
+                    details={"text": user_text[:200]},
+                    agent_type="supervisor",
+                    status="running",
+                    user_id=user_id,
+                )
+            except Exception:
+                pass
+
+        # ── Stage 1: Supervisor routing (local 8B or cloud) ──────────────────
         routing_packet = self._run_supervisor(user_text)
         supervisor_ms = round((time.monotonic() - start) * 1000, 1)
 
@@ -254,7 +305,19 @@ class RouterEngine:
             if len(self._latency_history[key]) > 100:
                 self._latency_history[key] = self._latency_history[key][-100:]
 
-        # ── Stage 3: Enterprise Security Inspection ────────────────────────────
+        # ── Stage 3: Production Sandbox execution ─────────────────────────────
+        script_body = agent_response.get("os_action_payload", {}).get("payload_data", {}).get("script_body")
+        if script_body and self._sandbox:
+            try:
+                sandbox_result = self._sandbox.execute_script(script_body, language="python")
+                if sandbox_result.exit_code != 0:
+                    agent_response["execution_status"] = "CRITICAL_ERROR"
+                    agent_response["error_detail"] = sandbox_result.stderr[:500]
+            except Exception as e:
+                agent_response["execution_status"] = "CRITICAL_ERROR"
+                agent_response["error_detail"] = f"Sandbox error: {str(e)[:200]}"
+
+        # ── Stage 4: Enterprise Security Inspection ────────────────────────────
         security_check = vault.inspect_payload(agent_response)
         if not security_check.get("safe", True):
             agent_response = {
@@ -273,26 +336,47 @@ class RouterEngine:
                 }
             }
 
-        # ── Stage 4: Self-healing (if script execution failed) ────────────────
+        # ── Stage 5: Self-healing (if script execution failed) ────────────────
         healed = False
         if (agent_response.get("execution_status") in ("CRITICAL_ERROR", "FAILED")
                 and self._healer
-                and agent_response.get("os_action_payload", {}).get("payload_data", {}).get("script_body")):
-            script = agent_response["os_action_payload"]["payload_data"]["script_body"]
+                and script_body):
             try:
                 repair = self._healer.generate_repair(
                     agent_response.get("error_detail", "unknown error"),
                     "",
-                    script,
+                    script_body,
                     context=user_text,
                 )
-                if repair and self._vault:
-                    vr = self._vault.execute_script(repair, language="python")
-                    if not vr.blocked and vr.exit_code == 0:
-                        agent_response["os_action_payload"]["payload_data"]["script_body"] = repair
-                        agent_response["execution_status"] = "PENDING"
-                        healed = True
-                        self._healer.register_tool(f"healed_{target}", repair, metadata={"source": user_text[:100]})
+                if repair:
+                    # Validate in production sandbox
+                    if self._sandbox:
+                        vr = self._sandbox.execute_script(repair, language="python")
+                        if vr.exit_code == 0:
+                            agent_response["os_action_payload"]["payload_data"]["script_body"] = repair
+                            agent_response["execution_status"] = "PENDING"
+                            healed = True
+                            self._healer.register_tool(f"healed_{target}", repair, metadata={"source": user_text[:100]})
+                    elif self._vault:
+                        vr = self._vault.execute_script(repair, language="python")
+                        if not vr.blocked and vr.exit_code == 0:
+                            agent_response["os_action_payload"]["payload_data"]["script_body"] = repair
+                            agent_response["execution_status"] = "PENDING"
+                            healed = True
+                            self._healer.register_tool(f"healed_{target}", repair, metadata={"source": user_text[:100]})
+            except Exception:
+                pass
+
+        # ── Stage 6: Audit logging ────────────────────────────────────────────
+        if self._audit and audit_event_id:
+            try:
+                final_status = "completed" if agent_response.get("execution_status") != "CRITICAL_ERROR" else "failed"
+                self._audit.log_agent_complete(
+                    audit_event_id,
+                    status=final_status,
+                    result={"target": target, "healed": healed},
+                    latency_ms=int(total_ms),
+                )
             except Exception:
                 pass
 
