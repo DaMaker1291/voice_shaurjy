@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 export default function Navbar() {
   const pathname = usePathname();
-  if (pathname === "/sovereign" || pathname === "/agents") return null;
+  if (pathname === "/sovereign" || pathname === "/agents" || pathname === "/settings") return null;
 
   return (
     <header style={{ height: 32, background: "var(--surface)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
@@ -18,6 +18,7 @@ export default function Navbar() {
           { href: "/", label: "CHAT" },
           { href: "/agents", label: "AGENTS" },
           { href: "/sovereign", label: "NETWORK" },
+          { href: "/settings", label: "CONFIG" },
         ].map(item => (
           <Link key={item.href} href={item.href} style={{
             padding: "4px 10px", borderRadius: 3, fontSize: 9, fontWeight: 600, textDecoration: "none",

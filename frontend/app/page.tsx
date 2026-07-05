@@ -8,14 +8,23 @@ const AgentGraph = dynamic(() => import("@/components/cockpit/AgentGraph"), { ss
 const TelemetryPanel = dynamic(() => import("@/components/cockpit/TelemetryPanel"), { ssr: false });
 const InterceptBar = dynamic(() => import("@/components/cockpit/InterceptBar"), { ssr: false });
 const KineticOrb = dynamic(() => import("@/components/cockpit/KineticOrb"), { ssr: false });
+const Markdown = dynamic(() => import("@/components/cockpit/Markdown"), { ssr: false });
+const ExecutionOverlay = dynamic(() => import("@/components/cockpit/ExecutionOverlay"), { ssr: false });
 
-interface Message { role: string; content: string; ts: number }
+interface Message { role: string; content: string; ts: number; agent?: string }
 
 const BASE = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
   ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
   : "https://dgfhgjhj-jarvis-ai-brain.hf.space";
 
-const SUGGESTIONS = ["scan network", "open VS Code", "turn off lights", "CPU usage"];
+const SUGGESTIONS = [
+  { text: "scan network", icon: "📡" },
+  { text: "open VS Code", icon: "💻" },
+  { text: "turn off lights", icon: "💡" },
+  { text: "CPU usage", icon: "📊" },
+  { text: "screenshot", icon: "📷" },
+  { text: "what time is it", icon: "🕐" },
+];
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -25,6 +34,9 @@ export default function Home() {
   const [interim, setInterim] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [inputState, setInputState] = useState<"idle" | "listening" | "thinking" | "speaking">("idle");
+  const [executing, setExecuting] = useState(false);
+  const [execAgent, setExecAgent] = useState("OS");
+  const [execTask, setExecTask] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -42,6 +54,15 @@ export default function Home() {
     setMessages(p => [...p, { role: "user", content: text, ts: Date.now() }]);
     setThinking(true);
 
+    // Show execution overlay for device/system commands
+    const lowerText = text.toLowerCase();
+    const isDeviceCmd = /turn|light|plug|switch|lock|unlock|screenshot|open|volume|brightness/.test(lowerText);
+    if (isDeviceCmd) {
+      setExecuting(true);
+      setExecAgent(/turn|light|plug|switch/.test(lowerText) ? "HAL" : /screenshot|open/.test(lowerText) ? "OS" : "CORE");
+      setExecTask(text);
+    }
+
     try {
       const res = await fetch(`${BASE}/api/entity/process`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -49,11 +70,13 @@ export default function Home() {
       });
       const data = await res.json();
       const reply = data?.text || data?.message || "Acknowledged.";
-      setMessages(p => [...p, { role: "assistant", content: reply, ts: Date.now() }]);
+      const agent = data?.routing?.target_agent || data?.agent || "CORE";
+      setMessages(p => [...p, { role: "assistant", content: reply, ts: Date.now(), agent }]);
     } catch (err: any) {
       setMessages(p => [...p, { role: "assistant", content: `Error: ${err.message}`, ts: Date.now() }]);
     }
     setThinking(false);
+    setTimeout(() => setExecuting(false), 1500);
   }, [input]);
 
   const handleVoice = useCallback(() => {
@@ -84,6 +107,7 @@ export default function Home() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--void)", color: "var(--text-primary)", overflow: "hidden" }}>
       <TopBar />
+      <ExecutionOverlay active={executing} agent={execAgent} task={execTask} />
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
         {/* Left Panel — Agent Graph */}
@@ -103,7 +127,6 @@ export default function Home() {
           <div style={{ flex: 1, overflowY: "auto", padding: "24px 32px", position: "relative", zIndex: 1 }}>
             {messages.length === 0 && (
               <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
-                {/* WebGL Kinetic Orb */}
                 <KineticOrb size={280} particleCount={600} speed={0.4} />
                 <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em" }}>AWAITING INPUT</div>
                 <div style={{ fontSize: 9, color: "var(--text-muted)", opacity: 0.4, fontFamily: "var(--font-mono)" }}>Move mouse over orb to interact</div>
@@ -113,7 +136,7 @@ export default function Home() {
             {messages.map((msg, i) => (
               <div key={i} className="animate-fade" style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start", marginBottom: 12 }}>
                 <div style={{
-                  maxWidth: "70%", padding: "10px 16px", fontSize: 13, lineHeight: 1.6,
+                  maxWidth: "75%", padding: "12px 16px", fontSize: 13, lineHeight: 1.6,
                   fontFamily: "var(--font-mono)",
                   borderRadius: msg.role === "user" ? "8px 8px 2px 8px" : "8px 8px 8px 2px",
                   background: msg.role === "user" ? "rgba(0,255,102,0.06)" : "var(--surface)",
@@ -121,9 +144,19 @@ export default function Home() {
                   color: msg.role === "user" ? "var(--text-primary)" : "var(--text-secondary)",
                 }}>
                   {msg.role === "assistant" && (
-                    <div style={{ fontSize: 8, color: "var(--neon-green)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em", marginBottom: 4, opacity: 0.6 }}>JARVIS</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                      <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--neon-green)", boxShadow: "0 0 4px rgba(0,255,102,0.4)" }} />
+                      <span style={{ fontSize: 8, color: "var(--neon-green)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em", opacity: 0.8 }}>JARVIS</span>
+                      {msg.agent && (
+                        <span style={{ fontSize: 7, padding: "1px 4px", borderRadius: 2, background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--steel)", fontFamily: "var(--font-mono)" }}>{msg.agent}</span>
+                      )}
+                    </div>
                   )}
-                  {msg.content}
+                  {msg.role === "assistant" ? (
+                    <Markdown content={msg.content} />
+                  ) : (
+                    msg.content
+                  )}
                 </div>
               </div>
             ))}
@@ -131,10 +164,13 @@ export default function Home() {
             {thinking && (
               <div className="animate-fade" style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
                 <div style={{ padding: "12px 18px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px 8px 8px 2px" }}>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    {[0, 0.2, 0.4].map((d, i) => (
-                      <div key={i} style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--neon-green)", animation: `glow-pulse 1.2s infinite ${d}s` }} />
-                    ))}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 3 }}>
+                      {[0, 0.2, 0.4].map((d, i) => (
+                        <div key={i} style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--neon-green)", animation: `glow-pulse 1.2s infinite ${d}s` }} />
+                      ))}
+                    </div>
+                    <span style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>processing...</span>
                   </div>
                 </div>
               </div>
@@ -146,9 +182,10 @@ export default function Home() {
           {showSuggestions && messages.length === 0 && (
             <div style={{ padding: "0 32px 12px", display: "flex", flexWrap: "wrap", gap: 6, position: "relative", zIndex: 1 }}>
               {SUGGESTIONS.map(s => (
-                <button key={s} onClick={() => { setInput(s); setShowSuggestions(false); inputRef.current?.focus(); }}
-                  style={{ padding: "5px 12px", borderRadius: 3, fontSize: 10, fontFamily: "var(--font-mono)", cursor: "pointer", background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border)", transition: "all 0.15s", letterSpacing: "0.03em" }}>
-                  {s}
+                <button key={s.text} onClick={() => { setInput(s.text); setShowSuggestions(false); inputRef.current?.focus(); }}
+                  style={{ padding: "5px 12px", borderRadius: 3, fontSize: 10, fontFamily: "var(--font-mono)", cursor: "pointer", background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border)", transition: "all 0.15s", letterSpacing: "0.03em", display: "flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ fontSize: 11 }}>{s.icon}</span>
+                  {s.text}
                 </button>
               ))}
             </div>

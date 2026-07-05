@@ -69,6 +69,32 @@ body {
 @keyframes orb-breathe { 0%,100% { transform:scale(1); opacity:0.6; } 50% { transform:scale(1.05); opacity:1; } }
 @keyframes data-stream { from { transform:translateY(0); } to { transform:translateY(-50%); } }
 @keyframes pulse-ring { 0% { transform:scale(0.8); opacity:1; } 100% { transform:scale(2); opacity:0; } }
+@keyframes exec-scan { 0% { top: -2px; } 100% { top: calc(100% + 2px); } }
+@keyframes particle-rise { 0% { transform:translateY(0) scale(1); opacity:0.8; } 100% { transform:translateY(-100vh) scale(0); opacity:0; } }
+@keyframes hex-rotate { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+@keyframes data-flow { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -40; } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+/* ── Execution Overlay Styles ─────────────────────────────── */
+.exec-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(3,3,3,0.88);
+  backdrop-filter: blur(2px);
+}
+.exec-mesh {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,255,102,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,102,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  animation: data-flow 2s linear infinite;
+}
+.exec-scan {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--neon-green), transparent);
+  animation: exec-scan 3s linear infinite;
+  opacity: 0.4;
+}
 
 /* ── Utility Classes ────────────────────────────────────────── */
 .glow-green { box-shadow: var(--glow-green); }
