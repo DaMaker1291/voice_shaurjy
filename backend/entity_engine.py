@@ -468,13 +468,31 @@ class Entity:
             if result.startswith("__NEEDS_RELAY__:"):
                 msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
 
-                # Smart clarification for device commands without relay
                 lower_text = text.lower().strip()
+
+                # Smart clarification based on action type
+                if action == "screenshot":
+                    return {"action": "ask_clarify", "text": (
+                        "I can take a screenshot of your screen, but I need the relay running first.\n\n"
+                        "**What I'll do:**\n"
+                        "  • Capture your full screen\n"
+                        "  • Save it to your Desktop as `jarvis_screenshot.png`\n\n"
+                        f"**Start the relay:** `python3 relay.py --user {self.user_id}`\n\n"
+                        "Once connected, just say *'screenshot'* and I'll grab it instantly."
+                    )}
+
+                if action == "open_app":
+                    app_name = text.lower().replace("open", "").replace("launch", "").strip()
+                    return {"action": "ask_clarify", "text": (
+                        f"I can open **{app_name or 'an application'}** on your Mac, but the relay needs to be running.\n\n"
+                        f"**Start the relay:** `python3 relay.py --user {self.user_id}`\n\n"
+                        "Then I'll launch it directly on your desktop."
+                    )}
+
                 device_keywords = ["light", "lights", "plug", "switch", "turn on", "turn off", "toggle"]
                 is_device_cmd = any(kw in lower_text for kw in device_keywords)
 
                 if is_device_cmd:
-                    # Check for known devices in sovereign registry
                     known_devices = []
                     try:
                         from device_manager import DeviceManager
@@ -497,7 +515,7 @@ class Entity:
                         )}
 
                     return {"action": "ask_clarify", "text": (
-                        f"I understand you want to **{lower_text.replace('turn off', 'turn off').replace('turn on', 'turn on')}** — "
+                        f"I understand you want to **{lower_text}** — "
                         f"but I don't see any smart devices connected yet.\n\n"
                         f"**What I can control:**\n"
                         f"  • TP-Link Tapo smart plugs (P100/P110)\n"
@@ -511,7 +529,12 @@ class Entity:
                         f"Would you like me to scan for devices once the relay is running?"
                     )}
 
-                return {"text": f"{msg}", "action": "__needs_relay__"}
+                # Generic fallback for other relay-dependent actions
+                return {"action": "ask_clarify", "text": (
+                    f"I can do that, but I need your computer's relay agent running first.\n\n"
+                    f"**Start it:** `python3 relay.py --user {self.user_id}`\n\n"
+                    f"Keep the terminal open and I'll execute commands on your Mac directly."
+                )}
             if result.startswith("__RELAY__:"):
                 parts = result.split(":", 2)
                 relay_id = parts[1] if len(parts) > 1 else ""
