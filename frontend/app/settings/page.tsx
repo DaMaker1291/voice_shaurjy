@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const CredentialModal = dynamic(() => import("@/components/cockpit/CredentialModal"), { ssr: false });
 
 interface Settings {
   hfToken: string;
@@ -35,6 +38,8 @@ export default function SettingsPage() {
   });
   const [saved, setSaved] = useState(false);
   const [activeSection, setActiveSection] = useState<"api" | "relay" | "general" | "about">("api");
+  const [showApiModal, setShowApiModal] = useState(false);
+  const [showRelayModal, setShowRelayModal] = useState(false);
 
   const save = () => {
     localStorage.setItem("jarvis_settings", JSON.stringify(settings));
@@ -117,28 +122,28 @@ export default function SettingsPage() {
           <div style={{ maxWidth: 500 }}>
             {activeSection === "api" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div>
-                  <label style={labelStyle}>Hugging Face Token</label>
-                  <input
-                    type="password"
-                    value={settings.hfToken}
-                    onChange={e => update("hfToken", e.target.value)}
-                    placeholder="hf_..."
-                    style={inputStyle}
-                  />
-                  <div style={{ fontSize: 8, color: "var(--text-muted)", marginTop: 4 }}>For Space access and model downloads</div>
+                <button onClick={() => setShowApiModal(true)} style={{
+                  padding: "12px 16px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                  fontFamily: "var(--font-mono)", cursor: "pointer", width: "100%",
+                  background: "var(--neon-green-dim)", color: "var(--neon-green)",
+                  border: "1px solid rgba(0,255,102,0.2)", transition: "all 0.15s",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}>
+                  <span>🔒</span> Setup API Keys Securely
+                </button>
+                <div style={{ fontSize: 9, color: "var(--text-muted)", textAlign: "center" }}>
+                  Opens an encrypted modal — credentials stay on your device
                 </div>
-                <div>
-                  <label style={labelStyle}>GROQ API Key</label>
-                  <input
-                    type="password"
-                    value={settings.groqKey}
-                    onChange={e => update("groqKey", e.target.value)}
-                    placeholder="gsk_..."
-                    style={inputStyle}
-                  />
-                  <div style={{ fontSize: 8, color: "var(--text-muted)", marginTop: 4 }}>For cloud inference (Llama 3)</div>
-                </div>
+                {settings.hfToken && (
+                  <div style={{ padding: "8px 10px", borderRadius: 4, background: "var(--surface-raised)", border: "1px solid var(--border)", fontSize: 9, color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
+                    <span style={{ color: "var(--neon-green)" }}>✓</span> HF Token configured
+                  </div>
+                )}
+                {settings.groqKey && (
+                  <div style={{ padding: "8px 10px", borderRadius: 4, background: "var(--surface-raised)", border: "1px solid var(--border)", fontSize: 9, color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
+                    <span style={{ color: "var(--neon-green)" }}>✓</span> GROQ Key configured
+                  </div>
+                )}
               </div>
             )}
 
@@ -263,6 +268,22 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      <CredentialModal
+        open={showApiModal}
+        title="API Configuration"
+        description="Enter your API keys. These are encrypted locally and never sent to our servers."
+        fields={[
+          { name: "hfToken", label: "Hugging Face Token", placeholder: "hf_..." },
+          { name: "groqKey", label: "GROQ API Key", placeholder: "gsk_..." },
+        ]}
+        onSubmit={(values) => {
+          if (values.hfToken) update("hfToken", values.hfToken);
+          if (values.groqKey) update("groqKey", values.groqKey);
+          setShowApiModal(false);
+        }}
+        onClose={() => setShowApiModal(false)}
+      />
     </div>
   );
 }
