@@ -588,6 +588,7 @@ _ACTION_PATTERNS = {
     r"^open\s+(?:the\s+)?(?:camera|webcam)": "camera",
     r"^open\s+(?:the\s+)?(?:snipping\s+tool|snip|screenshot\s+tool)": "snipping_tool",
     r"^open\s+(?:app\s+|the\s+)?(.+?)$": "open_app",
+    r"^(?:go\s+to|launch|start)\s+(?:the\s+|app\s+)?(.+?)$": "open_app",
 
     # ── Windows Update ──────────────────────────────────────────
     r"^(?:check|search)\s+(?:for\s+)?(?:windows\s+)?updates": "windows_update",

@@ -462,7 +462,14 @@ class Entity:
                 self._set_mood("focused")
                 return {"text": f"Opening {action} in your browser...", "action": action, "link": url}
 
-            result = cloud_safe_execute(action, text, user_id=self.user_id)
+            # Extract clean params — for open_app, strip "open/launch/start/go to" prefix
+            exec_params = text
+            if action == "open_app":
+                import re as _re
+                m = _re.match(r'^(?:open|launch|start|go\s+to)\s+(?:the\s+|app\s+)?(.+?)$', text.lower().strip())
+                exec_params = m.group(1) if m else text
+
+            result = cloud_safe_execute(action, exec_params, user_id=self.user_id)
             label = _ACTION_LABELS.get(action, "")
             self._set_mood("focused")
             if result.startswith("__NEEDS_RELAY__:"):
