@@ -217,7 +217,6 @@ def _send_wol(mac):
 
 def macos_exec(action, params=""):
     if _is_win: return _win_exec(action, params)
-    import urllib.parse
     actions = {
         "screenshot": lambda: run("screencapture -x ~/Desktop/jarvis_screenshot.png 2>/dev/null; echo 'Saved to Desktop'"),
         "open_url": lambda: run(f"open '{params}'") if params else "Open what?",
@@ -329,7 +328,6 @@ def _cognitive_scan():
 
 def startup_scan(user_id):
     print("[Relay] Running startup scan...")
-    import urllib.parse
     results = {}
     for name, fn in [("whoami","whoami"),("hostname",lambda:socket.gethostname()),("os",lambda:f"{platform.system()} {platform.release()}"),("uptime",lambda:run("uptime")),("public_ip",lambda:get_text("https://api.ipify.org"))]:
         try: results[name] = str(fn()) if callable(fn) else run(fn)
