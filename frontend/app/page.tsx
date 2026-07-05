@@ -51,7 +51,8 @@ export default function Home() {
   const send = useCallback(async () => {
     const text = input.trim(); if (!text) return;
     setInput(""); setShowSuggestions(false);
-    setMessages(p => [...p, { role: "user", content: text, ts: Date.now() }]);
+    const userMsg = { role: "user", content: text, ts: Date.now() };
+    setMessages(p => [...p, userMsg]);
     setThinking(true);
 
     // Show execution overlay for device/system commands
@@ -63,13 +64,23 @@ export default function Home() {
       setExecTask(text);
     }
 
+    // Build conversation history for context
+    const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
+
     try {
       const res = await fetch(`${BASE}/api/entity/process`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_input: text, user_id: "local" }),
+        body: JSON.stringify({ user_input: text, user_id: "local", history }),
       });
       const data = await res.json();
-      const reply = data?.text || data?.message || "Acknowledged.";
+      let reply = data?.text || data?.message || "Acknowledged.";
+      // Strip raw cockpit/system blocks that shouldn't be shown to user
+      reply = reply.replace(/={3,} COCKPIT BLOCK =={3,}[\s\S]*?(?==={3,}|$)/g, "").trim();
+      reply = reply.replace(/={3,} COCKPIT =={3,}[\s\S]*?={3,} END COCKPIT =={3,}/g, "").trim();
+      reply = reply.replace(/\[System State\][\s\S]*?(?=\n[A-Z]|\n\n|$)/g, "").trim();
+      reply = reply.replace(/\[Your State\][\s\S]*?(?=\n[A-Z]|\n\n|$)/g, "").trim();
+      reply = reply.replace(/\[Memory\][\s\S]*?(?=\n[A-Z]|\n\n|$)/g, "").trim();
+      if (!reply) reply = "Acknowledged.";
       const agent = data?.routing?.target_agent || data?.agent || "CORE";
       setMessages(p => [...p, { role: "assistant", content: reply, ts: Date.now(), agent }]);
     } catch (err: any) {

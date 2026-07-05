@@ -622,12 +622,16 @@ Recent interactions:
 
     # ── Main Processing ─────────────────────────────────────────────
 
-    def process(self, user_input: str) -> dict:
+    def process(self, user_input: str, history: list = None) -> dict:
         now = time.time()
         self.memory.log_interaction(user_input, "")
         self._extract_knowledge(user_input)
         related_goals = self._find_related_goals(user_input)
         ctx = _gather_system_context()
+
+        # Store conversation history for context
+        if history:
+            self._conversation_history = history[-20:]  # Keep last 20 messages
 
         result = {"text": "", "action": None, "task": None, "strategies": None,
                   "follow_up": None, "proactive": None, "related_goals": related_goals,
@@ -722,20 +726,32 @@ Recent interactions:
         return result
 
     def _generate_response(self, user_input: str, context: str, act_prompt: str) -> str:
+        # Build conversation history for context
+        history_str = ""
+        if hasattr(self, '_conversation_history') and self._conversation_history:
+            for msg in self._conversation_history[-10:]:  # Last 10 messages
+                role = "User" if msg.get("role") == "user" else "JARVIS"
+                content = msg.get("content", "")[:200]  # Truncate long messages
+                history_str += f"{role}: {content}\n"
+            history_str = f"\n[Conversation History]\n{history_str}\n"
+
         prompt = f"""{PERSONA_COMPRESSED}
 
 {context}
-
+{history_str}
 Action library:
 {act_prompt[:400]}
 
 The user said: {user_input}
 
 Respond as JARVIS. Guidelines:
-- If you need more info to complete a task, ask ONE clear, specific question (not a list)
+- You have MEMORY of the conversation above — reference previous messages naturally
+- If the user said something before and you asked a question, continue that thread
+- If you need more info to complete a task, ask ONE clear, specific question
 - If you can do it, do it and report the result concisely
 - For device/smart home commands, mention what devices are available if known
-- Never dump raw code blocks or terminal commands unless explicitly asked
+- NEVER output raw system blocks like === COCKPIT === or === END COCKPIT ===
+- Never dump terminal commands or code blocks unless explicitly asked
 - Be conversational but efficient — like a competent AI assistant
 - If something isn't possible, briefly explain why and suggest an alternative"""
         return self._groq_with_timeout(prompt, max_tokens=300)

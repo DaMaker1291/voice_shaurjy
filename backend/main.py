@@ -488,6 +488,7 @@ from pydantic import BaseModel
 class StrategyRequest(BaseModel):
     user_input: str
     user_id: str = "local"
+    history: list = []  # [{role: "user"|"assistant", content: "..."}]
 
 
 class WorkflowAdvanceRequest(BaseModel):
@@ -502,7 +503,7 @@ class WorkflowAdvanceRequest(BaseModel):
 async def entity_process(req: StrategyRequest):
     from entity_engine import get_entity
     entity = get_entity(req.user_id)
-    result = entity.process(req.user_input)
+    result = entity.process(req.user_input, history=req.history)
     return result
 
 
