@@ -195,6 +195,181 @@ def startup_scan(user_id):
         except Exception as e: results[name] = f"Error: {e}"
     return results
 
+
+def _discover_real_devices():
+    """Discover real devices on the local network via ARP."""
+    import re
+    devices = []
+
+    try:
+        arp_output = run("arp -a", timeout=15)
+    except Exception:
+        return devices
+
+    for line in arp_output.splitlines():
+        mac_match = re.search(r'at\s+([0-9a-fA-F:]{17})', line)
+        ip_match = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)', line)
+        if not mac_match or not ip_match:
+            continue
+
+        ip = ip_match.group(1)
+        mac = mac_match.group(1).upper()
+
+        if "FF:FF:FF:FF:FF:FF" in mac or "1:0:5E" in mac or "(incomplete)" in line:
+            continue
+
+        hostname = line.split("(")[0].strip() if "(" in line else ""
+        hostname = hostname.replace("?", "").strip()
+        hl = hostname.lower()
+
+        device_type = "UNKNOWN"
+        protocol = "unknown"
+        manufacturer = ""
+        model = ""
+        device_name = hostname or ip
+
+        # Router/Gateway
+        if "skysr213" in hl or (ip.endswith(".1") and not hl):
+            device_type = "ROUTER"
+            protocol = "http"
+            manufacturer = "Sky"
+            model = "SR213"
+        # TP-Link Tapo Smart Plugs
+        elif "tapo" in hl or "p100" in hl or "p110" in hl or "p125" in hl:
+            device_type = "SWITCH"
+            protocol = "tapo"
+            manufacturer = "TP-Link"
+            if "p110" in hl: model = "Tapo P110"
+            elif "p100" in hl: model = "Tapo P100"
+            elif "p125" in hl: model = "Tapo P125"
+            else: model = "Tapo Smart Plug"
+        # HP Printer
+        elif "hp" in hl or "printer" in hl:
+            device_type = "PRINTER"
+            protocol = "ipp"
+            manufacturer = "HP"
+            model = "Printer"
+        # Samsung phones
+        elif "samsung" in hl or "galaxy" in hl or "note20" in hl or "s24" in hl or "gargi" in hl or "suprotim" in hl:
+            device_type = "PHONE"
+            protocol = "adb"
+            manufacturer = "Samsung"
+            if "note20" in hl: model = "Galaxy Note20"
+            elif "s24 ultra" in hl: model = "Galaxy S24 Ultra"
+            elif "s24" in hl: model = "Galaxy S24"
+        # Range extender
+        elif "re200" in hl or "extender" in hl:
+            device_type = "ROUTER"
+            protocol = "http"
+            manufacturer = "TP-Link"
+            model = "RE200"
+        # iMac / Apple
+        elif "imac" in hl or "macbook" in hl:
+            device_type = "HUB"
+            protocol = "ssh"
+            manufacturer = "Apple"
+            model = "iMac"
+        # Generic laptop
+        elif "laptop" in hl or "nbkw" in hl:
+            device_type = "HUB"
+            protocol = "ssh"
+            model = "Laptop"
+        # lwip devices (likely IoT)
+        elif "lwip" in hl:
+            device_type = "SENSOR"
+            protocol = "mqtt"
+            model = "IoT Device"
+
+        if device_type == "UNKNOWN":
+            continue
+
+        devices.append({
+            "id": f"real_{ip.replace('.', '_')}",
+            "name": device_name,
+            "device_type": device_type,
+            "ip": ip,
+            "mac": mac,
+            "protocol": protocol,
+            "manufacturer": manufacturer,
+            "model": model,
+            "room": "unknown",
+            "state": {"power": "UNKNOWN"},
+            "is_online": True,
+        })
+
+    return devices
+
+
+def _push_devices_to_hf(devices):
+    """Push discovered devices to HF Space."""
+    try:
+        post(f"{HF_API}/api/sovereign/devices/sync", {"devices": devices})
+    except Exception:
+        pass
+
+
+def _execute_device_command(action, params):
+    """Execute a real device command locally."""
+    import re
+
+    ip = params.get("ip", "")
+    device_type = params.get("device_type", "")
+
+    # Tapo smart plug control
+    if device_type == "SWITCH" and ("tapo" in params.get("protocol", "").lower() or "p100" in ip or "p110" in ip):
+        try:
+            from tapo_client import TapoClient
+            client = TapoClient()
+            client.add_device(ip)
+            if action == "turn_on":
+                return client.turn_on(ip)
+            elif action == "turn_off":
+                return client.turn_off(ip)
+            elif action == "toggle":
+                return client.toggle(ip)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # Printer control
+    if device_type == "PRINTER":
+        try:
+            from printer_client import PrinterClient
+            client = PrinterClient()
+            client.add_printer(ip)
+            if action == "status":
+                return client.get_printer_status(ip)
+            elif action == "ink":
+                return client.get_ink_levels(ip)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # Phone control via ADB
+    if device_type == "PHONE":
+        try:
+            from phone_client import PhoneClient
+            client = PhoneClient()
+            client.add_phone(ip)
+            if action == "connect":
+                return client.connect_adb(ip)
+            elif action == "battery":
+                return client.get_battery_state(ip)
+            elif action == "screen":
+                return client.get_screen_state(ip)
+            elif action == "lock":
+                return client.lock_screen(ip)
+            elif action == "unlock":
+                return client.unlock_screen(ip)
+            elif action == "screenshot":
+                return client.take_screenshot(ip)
+            elif action == "volume":
+                return client.set_volume(ip, "music", params.get("level", 50))
+            elif action == "brightness":
+                return client.set_brightness(ip, params.get("level", 128))
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    return {"success": False, "error": f"Unknown device type: {device_type}"}
+
 def main():
     global HF_API
     parser = argparse.ArgumentParser(description="J.A.R.V.I.S. Standalone Relay Agent")
@@ -220,27 +395,58 @@ def main():
     poll_ids = list(dict.fromkeys([args.user, "local"]))
     fb_idx = 0
     hb = 0
+    device_push_hb = 0
     _SCHEDULER_FILE = ".jarvis_scheduled.json"
+
+    # Initial device discovery
+    print("[Relay] Discovering real devices on local network...")
+    real_devices = _discover_real_devices()
+    print(f"[Relay] Found {len(real_devices)} real devices:")
+    for d in real_devices:
+        print(f"  {d['ip']} | {d['name']} | {d['device_type']} | {d['protocol']}")
+    _push_devices_to_hf(real_devices)
+
     print(f"[Relay] Polling every 0.5s...")
     while True:
         hb += 1
+        device_push_hb += 1
+
+        # Heartbeat every 30 cycles (15s)
         if hb >= 30:
             hb = 0
             try: post(f"{HF_API}/api/relay/heartbeat", {"user_id": args.user})
             except: pass
+
+        # Re-discover and push devices every 5 minutes
+        if device_push_hb >= 600:
+            device_push_hb = 0
+            try:
+                real_devices = _discover_real_devices()
+                _push_devices_to_hf(real_devices)
+                print(f"[Relay] Re-discovered {len(real_devices)} devices")
+            except Exception:
+                pass
+
         try:
             uid = poll_ids[fb_idx % len(poll_ids)]
             fb_idx += 1
             resp = get(f"{HF_API}/api/relay/pending?user_id={uid}")
             for a in resp.get("actions", []):
                 rid, act, params = a["relay_id"], a["action"], a.get("params", "")
+                if isinstance(params, str):
+                    try: params = json.loads(params)
+                    except: params = {"raw": params}
+
                 print(f"[Relay] Executing: {act} ({str(params)[:50]})")
-                result = None
-                if _is_mac or _is_win:
-                    result = macos_exec(act, params)
-                if result is None:
-                    if _is_mac: result = run(f"open '{params}'") if params else f"Unknown: {act}"
-                    else: result = f"Unknown action: {act}"
+
+                # Check if this is a device command
+                if act.startswith("device_") or params.get("device_type"):
+                    result = _execute_device_command(act.replace("device_", ""), params)
+                elif _is_mac or _is_win:
+                    result = macos_exec(act, str(params) if not isinstance(params, str) else params)
+                else:
+                    result = f"Unknown action: {act}"
+
                 post(f"{HF_API}/api/relay/result", {"relay_id": rid, "result": str(result)[:2000], "success": True})
                 print(f"[Relay] Done: {act} -> {str(result)[:80]}")
         except urllib.error.HTTPError as e:

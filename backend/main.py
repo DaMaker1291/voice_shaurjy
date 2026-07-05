@@ -3300,6 +3300,22 @@ async def real_send_notification(ip: str, title: str, message: str):
         return {"success": False, "error": str(e)}
 
 
+@app.post("/api/sovereign/devices/sync")
+async def sovereign_devices_sync(req: dict):
+    """Sync real devices from the local relay agent."""
+    try:
+        from device_manager import upsert_device
+        devices = req.get("devices", [])
+        synced = 0
+        for device in devices:
+            if device.get("ip"):
+                upsert_device(device)
+                synced += 1
+        return {"success": True, "synced": synced}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/api/real/scan")
 async def real_network_scan():
     """Scan the real local network and register discovered devices."""
