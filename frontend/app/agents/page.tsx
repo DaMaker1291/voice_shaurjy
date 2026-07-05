@@ -53,6 +53,19 @@ interface PoolStats {
   utilization: string;
 }
 
+interface LocalModel {
+  is_loaded: boolean;
+  model_info: { name: string; path: string; n_ctx: number; n_threads: number; quantization: string; size_human: string } | null;
+  stats: {
+    model_loaded: boolean;
+    model_name: string;
+    total_inferences: number;
+    avg_tokens_per_second: number;
+    hardware: { ram_total_mb: number; ram_total_human: string };
+    model_tier: { tier: number; description: string; ram_required_mb?: number };
+  };
+}
+
 interface Event {
   type: string;
   time: number;
@@ -79,6 +92,7 @@ export default function AgentsPage() {
   const [spawning, setSpawning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [localModel, setLocalModel] = useState<LocalModel | null>(null);
   const eventsRef = useRef<HTMLDivElement>(null);
 
   const fetchAgents = useCallback(async () => {
@@ -87,6 +101,14 @@ export default function AgentsPage() {
       const data = await res.json();
       setAgents(data.agents || []);
       setStats(data.stats || null);
+    } catch {}
+  }, []);
+
+  const fetchLocalModel = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/local-model/info`);
+      const data = await res.json();
+      setLocalModel(data);
     } catch {}
   }, []);
 
@@ -109,17 +131,19 @@ export default function AgentsPage() {
   useEffect(() => {
     fetchAgents();
     fetchEvents();
-  }, [fetchAgents, fetchEvents]);
+    fetchLocalModel();
+  }, [fetchAgents, fetchEvents, fetchLocalModel]);
 
   useEffect(() => {
     if (!autoRefresh) return;
     const interval = setInterval(() => {
       fetchAgents();
       fetchEvents();
+      fetchLocalModel();
       if (selectedAgent) fetchAgentTasks(selectedAgent);
     }, 3000);
     return () => clearInterval(interval);
-  }, [autoRefresh, fetchAgents, fetchEvents, selectedAgent, fetchAgentTasks]);
+  }, [autoRefresh, fetchAgents, fetchEvents, fetchLocalModel, selectedAgent, fetchAgentTasks]);
 
   useEffect(() => {
     if (selectedAgent) fetchAgentTasks(selectedAgent);
@@ -260,6 +284,44 @@ export default function AgentsPage() {
       <div style={{ maxWidth: 1400, margin: "0 auto", padding: "20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
         {/* Left Column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Local Model Status */}
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Edge Architecture
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: localModel?.is_loaded ? "#22c55e" : "#52525b" }} />
+              <span style={{ fontSize: 12, color: localModel?.is_loaded ? "#22c55e" : "#52525b" }}>
+                {localModel?.is_loaded ? "LOCAL ROUTING ACTIVE" : "CLOUD ROUTING (no local model)"}
+              </span>
+            </div>
+            {localModel?.stats && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11 }}>
+                <div style={{ padding: "6px 8px", borderRadius: 4, background: "rgba(255,255,255,0.02)" }}>
+                  <div style={{ color: "#52525b", marginBottom: 2 }}>Model</div>
+                  <div style={{ color: "#a1a1aa" }}>{localModel.stats.model_name || "none"}</div>
+                </div>
+                <div style={{ padding: "6px 8px", borderRadius: 4, background: "rgba(255,255,255,0.02)" }}>
+                  <div style={{ color: "#52525b", marginBottom: 2 }}>Tier</div>
+                  <div style={{ color: "#a1a1aa" }}>{localModel.stats.model_tier?.description || "—"}</div>
+                </div>
+                <div style={{ padding: "6px 8px", borderRadius: 4, background: "rgba(255,255,255,0.02)" }}>
+                  <div style={{ color: "#52525b", marginBottom: 2 }}>RAM</div>
+                  <div style={{ color: "#a1a1aa" }}>{localModel.stats.hardware?.ram_total_human || "—"}</div>
+                </div>
+                <div style={{ padding: "6px 8px", borderRadius: 4, background: "rgba(255,255,255,0.02)" }}>
+                  <div style={{ color: "#52525b", marginBottom: 2 }}>Inferences</div>
+                  <div style={{ color: "#a1a1aa" }}>{localModel.stats.total_inferences}</div>
+                </div>
+              </div>
+            )}
+            {localModel?.model_info && (
+              <div style={{ marginTop: 8, padding: "6px 8px", borderRadius: 4, background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.1)", fontSize: 10, color: "#22c55e" }}>
+                {localModel.model_info.size_human} · {localModel.model_info.quantization} · {localModel.model_info.n_ctx} ctx · {localModel.model_info.n_threads} threads
+              </div>
+            )}
+          </div>
+
           {/* Spawn Panel */}
           <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Deploy Agent</div>

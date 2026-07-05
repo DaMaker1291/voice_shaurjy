@@ -30,18 +30,82 @@ _GRAMMAR_DIRS = [
 ]
 
 # Preferred model download order (repo_id, filename fragment, quantization)
+# Tiered by hardware capability: smallest first for consumer laptops
 _PREFERRED_MODELS = [
+    # Tier 1: Ultra-light (< 1.5GB RAM) — any laptop, any age
+    {
+        "repo_id": "bartowski/Qwen2.5-1.5B-Instruct-GGUF",
+        "filename": "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+        "quantization": "Q4_K_M",
+        "tier": 1,
+        "ram_required_mb": 1200,
+        "description": "Qwen 1.5B — instant routing, <10ms TTFT",
+    },
+    # Tier 2: Light (< 2.5GB RAM) — standard office laptops
+    {
+        "repo_id": "bartowski/Llama-3.2-3B-Instruct-GGUF",
+        "filename": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+        "quantization": "Q4_K_M",
+        "tier": 2,
+        "ram_required_mb": 2200,
+        "description": "Llama 3.2 3B — balanced speed/quality",
+    },
+    # Tier 3: Medium (< 5GB RAM) — modern laptops with 8GB+ RAM
     {
         "repo_id": "bartowski/Qwen2.5-7B-Instruct-GGUF",
         "filename": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
         "quantization": "Q4_K_M",
+        "tier": 3,
+        "ram_required_mb": 4500,
+        "description": "Qwen 7B — strong reasoning, needs 8GB+ RAM",
     },
+    # Tier 4: Heavy (< 6GB RAM) — machines with 16GB+ RAM
     {
         "repo_id": "bartowski/Meta-Llama-3-8B-Instruct-GGUF",
         "filename": "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
         "quantization": "Q4_K_M",
+        "tier": 4,
+        "ram_required_mb": 5500,
+        "description": "Llama 3 8B — full capability, needs 16GB+ RAM",
     },
 ]
+
+
+def _get_available_ram_mb() -> int:
+    """Return available system RAM in MB."""
+    try:
+        import psutil
+        return psutil.virtual_memory().total // (1024 * 1024)
+    except ImportError:
+        return 8192  # assume 8GB if psutil unavailable
+
+
+def _select_model_for_hardware() -> list[dict]:
+    """Return preferred models sorted by fit for current hardware.
+    
+    Picks the largest model that fits comfortably in available RAM,
+    with a 20% headroom buffer.
+    """
+    ram_mb = _get_available_ram_mb()
+    usable_mb = int(ram_mb * 0.8)  # 20% headroom for OS + other apps
+    
+    # Filter models that fit, sort by tier (largest first)
+    candidates = [
+        m for m in _PREFERRED_MODELS
+        if m["ram_required_mb"] <= usable_mb
+    ]
+    candidates.sort(key=lambda m: m["tier"], reverse=True)
+    
+    if candidates:
+        logger.info(
+            "Hardware: %dMB RAM, %dMB usable → selecting tier %d model (%s)",
+            ram_mb, usable_mb, candidates[0]["tier"], candidates[0]["description"]
+        )
+        return candidates
+    
+    # Fallback: smallest model regardless of RAM
+    logger.warning("Low RAM (%dMB), falling back to smallest model", ram_mb)
+    return [_PREFERRED_MODELS[0]]
 
 
 def _now_ms() -> float:
@@ -204,26 +268,30 @@ class LocalModelEngine:
     # ------------------------------------------------------------------
 
     def _ensure_model_available(self) -> Optional[str]:
-        """Return a model path, auto-downloading the preferred model if needed."""
+        """Return a model path, auto-downloading the best model for current hardware."""
         models = self.list_available_models()
         if models:
-            # Try to pick the preferred model
-            for pref in _PREFERRED_MODELS:
+            # Try to pick the best model for current hardware
+            hw_models = _select_model_for_hardware()
+            for pref in hw_models:
                 for m in models:
                     if m["name"] == pref["filename"]:
                         return m["path"]
+            # If no hardware-matched model, return largest available
+            models.sort(key=lambda m: m.get("size_bytes", 0), reverse=True)
             return models[0]["path"]
 
-        # No models found – download preferred
-        logger.info("No local GGUF models found. Downloading preferred model...")
-        for pref in _PREFERRED_MODELS:
+        # No models found – download best model for hardware
+        hw_models = _select_model_for_hardware()
+        logger.info("No local GGUF models found. Downloading model for current hardware...")
+        for pref in hw_models:
             try:
                 path = self.download_model(
                     repo_id=pref["repo_id"],
                     filename=pref["filename"],
                     quantization=pref["quantization"],
                 )
-                logger.info("Auto-downloaded %s", pref["filename"])
+                logger.info("Auto-downloaded %s (%s)", pref["filename"], pref["description"])
                 return path
             except Exception as exc:
                 logger.warning("Failed to download %s: %s", pref["filename"], exc)
@@ -271,7 +339,27 @@ class LocalModelEngine:
             try:
                 n_ctx = int(os.environ.get("LOCAL_MODEL_CTX", "4096"))
                 n_threads = int(os.environ.get("LOCAL_MODEL_THREADS", "4"))
+                
+                # Auto-tune threads based on CPU cores
+                try:
+                    import multiprocessing
+                    cpu_count = multiprocessing.cpu_count()
+                    if n_threads == 4 and cpu_count <= 4:
+                        n_threads = max(2, cpu_count - 1)
+                    elif n_threads == 4 and cpu_count > 8:
+                        n_threads = min(8, cpu_count // 2)
+                except Exception:
+                    pass
 
+                # Detect model size and adjust context window
+                model_size_gb = os.path.getsize(path) / (1024 ** 3)
+                if model_size_gb < 2.0:
+                    # Small model (< 2GB): use larger context for routing
+                    n_ctx = min(n_ctx, 8192)
+                elif model_size_gb < 4.0:
+                    # Medium model: standard context
+                    n_ctx = min(n_ctx, 4096)
+                
                 self._llama = Llama(
                     model_path=path,
                     n_ctx=n_ctx,
@@ -389,6 +477,7 @@ class LocalModelEngine:
         with self._stats_lock:
             hist = self._stats["tokens_per_second_history"]
             avg_tps = round(sum(hist) / len(hist), 1) if hist else 0.0
+            ram_mb = _get_available_ram_mb()
             return {
                 "model_loaded": self._loaded,
                 "model_name": self._model_name,
@@ -398,7 +487,35 @@ class LocalModelEngine:
                 "avg_tokens_per_second": avg_tps,
                 "best_tokens_per_second": max(hist) if hist else 0.0,
                 "load_events": list(self._stats["load_events"]),
+                "hardware": {
+                    "ram_total_mb": ram_mb,
+                    "ram_total_human": _format_size(ram_mb * 1024 * 1024),
+                },
+                "model_tier": self._get_model_tier(),
             }
+    
+    def _get_model_tier(self) -> dict:
+        """Return tier info for the currently loaded model."""
+        if not self._model_name:
+            return {"tier": 0, "description": "no model loaded"}
+        for pref in _PREFERRED_MODELS:
+            if pref["filename"] in self._model_name:
+                return {
+                    "tier": pref["tier"],
+                    "description": pref["description"],
+                    "ram_required_mb": pref["ram_required_mb"],
+                }
+        return {"tier": 0, "description": self._model_name}
+    
+    def is_local_routing_available(self) -> bool:
+        """Check if local routing is ready (model loaded + grammar available)."""
+        if not self._loaded or self._llama is None:
+            return False
+        try:
+            self._resolve_grammar("router")
+            return True
+        except Exception:
+            return False
 
     # ------------------------------------------------------------------
     # Inference
@@ -476,6 +593,9 @@ class LocalModelEngine:
 
     def route_intent(self, user_text: str) -> dict:
         """Fast routing inference using the ``router`` GBNF grammar.
+        
+        Optimized for small models (1.5B-3B): uses minimal tokens,
+        temperature=0.0 for deterministic output, and tight grammar constraints.
 
         Returns the parsed JSON dict produced by the grammar-constrained model.
         Falls back to a simple text response if grammar is unavailable.
@@ -488,8 +608,8 @@ class LocalModelEngine:
         result = self.inference(
             prompt=user_text,
             system=system,
-            max_tokens=128,
-            temperature=0.0,
+            max_tokens=64,  # Small models: keep output tight
+            temperature=0.0,  # Deterministic routing
             grammar="router",
         )
         raw = result["text"].strip()
@@ -511,6 +631,7 @@ class LocalModelEngine:
             "latency_ms": result["latency_ms"],
             "tokens_per_second": result["tokens_per_second"],
             "model": result["model"],
+            "local_routing": True,
         }
         return parsed
 

@@ -160,24 +160,41 @@ class RouterEngine:
         self._economic = None
         self._init_platform()
 
-        # Try to initialize local model
+        # Try to initialize local model via LocalModelEngine (hardware-aware)
         try:
-            from llama_cpp import Llama, LlamaGrammar
-            model_path = "./models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"
-            
-            if os.path.exists(model_path):
-                self.local_model = Llama(
-                    model_path=model_path,
-                    n_ctx=512,
-                    n_threads=4,
-                    flash_attn=True,
-                    verbose=False
-                )
-                if "router" in self.grammars:
-                    self.grammar = self.grammars["router"]
+            from local_model import engine as local_engine
+            self._local_model_engine = local_engine
+            # Try to load the best model for current hardware
+            if local_engine.is_loaded() or local_engine.load_model():
+                self.local_model = local_engine
                 self.model_source = "LOCAL_LLAMA"
+                # Load grammars from local_model engine
+                self._load_grammars_from_engine(local_engine)
         except Exception:
-            pass
+            # Fallback: try direct llama.cpp loading
+            try:
+                from llama_cpp import Llama, LlamaGrammar
+                # Try small models first (hardware-aware)
+                model_candidates = [
+                    "./models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+                    "./models/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+                    "./models/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+                    "./models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+                ]
+                for model_path in model_candidates:
+                    if os.path.exists(model_path):
+                        self.local_model = Llama(
+                            model_path=model_path,
+                            n_ctx=512,
+                            n_threads=4,
+                            verbose=False
+                        )
+                        if "router" in self.grammars:
+                            self.grammar = self.grammars["router"]
+                        self.model_source = "LOCAL_LLAMA"
+                        break
+            except Exception:
+                pass
 
     def _load_grammars(self):
         """Load all GBNF grammar files."""
@@ -195,6 +212,24 @@ class RouterEngine:
                             self.grammars[name] = LlamaGrammar.from_string(f.read())
                     except Exception:
                         pass
+
+    def _load_grammars_from_engine(self, engine):
+        """Load grammars from the LocalModelEngine's grammar cache."""
+        try:
+            # The local_model engine already loads grammars
+            # We can access them via the engine's grammar resolution
+            for grammar_name in ["router", "os_agent", "hal_agent", "web_agent", "core_agent"]:
+                try:
+                    grammar = engine._resolve_grammar(grammar_name)
+                    if grammar:
+                        self.grammars[grammar_name] = grammar
+                except Exception:
+                    pass
+            # Set the router grammar for supervisor
+            if "router" in self.grammars:
+                self.grammar = self.grammars["router"]
+        except Exception:
+            pass
 
     def _init_platform(self):
         """Initialize all platform modules: vault, healing, audit, local model, sandbox, IoT, economic."""
@@ -425,8 +460,24 @@ class RouterEngine:
     # ── Agent runners ─────────────────────────────────────────────────────────
 
     def _run_supervisor(self, user_text: str) -> dict:
-        # Check local llama first
-        if self.local_model and self.grammar:
+        # Check local model engine first (hardware-aware, auto-downloads)
+        if self._local_model_engine and self._local_model_engine.is_loaded():
+            try:
+                result = self._local_model_engine.route_intent(user_text)
+                if result.get("intent") != "unknown":
+                    return {
+                        "target_agent": result.get("target_agent", "OS_AGENT"),
+                        "routing_confidence": result.get("routing_confidence", 0.9),
+                        "extracted_intent": result.get("extracted_intent", user_text),
+                        "execution_context": result.get("execution_context", {}),
+                        "_local_routing": True,
+                        "_latency_ms": result.get("_meta", {}).get("latency_ms", 0),
+                    }
+            except Exception:
+                pass  # fallback to cloud
+
+        # Check direct llama.cpp model (legacy path)
+        if self.local_model and self.grammar and not self._local_model_engine:
             try:
                 start = time.perf_counter()
                 prompt = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n" \
@@ -448,7 +499,7 @@ class RouterEngine:
                     "execution_context": {"primary_targets": [], "actionable_variables": {}, "downstream_dependencies": []}
                 })
             except Exception:
-                pass # fallback to cloud
+                pass  # fallback to cloud
 
         # Fallback to high-speed cloud API
         raw = self._groq_call(
