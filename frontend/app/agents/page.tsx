@@ -12,7 +12,7 @@ const AGENT_TYPES = [
   { id: "chat", label: "CHAT", icon: "💬", desc: "Conversation, memory", color: "#ec4899" },
   { id: "device", label: "DEVICE", icon: "📡", desc: "Network device control", color: "#06b6d4" },
   { id: "monitor", label: "MONITOR", icon: "👁", desc: "System monitoring", color: "#a78bfa" },
-  { id: "custom", label: "CUSTOM", icon: "⚙️", desc: "Custom task agent", color: "#52525b" },
+  { id: "custom", label: "CUSTOM", icon: "⚙️", desc: "Custom task agent", color: "#71717a" },
 ];
 
 interface Agent {
@@ -53,6 +53,17 @@ interface PoolStats {
   utilization: string;
 }
 
+interface Event {
+  type: string;
+  time: number;
+  agent_id?: string;
+  task_id?: string;
+  status?: string;
+  duration_ms?: number;
+  command?: string;
+  name?: string;
+}
+
 interface LocalModel {
   is_loaded: boolean;
   model_info: { name: string; path: string; n_ctx: number; n_threads: number; quantization: string; size_human: string } | null;
@@ -66,16 +77,30 @@ interface LocalModel {
   };
 }
 
-interface Event {
-  type: string;
-  time: number;
-  agent_id?: string;
-  task_id?: string;
-  status?: string;
-  duration_ms?: number;
-  command?: string;
-  name?: string;
-}
+const statusColor = (s: string) => {
+  switch (s) {
+    case "running": return "#22c55e";
+    case "idle": return "#a78bfa";
+    case "completed": return "#06b6d4";
+    case "failed": case "error": return "#ef4444";
+    case "cancelled": return "#52525b";
+    case "paused": return "#eab308";
+    default: return "#52525b";
+  }
+};
+
+const agentTypeMeta = (t: string) => AGENT_TYPES.find(a => a.id === t) || AGENT_TYPES[6];
+
+const formatTime = (ts: number) => {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+};
+
+const formatDuration = (ms: number | null) => {
+  if (!ms) return "—";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+};
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -93,7 +118,8 @@ export default function AgentsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [localModel, setLocalModel] = useState<LocalModel | null>(null);
-  const eventsRef = useRef<HTMLDivElement>(null);
+  const [modelLoading, setModelLoading] = useState(false);
+  const [modelMsg, setModelMsg] = useState("");
 
   const fetchAgents = useCallback(async () => {
     try {
@@ -104,19 +130,19 @@ export default function AgentsPage() {
     } catch {}
   }, []);
 
-  const fetchLocalModel = useCallback(async () => {
-    try {
-      const res = await fetch(`${API}/api/local-model/info`);
-      const data = await res.json();
-      setLocalModel(data);
-    } catch {}
-  }, []);
-
   const fetchEvents = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/agents/pool/events?limit=30`);
       const data = await res.json();
       setEvents(data.events || []);
+    } catch {}
+  }, []);
+
+  const fetchLocalModel = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/local-model/info`);
+      const data = await res.json();
+      setLocalModel(data);
     } catch {}
   }, []);
 
@@ -218,245 +244,200 @@ export default function AgentsPage() {
     fetchAgents();
   };
 
-  const statusColor = (s: string) => {
-    switch (s) {
-      case "running": return "#22c55e";
-      case "idle": return "#a78bfa";
-      case "completed": return "#06b6d4";
-      case "failed": case "error": return "#ef4444";
-      case "cancelled": return "#52525b";
-      case "paused": return "#f59e0b";
-      default: return "#52525b";
+  const handleLoadModel = async () => {
+    setModelLoading(true);
+    setModelMsg("Loading model...");
+    try {
+      const res = await fetch(`${API}/api/local-model/load`, { method: "POST" });
+      const data = await res.json();
+      setModelMsg(data.loaded ? "Model loaded!" : "Failed to load model");
+      fetchLocalModel();
+    } catch (e: any) {
+      setModelMsg(`Error: ${e.message}`);
     }
-  };
-
-  const agentTypeIcon = (t: string) => AGENT_TYPES.find(a => a.id === t)?.icon || "⚙️";
-  const agentTypeColor = (t: string) => AGENT_TYPES.find(a => a.id === t)?.color || "#52525b";
-
-  const formatTime = (ts: number) => {
-    if (!ts) return "—";
-    const d = new Date(ts * 1000);
-    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  };
-
-  const formatDuration = (ms: number | null) => {
-    if (!ms) return "—";
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
+    setTimeout(() => setModelMsg(""), 3000);
+    setModelLoading(false);
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#fafafa", fontFamily: "'Inter', -apple-system, sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "var(--font-inter), system-ui, sans-serif" }}>
+      <style jsx global>{`
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .agent-card { animation: fade-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .agent-card:nth-child(1) { animation-delay: 0ms; }
+        .agent-card:nth-child(2) { animation-delay: 40ms; }
+        .agent-card:nth-child(3) { animation-delay: 80ms; }
+        .agent-card:nth-child(4) { animation-delay: 120ms; }
+        .agent-card:nth-child(5) { animation-delay: 160ms; }
+        .glow-ring { box-shadow: 0 0 0 1px rgba(139,92,246,0.15), 0 0 20px -5px rgba(139,92,246,0.1); }
+        .card-hover { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+        .card-hover:hover { border-color: rgba(139,92,246,0.2); background: rgba(139,92,246,0.03); }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.2); border-radius: 2px; }
+      `}</style>
+
       {/* Header */}
-      <div style={{ position: "sticky", top: 0, zIndex: 100, borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(10,10,15,0.95)", backdropFilter: "blur(20px)" }}>
-        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 20px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <Link href="/" style={{ color: "#52525b", textDecoration: "none", fontSize: 18 }}>←</Link>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-            </svg>
-            <span style={{ fontSize: 16, fontWeight: 600 }}>Agent Pool</span>
+      <header style={{ position: "sticky", top: 0, zIndex: 100, borderBottom: "1px solid var(--border-subtle)", background: "rgba(9,9,11,0.85)", backdropFilter: "blur(20px) saturate(180%)" }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 24px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <Link href="/" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", color: "var(--text-muted)", textDecoration: "none", transition: "all 0.15s", fontSize: 14 }}>
+              ←
+            </Link>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: stats && stats.running > 0 ? "var(--success)" : "var(--text-muted)", boxShadow: stats && stats.running > 0 ? "0 0 12px rgba(34,197,94,0.4)" : "none", transition: "all 0.3s" }} />
+              <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em" }}>Agent Pool</span>
+            </div>
             {stats && (
-              <span style={{ fontSize: 11, color: "#52525b", background: "rgba(255,255,255,0.04)", padding: "2px 8px", borderRadius: 4 }}>
-                {stats.running} running / {stats.utilization} slots
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 4 }}>
+                <span style={{ fontSize: 11, color: "var(--text-muted)", padding: "3px 8px", borderRadius: 6, background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)" }}>
+                  {stats.running}<span style={{ color: "var(--text-tertiary)" }}>/{stats.max_concurrent}</span> slots
+                </span>
+                {stats.active_tasks > 0 && (
+                  <span style={{ fontSize: 11, color: "var(--accent)", padding: "3px 8px", borderRadius: 6, background: "var(--accent-dim)" }}>
+                    {stats.active_tasks} task{stats.active_tasks !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              style={{
-                padding: "4px 10px", borderRadius: 4, fontSize: 11, fontWeight: 500, cursor: "pointer",
-                background: autoRefresh ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.04)",
-                color: autoRefresh ? "#22c55e" : "#52525b",
-                border: `1px solid ${autoRefresh ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.06)"}`,
-              }}
-            >
-              {autoRefresh ? "● LIVE" : "○ PAUSED"}
+            <button onClick={() => setAutoRefresh(!autoRefresh)} style={{ padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer", background: autoRefresh ? "var(--success-dim)" : "var(--bg-secondary)", color: autoRefresh ? "var(--success)" : "var(--text-muted)", border: `1px solid ${autoRefresh ? "rgba(34,197,94,0.2)" : "var(--border-subtle)"}`, transition: "all 0.15s" }}>
+              {autoRefresh ? "● Live" : "○ Paused"}
             </button>
-            <Link href="/sovereign" style={{ padding: "4px 10px", borderRadius: 4, fontSize: 11, fontWeight: 500, color: "#52525b", textDecoration: "none", border: "1px solid rgba(255,255,255,0.06)" }}>
-              Network
+            <Link href="/sovereign" style={{ padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500, color: "var(--text-muted)", textDecoration: "none", border: "1px solid var(--border-subtle)", background: "var(--bg-secondary)", transition: "all 0.15s" }}>
+              Network →
             </Link>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        {/* Left Column */}
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        {/* ─── Left Column ─── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Local Model Status */}
-          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Edge Architecture
+
+          {/* Edge Architecture Card */}
+          <div className="card-hover" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: 20, animation: "fade-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em" }}>Edge Architecture</span>
+                <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: localModel?.is_loaded ? "var(--success-dim)" : "var(--bg-tertiary)", color: localModel?.is_loaded ? "var(--success)" : "var(--text-muted)", fontWeight: 500 }}>
+                  {localModel?.is_loaded ? "ACTIVE" : "INACTIVE"}
+                </span>
+              </div>
+              {!localModel?.is_loaded && (
+                <button onClick={handleLoadModel} disabled={modelLoading} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer", background: "var(--accent-dim)", color: "var(--accent)", border: "1px solid rgba(139,92,246,0.2)", opacity: modelLoading ? 0.5 : 1, transition: "all 0.15s" }}>
+                  {modelLoading ? "Loading..." : "Load Model"}
+                </button>
+              )}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: localModel?.is_loaded ? "#22c55e" : "#52525b" }} />
-              <span style={{ fontSize: 12, color: localModel?.is_loaded ? "#22c55e" : "#52525b" }}>
-                {localModel?.is_loaded ? "LOCAL ROUTING ACTIVE" : "CLOUD ROUTING (no local model)"}
-              </span>
-            </div>
+
             {localModel?.stats && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11 }}>
-                <div style={{ padding: "6px 8px", borderRadius: 4, background: "rgba(255,255,255,0.02)" }}>
-                  <div style={{ color: "#52525b", marginBottom: 2 }}>Model</div>
-                  <div style={{ color: "#a1a1aa" }}>{localModel.stats.model_name || "none"}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                <div style={{ padding: "10px 12px", borderRadius: 8, background: "var(--bg-tertiary)", border: "1px solid var(--border-subtle)" }}>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Model</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: localModel.is_loaded ? "var(--text-primary)" : "var(--text-muted)" }}>
+                    {localModel.stats.model_name ? localModel.stats.model_name.split("-").slice(0, 3).join(" ") : "none"}
+                  </div>
                 </div>
-                <div style={{ padding: "6px 8px", borderRadius: 4, background: "rgba(255,255,255,0.02)" }}>
-                  <div style={{ color: "#52525b", marginBottom: 2 }}>Tier</div>
-                  <div style={{ color: "#a1a1aa" }}>{localModel.stats.model_tier?.description || "—"}</div>
+                <div style={{ padding: "10px 12px", borderRadius: 8, background: "var(--bg-tertiary)", border: "1px solid var(--border-subtle)" }}>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>RAM</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>{localModel.stats.hardware?.ram_total_human || "—"}</div>
                 </div>
-                <div style={{ padding: "6px 8px", borderRadius: 4, background: "rgba(255,255,255,0.02)" }}>
-                  <div style={{ color: "#52525b", marginBottom: 2 }}>RAM</div>
-                  <div style={{ color: "#a1a1aa" }}>{localModel.stats.hardware?.ram_total_human || "—"}</div>
-                </div>
-                <div style={{ padding: "6px 8px", borderRadius: 4, background: "rgba(255,255,255,0.02)" }}>
-                  <div style={{ color: "#52525b", marginBottom: 2 }}>Inferences</div>
-                  <div style={{ color: "#a1a1aa" }}>{localModel.stats.total_inferences}</div>
+                <div style={{ padding: "10px 12px", borderRadius: 8, background: "var(--bg-tertiary)", border: "1px solid var(--border-subtle)" }}>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Inferences</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>{localModel.stats.total_inferences}</div>
                 </div>
               </div>
             )}
-            {localModel?.model_info && (
-              <div style={{ marginTop: 8, padding: "6px 8px", borderRadius: 4, background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.1)", fontSize: 10, color: "#22c55e" }}>
-                {localModel.model_info.size_human} · {localModel.model_info.quantization} · {localModel.model_info.n_ctx} ctx · {localModel.model_info.n_threads} threads
+            {modelMsg && (
+              <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 6, background: "var(--accent-dim)", border: "1px solid rgba(139,92,246,0.15)", fontSize: 11, color: "var(--accent)", fontWeight: 500 }}>
+                {modelMsg}
               </div>
             )}
           </div>
 
-          {/* Spawn Panel */}
-          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Deploy Agent</div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              <input
-                value={spawnName}
-                onChange={e => setSpawnName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleSpawn()}
-                placeholder="Agent name..."
-                style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#fafafa", fontSize: 13, outline: "none" }}
-              />
-              <select
-                value={spawnType}
-                onChange={e => setSpawnType(e.target.value)}
-                style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#fafafa", fontSize: 12, outline: "none", cursor: "pointer" }}
-              >
-                {AGENT_TYPES.map(t => (
-                  <option key={t.id} value={t.id}>{t.icon} {t.label}</option>
-                ))}
+          {/* Deploy Agent Card */}
+          <div className="card-hover" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: 20, animation: "fade-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 14 }}>Deploy Agent</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input value={spawnName} onChange={e => setSpawnName(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSpawn()} placeholder="Agent name..." style={{ flex: 1, padding: "9px 14px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--bg-tertiary)", color: "var(--text-primary)", fontSize: 13, outline: "none", transition: "border-color 0.15s" }} />
+              <select value={spawnType} onChange={e => setSpawnType(e.target.value)} style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--bg-tertiary)", color: "var(--text-primary)", fontSize: 12, outline: "none", cursor: "pointer" }}>
+                {AGENT_TYPES.map(t => <option key={t.id} value={t.id}>{t.icon} {t.label}</option>)}
               </select>
             </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
               {AGENT_TYPES.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => { setSpawnType(t.id); setSpawnName(`JARVIS ${t.label}`); }}
-                  style={{
-                    padding: "4px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer",
-                    background: spawnType === t.id ? `${t.color}15` : "rgba(255,255,255,0.02)",
-                    color: spawnType === t.id ? t.color : "#52525b",
-                    border: `1px solid ${spawnType === t.id ? `${t.color}30` : "rgba(255,255,255,0.04)"}`,
-                  }}
-                >
+                <button key={t.id} onClick={() => { setSpawnType(t.id); setSpawnName(`JARVIS ${t.label}`); }} style={{ padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer", background: spawnType === t.id ? `${t.color}12` : "var(--bg-tertiary)", color: spawnType === t.id ? t.color : "var(--text-muted)", border: `1px solid ${spawnType === t.id ? `${t.color}25` : "var(--border-subtle)"}`, transition: "all 0.15s" }}>
                   {t.icon} {t.label}
                 </button>
               ))}
             </div>
-            <button
-              onClick={handleSpawn}
-              disabled={spawning || !spawnName.trim()}
-              style={{
-                width: "100%", marginTop: 10, padding: "8px 0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                background: "rgba(139,92,246,0.1)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.2)",
-                opacity: spawning || !spawnName.trim() ? 0.5 : 1,
-              }}
-            >
+            <button onClick={handleSpawn} disabled={spawning || !spawnName.trim()} style={{ width: "100%", padding: "10px 0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", background: "var(--accent)", color: "#fff", border: "none", opacity: spawning || !spawnName.trim() ? 0.4 : 1, transition: "all 0.15s", letterSpacing: "-0.01em" }}>
               {spawning ? "Deploying..." : "Deploy Agent"}
             </button>
           </div>
 
-          {/* Agent List */}
-          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Agents ({agents.length})
+          {/* Agent List Card */}
+          <div className="card-hover" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: 20, animation: "fade-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em" }}>Agents</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{agents.length}</span>
             </div>
             {agents.length === 0 && (
-              <div style={{ textAlign: "center", padding: "30px 0", color: "#52525b", fontSize: 12 }}>No agents deployed yet</div>
+              <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)", fontSize: 12 }}>
+                <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.3 }}>🤖</div>
+                No agents deployed yet
+              </div>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 400, overflowY: "auto" }}>
-              {agents.map(agent => (
-                <div
-                  key={agent.id}
-                  onClick={() => setSelectedAgent(selectedAgent === agent.id ? null : agent.id)}
-                  style={{
-                    padding: "10px 12px", borderRadius: 8, cursor: "pointer",
-                    background: selectedAgent === agent.id ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.02)",
-                    border: `1px solid ${selectedAgent === agent.id ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)"}`,
-                    transition: "all 0.15s",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 16 }}>{agentTypeIcon(agent.agent_type)}</span>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{agent.name}</div>
-                        <div style={{ fontSize: 10, color: "#52525b" }}>{agent.id.slice(0, 16)}...</div>
+              {agents.map(agent => {
+                const meta = agentTypeMeta(agent.agent_type);
+                return (
+                  <div key={agent.id} className="agent-card" onClick={() => setSelectedAgent(selectedAgent === agent.id ? null : agent.id)} style={{ padding: "12px 14px", borderRadius: 10, cursor: "pointer", background: selectedAgent === agent.id ? "rgba(139,92,246,0.06)" : "var(--bg-tertiary)", border: `1px solid ${selectedAgent === agent.id ? "rgba(139,92,246,0.2)" : "var(--border-subtle)"}`, transition: "all 0.15s" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: `${meta.color}10`, border: `1px solid ${meta.color}20`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>{meta.icon}</div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500 }}>{agent.name}</div>
+                          <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>{agent.id.slice(0, 18)}…</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {agent.status === "running" && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success)", animation: "pulse 1.5s infinite" }} />}
+                        <span style={{ fontSize: 10, fontWeight: 500, padding: "3px 8px", borderRadius: 5, background: `${statusColor(agent.status)}10`, color: statusColor(agent.status), textTransform: "uppercase", letterSpacing: "0.03em" }}>{agent.status}</span>
                       </div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 3, background: `${statusColor(agent.status)}15`, color: statusColor(agent.status) }}>
-                        {agent.status.toUpperCase()}
-                      </span>
-                      {agent.status === "running" && (
-                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", animation: "pulse 1.5s infinite" }} />
-                      )}
-                    </div>
+                    {selectedAgent === agent.id && (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-subtle)" }}>
+                        <div style={{ display: "flex", gap: 10, marginBottom: 10, fontSize: 11, color: "var(--text-muted)" }}>
+                          <span>Tasks: <span style={{ color: "var(--text-secondary)" }}>{agent.total_tasks}</span></span>
+                          <span>Errors: <span style={{ color: agent.error_count > 0 ? "var(--error)" : "var(--text-secondary)" }}>{agent.error_count}</span></span>
+                          <span>Active: <span style={{ color: agent.current_task ? "var(--success)" : "var(--text-secondary)" }}>{agent.current_task ? "yes" : "no"}</span></span>
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {agent.status === "running" && <button onClick={e => { e.stopPropagation(); handlePause(agent.id); }} style={{ padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer", background: "var(--warning-dim)", color: "var(--warning)", border: "1px solid rgba(234,179,8,0.2)" }}>Pause</button>}
+                          {agent.status === "paused" && <button onClick={e => { e.stopPropagation(); handleResume(agent.id); }} style={{ padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer", background: "var(--success-dim)", color: "var(--success)", border: "1px solid rgba(34,197,94,0.2)" }}>Resume</button>}
+                          <button onClick={e => { e.stopPropagation(); handleKill(agent.id); }} style={{ padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer", background: "var(--error-dim)", color: "var(--error)", border: "1px solid rgba(239,68,68,0.2)" }}>Kill</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {selectedAgent === agent.id && (
-                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                      <div style={{ display: "flex", gap: 6, marginBottom: 8, fontSize: 10, color: "#52525b" }}>
-                        <span>Tasks: {agent.total_tasks}</span>
-                        <span>·</span>
-                        <span>Errors: {agent.error_count}</span>
-                        <span>·</span>
-                        <span>Active: {agent.current_task ? "yes" : "no"}</span>
-                      </div>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        {agent.status === "running" && (
-                          <button onClick={(e) => { e.stopPropagation(); handlePause(agent.id); }} style={{ padding: "3px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer", background: "rgba(245,158,11,0.1)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.2)" }}>Pause</button>
-                        )}
-                        {agent.status === "paused" && (
-                          <button onClick={(e) => { e.stopPropagation(); handleResume(agent.id); }} style={{ padding: "3px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer", background: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>Resume</button>
-                        )}
-                        <button onClick={(e) => { e.stopPropagation(); handleKill(agent.id); }} style={{ padding: "3px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}>Kill</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
           {/* Task Submit */}
           {selectedAgent && (
-            <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Submit Task → {agents.find(a => a.id === selectedAgent)?.name}
+            <div className="card-hover glow-ring" style={{ background: "var(--bg-secondary)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 12, padding: 20, animation: "fade-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) both" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 10 }}>
+                Task → <span style={{ color: "var(--accent)" }}>{agents.find(a => a.id === selectedAgent)?.name}</span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  value={taskCommand}
-                  onChange={e => setTaskCommand(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleSubmitTask()}
-                  placeholder="Enter command..."
-                  style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#fafafa", fontSize: 13, outline: "none" }}
-                />
-                <button
-                  onClick={handleSubmitTask}
-                  disabled={submitting || !taskCommand.trim()}
-                  style={{
-                    padding: "8px 16px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                    background: "rgba(139,92,246,0.1)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.2)",
-                    opacity: submitting || !taskCommand.trim() ? 0.5 : 1,
-                  }}
-                >
+                <input value={taskCommand} onChange={e => setTaskCommand(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmitTask()} placeholder="Enter command..." style={{ flex: 1, padding: "9px 14px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--bg-tertiary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }} />
+                <button onClick={handleSubmitTask} disabled={submitting || !taskCommand.trim()} style={{ padding: "9px 20px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", background: "var(--accent)", color: "#fff", border: "none", opacity: submitting || !taskCommand.trim() ? 0.4 : 1, transition: "all 0.15s" }}>
                   {submitting ? "..." : "Run"}
                 </button>
               </div>
@@ -464,51 +445,36 @@ export default function AgentsPage() {
           )}
         </div>
 
-        {/* Right Column */}
+        {/* ─── Right Column ─── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Cognitive Router Dispatch */}
-          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Cognitive Router
+
+          {/* Cognitive Router */}
+          <div className="card-hover" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: 20, animation: "fade-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em" }}>Cognitive Router</span>
+              <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: "var(--accent-dim)", color: "var(--accent)", fontWeight: 500 }}>SUPERVISOR</span>
             </div>
-            <div style={{ fontSize: 11, color: "#52525b", marginBottom: 10 }}>
-              Supervisor triages intent → routes to OS / HAL / WEB / CORE agent
-            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 14 }}>Triage intent → route to OS / HAL / WEB / CORE agent</div>
             <div style={{ display: "flex", gap: 8 }}>
-              <input
-                value={dispatchText}
-                onChange={e => setDispatchText(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleDispatch()}
-                placeholder="Describe a task..."
-                style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "#fafafa", fontSize: 13, outline: "none" }}
-              />
-              <button
-                onClick={handleDispatch}
-                disabled={dispatching || !dispatchText.trim()}
-                style={{
-                  padding: "8px 16px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  background: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)",
-                  opacity: dispatching || !dispatchText.trim() ? 0.5 : 1,
-                }}
-              >
+              <input value={dispatchText} onChange={e => setDispatchText(e.target.value)} onKeyDown={e => e.key === "Enter" && handleDispatch()} placeholder="Describe a task..." style={{ flex: 1, padding: "9px 14px", borderRadius: 8, border: "1px solid var(--border-default)", background: "var(--bg-tertiary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }} />
+              <button onClick={handleDispatch} disabled={dispatching || !dispatchText.trim()} style={{ padding: "9px 20px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", background: "var(--success)", color: "#fff", border: "none", opacity: dispatching || !dispatchText.trim() ? 0.4 : 1, transition: "all 0.15s" }}>
                 {dispatching ? "Routing..." : "Dispatch"}
               </button>
             </div>
             {dispatchResult && (
-              <div style={{ marginTop: 10, padding: 10, borderRadius: 6, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", fontSize: 11 }}>
+              <div style={{ marginTop: 14, padding: 14, borderRadius: 10, background: "var(--bg-tertiary)", border: "1px solid var(--border-subtle)", animation: "fade-up 0.2s ease both" }}>
                 {dispatchResult.error ? (
-                  <span style={{ color: "#ef4444" }}>Error: {dispatchResult.error}</span>
+                  <div style={{ color: "var(--error)", fontSize: 12 }}>Error: {dispatchResult.error}</div>
                 ) : (
                   <>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-                      <span style={{ color: "#a78bfa" }}>Target: {dispatchResult.target_agent}</span>
-                      <span style={{ color: "#52525b" }}>·</span>
-                      <span style={{ color: "#52525b" }}>Confidence: {((dispatchResult.routing?.routing_confidence || 0) * 100).toFixed(0)}%</span>
-                      <span style={{ color: "#52525b" }}>·</span>
-                      <span style={{ color: dispatchResult.security_status === "PASSED" ? "#22c55e" : "#ef4444" }}>{dispatchResult.security_status}</span>
+                    <div style={{ display: "flex", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, background: "var(--accent-dim)", color: "var(--accent)", fontWeight: 500 }}>{dispatchResult.target_agent}</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{Math.round((dispatchResult.routing?.routing_confidence || 0) * 100)}% confidence</span>
+                      <span style={{ fontSize: 11, color: dispatchResult.security_status === "PASSED" ? "var(--success)" : "var(--error)" }}>{dispatchResult.security_status}</span>
+                      {dispatchResult.latency_ms?.total && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{Math.round(dispatchResult.latency_ms.total)}ms</span>}
                     </div>
-                    <div style={{ color: "#a1a1aa", lineHeight: 1.5 }}>
-                      {JSON.stringify(dispatchResult.routing?.extracted_intent || dispatchResult.routing, null, 2)}
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6, fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+                      {dispatchResult.routing?.extracted_intent || JSON.stringify(dispatchResult.routing, null, 2)}
                     </div>
                   </>
                 )}
@@ -516,25 +482,21 @@ export default function AgentsPage() {
             )}
           </div>
 
-          {/* Agent Tasks */}
+          {/* Task History */}
           {selectedAgent && (
-            <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Task History
-              </div>
+            <div className="card-hover" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: 20, animation: "fade-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 14 }}>Task History</div>
               {agentTasks.length === 0 && (
-                <div style={{ textAlign: "center", padding: "20px 0", color: "#52525b", fontSize: 11 }}>No tasks yet</div>
+                <div style={{ textAlign: "center", padding: "30px 0", color: "var(--text-muted)", fontSize: 12 }}>No tasks yet</div>
               )}
               <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 300, overflowY: "auto" }}>
                 {agentTasks.map(task => (
-                  <div key={task.id} style={{ padding: "8px 10px", borderRadius: 6, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: 11, color: "#a1a1aa" }}>{task.command.slice(0, 60)}{task.command.length > 60 ? "..." : ""}</span>
-                      <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: `${statusColor(task.status)}15`, color: statusColor(task.status) }}>
-                        {task.status.toUpperCase()}
-                      </span>
+                  <div key={task.id} style={{ padding: "10px 12px", borderRadius: 8, background: "var(--bg-tertiary)", border: "1px solid var(--border-subtle)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "monospace" }}>{task.command.slice(0, 50)}{task.command.length > 50 ? "…" : ""}</span>
+                      <span style={{ fontSize: 10, fontWeight: 500, padding: "2px 6px", borderRadius: 4, background: `${statusColor(task.status)}10`, color: statusColor(task.status), textTransform: "uppercase" }}>{task.status}</span>
                     </div>
-                    <div style={{ display: "flex", gap: 8, marginTop: 4, fontSize: 9, color: "#52525b" }}>
+                    <div style={{ display: "flex", gap: 10, fontSize: 10, color: "var(--text-muted)" }}>
                       <span>{formatDuration(task.latency_ms)}</span>
                       <span>{formatTime(task.started_at || 0)}</span>
                     </div>
@@ -545,39 +507,24 @@ export default function AgentsPage() {
           )}
 
           {/* Event Log */}
-          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Event Log
-            </div>
-            <div ref={eventsRef} style={{ maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
+          <div className="card-hover" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: 20, animation: "fade-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 14 }}>Event Log</div>
+            <div style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
               {events.length === 0 && (
-                <div style={{ textAlign: "center", padding: "20px 0", color: "#52525b", fontSize: 11 }}>No events</div>
+                <div style={{ textAlign: "center", padding: "30px 0", color: "var(--text-muted)", fontSize: 12 }}>No events</div>
               )}
               {events.map((ev, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", borderRadius: 4, fontSize: 10, background: "rgba(255,255,255,0.01)" }}>
-                  <span style={{ color: ev.type.includes("spawn") ? "#22c55e" : ev.type.includes("kill") || ev.type.includes("fail") ? "#ef4444" : ev.type.includes("complete") ? "#06b6d4" : "#52525b" }}>
-                    {ev.type}
-                  </span>
-                  {ev.name && <span style={{ color: "#a1a1aa" }}>{ev.name}</span>}
-                  {ev.duration_ms && <span style={{ color: "#52525b" }}>{formatDuration(ev.duration_ms)}</span>}
-                  <span style={{ color: "#3f3f46", marginLeft: "auto" }}>{formatTime(ev.time)}</span>
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 10px", borderRadius: 6, fontSize: 11, background: "var(--bg-tertiary)" }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: ev.type.includes("spawn") ? "var(--success)" : ev.type.includes("kill") || ev.type.includes("fail") ? "var(--error)" : ev.type.includes("complete") ? "var(--info)" : "var(--text-muted)", flexShrink: 0 }} />
+                  <span style={{ color: "var(--text-secondary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.type}{ev.name ? ` — ${ev.name}` : ""}</span>
+                  {ev.duration_ms && <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>{formatDuration(ev.duration_ms)}</span>}
+                  <span style={{ color: "var(--text-muted)", flexShrink: 0, fontFamily: "monospace", fontSize: 10 }}>{formatTime(ev.time)}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
       </div>
-
-      <style jsx global>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.2); border-radius: 2px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.3); }
-      `}</style>
     </div>
   );
 }
