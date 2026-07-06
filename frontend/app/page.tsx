@@ -10,6 +10,7 @@ const InterceptBar = dynamic(() => import("@/components/cockpit/InterceptBar"), 
 const KineticOrb = dynamic(() => import("@/components/cockpit/KineticOrb"), { ssr: false });
 const Markdown = dynamic(() => import("@/components/cockpit/Markdown"), { ssr: false });
 const ExecutionOverlay = dynamic(() => import("@/components/cockpit/ExecutionOverlay"), { ssr: false });
+const StatusBar = dynamic(() => import("@/components/cockpit/StatusBar"), { ssr: false });
 const CommandPalette = dynamic(() => import("@/components/CommandPalette").then(m => m.CommandPalette), { ssr: false });
 const ShortcutsModal = dynamic(() => import("@/components/ShortcutsModal"), { ssr: false });
 
@@ -314,6 +315,7 @@ export default function Home() {
       </div>
 
       <InterceptBar onApprove={handleApprove} onDeny={handleDeny} />
+      <StatusBar />
     </div>
   );
 }
