@@ -245,6 +245,175 @@ def _send_wol(mac):
     s.close()
     return f"WoL sent to {mac}"
 
+# ── Alexa WiFi Controller ───────────────────────────────────────────
+
+def _alexa_discover():
+    """Discover Echo devices on local network."""
+    devices = []
+
+    # Method 1: ARP scan for Amazon devices
+    amazon_ouis = ["f0:27:2d", "f0:f0:a4", "44:35:83", "ac:63:be", "84:d6:db",
+                   "fc:65:de", "a0:02:dc", "3c:aa:8f", "74:c2:46", "e8:48:b8",
+                   "0c:47:3d", "88:71:b1", "d8:72:5a", "e4:7a:2c", "fc:15:b4"]
+    arp = run("arp -a", timeout=10)
+    for line in arp.split("\n"):
+        for oui in amazon_ouis:
+            if oui.lower() in line.lower():
+                ip_match = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)', line)
+                if ip_match:
+                    ip = ip_match.group(1)
+                    mac = line.split()[3] if len(line.split()) > 3 else ""
+                    devices.append({"ip": ip, "name": f"Echo ({ip})", "type": "ALEXA", "mac": mac})
+                break
+
+    # Method 2: Check common Echo ports
+    if not devices:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            subnet = ".".join(local_ip.split(".")[:3])
+            for i in range(1, 255):
+                ip = f"{subnet}.{i}"
+                # Check if Echo port is open
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(0.3)
+                result = sock.connect_ex((ip, 443))
+                if result == 0:
+                    # Check if it's an Amazon device
+                    try:
+                        ctx = ssl.create_default_context()
+                        ctx.check_hostname = False
+                        ctx.verify_mode = ssl.CERT_NONE
+                        conn = http.client.HTTPSConnection(ip, 443, timeout=2, context=ctx)
+                        conn.request("GET", "/")
+                        resp = conn.getresponse()
+                        server = resp.getheader("Server", "")
+                        if "amazon" in server.lower() or "echo" in server.lower() or "alexa" in server.lower():
+                            devices.append({"ip": ip, "name": f"Echo ({ip})", "type": "ALEXA"})
+                        conn.close()
+                    except:
+                        pass
+                sock.close()
+        except:
+            pass
+
+    return json.dumps({"devices": devices, "count": len(devices)})
+
+def _alexa_send_command(ip, endpoint):
+    """Send HTTP command to Echo device."""
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        conn = http.client.HTTPSConnection(ip, 443, timeout=5, context=ctx)
+        paths = [f"/api/{endpoint}", f"/{endpoint}", f"/v2/{endpoint}"]
+        for path in paths:
+            try:
+                conn.request("GET", path)
+                resp = conn.getresponse()
+                if resp.status in (200, 201, 202):
+                    return resp.read().decode()
+            except:
+                continue
+        conn.close()
+    except:
+        pass
+    # Fallback to curl
+    return run(f'curl -s -k -m 5 "https://{ip}/api/{endpoint}" 2>/dev/null')
+
+def _alexa_speak(params):
+    """Make Echo speak text."""
+    parts = params.split(" ", 1)
+    ip = parts[0] if len(parts) > 1 else ""
+    text = parts[1] if len(parts) > 1 else params
+    if not ip:
+        # Try to find any Echo device
+        try:
+            result = json.loads(_alexa_discover())
+            if result.get("devices"):
+                ip = result["devices"][0]["ip"]
+        except:
+            pass
+    if not ip:
+        return "No Echo device found. Run alexa_discover first."
+    encoded = urllib.parse.quote(text)
+    return _alexa_send_command(ip, f"speak/{encoded}") or f"Sent speak command to {ip}"
+
+def _alexa_volume(params):
+    """Set Echo volume."""
+    parts = params.split()
+    ip = parts[0] if len(parts) > 1 else ""
+    level = parts[1] if len(parts) > 1 else parts[0]
+    if not ip or not level.isdigit():
+        return "Usage: alexa_volume <ip> <0-100>"
+    alexa_level = int(int(level) * 40 / 100)
+    return _alexa_send_command(ip, f"volume/{alexa_level}") or f"Volume set on {ip}"
+
+def _alexa_playback(params, action):
+    """Control Echo playback."""
+    ip = params.strip()
+    if not ip:
+        try:
+            result = json.loads(_alexa_discover())
+            if result.get("devices"):
+                ip = result["devices"][0]["ip"]
+        except:
+            pass
+    if not ip:
+        return "No Echo device found."
+    return _alexa_send_command(ip, f"player/{action}") or f"{action} sent to {ip}"
+
+def _alexa_timer(params):
+    """Set a timer on Echo."""
+    parts = params.split(" ", 1)
+    ip = parts[0] if len(parts) > 1 else ""
+    duration = parts[1] if len(parts) > 1 else params
+    if not ip:
+        try:
+            result = json.loads(_alexa_discover())
+            if result.get("devices"):
+                ip = result["devices"][0]["ip"]
+        except:
+            pass
+    if not ip:
+        return "No Echo device found."
+    encoded = urllib.parse.quote(duration)
+    return _alexa_send_command(ip, f"timer/{encoded}") or f"Timer set on {ip}"
+
+def _alexa_routine(params):
+    """Trigger an Alexa routine."""
+    parts = params.split(" ", 1)
+    ip = parts[0] if len(parts) > 1 else ""
+    name = parts[1] if len(parts) > 1 else params
+    if not ip:
+        try:
+            result = json.loads(_alexa_discover())
+            if result.get("devices"):
+                ip = result["devices"][0]["ip"]
+        except:
+            pass
+    if not ip:
+        return "No Echo device found."
+    encoded = urllib.parse.quote(name)
+    return _alexa_send_command(ip, f"routine/{encoded}") or f"Routine '{name}' triggered on {ip}"
+
+def _alexa_dnd(params):
+    """Set Do Not Disturb on Echo."""
+    state = "on" if "on" in params.lower() else "off"
+    ip = params.replace("on", "").replace("off", "").strip()
+    if not ip:
+        try:
+            result = json.loads(_alexa_discover())
+            if result.get("devices"):
+                ip = result["devices"][0]["ip"]
+        except:
+            pass
+    if not ip:
+        return "No Echo device found."
+    return _alexa_send_command(ip, f"dnd/{state}") or f"DND {state} on {ip}"
+
 # ── Autonomous Task Engine ───────────────────────────────────────────
 
 def _get_active_browser():
@@ -422,6 +591,17 @@ def macos_exec(action, params=""):
         "ui_click": lambda: _ui_click(params),
         "ui_open_app": lambda: _open_app(params),
         "ui_activate_app": lambda: run(f"osascript -e 'tell app \"{params}\" to activate' 2>/dev/null"),
+        "alexa_discover": lambda: _alexa_discover(),
+        "alexa_speak": lambda: _alexa_speak(params),
+        "alexa_volume": lambda: _alexa_volume(params),
+        "alexa_play": lambda: _alexa_playback(params, "play"),
+        "alexa_pause": lambda: _alexa_playback(params, "pause"),
+        "alexa_stop": lambda: _alexa_playback(params, "pause"),
+        "alexa_next": lambda: _alexa_playback(params, "next"),
+        "alexa_prev": lambda: _alexa_playback(params, "previous"),
+        "alexa_timer": lambda: _alexa_timer(params),
+        "alexa_routine": lambda: _alexa_routine(params),
+        "alexa_dnd": lambda: _alexa_dnd(params),
         "ai_computer_task": lambda: _ai_computer_task(params),
         "screen_analyze": lambda: _screen_analyze(params),
         "browser_open": lambda: _browser_open(params),

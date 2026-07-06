@@ -497,7 +497,44 @@ class Entity:
                     )}
 
                 device_keywords = ["light", "lights", "plug", "switch", "turn on", "turn off", "toggle"]
+                alexa_keywords = ["alexa", "echo", "alexa speak", "alexa play", "alexa volume", "alexa timer"]
                 is_device_cmd = any(kw in lower_text for kw in device_keywords)
+                is_alexa_cmd = any(kw in lower_text for kw in alexa_keywords)
+
+                if is_alexa_cmd:
+                    # Route to Alexa control
+                    if "speak" in lower_text or "say" in lower_text or "announce" in lower_text:
+                        text_parts = lower_text.split("say", 1) if "say" in lower_text else lower_text.split("speak", 1) if "speak" in lower_text else lower_text.split("announce", 1)
+                        speak_text = text_parts[1].strip() if len(text_parts) > 1 else ""
+                        if speak_text:
+                            result = cloud_safe_execute("alexa_speak", speak_text, user_id=self.user_id)
+                            return {"text": f"🔊 Alexa: \"{speak_text}\"\n{result}", "action": "alexa_speak"}
+                    elif "play" in lower_text:
+                        result = cloud_safe_execute("alexa_play", "", user_id=self.user_id)
+                        return {"text": f"▶ Alexa playing\n{result}", "action": "alexa_play"}
+                    elif "pause" in lower_text or "stop" in lower_text:
+                        result = cloud_safe_execute("alexa_pause", "", user_id=self.user_id)
+                        return {"text": f"⏸ Alexa paused\n{result}", "action": "alexa_pause"}
+                    elif "volume" in lower_text:
+                        vol_match = __import__("re").search(r'(\d+)', lower_text)
+                        vol = vol_match.group(1) if vol_match else "50"
+                        result = cloud_safe_execute("alexa_volume", vol, user_id=self.user_id)
+                        return {"text": f"🔊 Alexa volume: {vol}%\n{result}", "action": "alexa_volume"}
+                    elif "discover" in lower_text or "find" in lower_text:
+                        result = cloud_safe_execute("alexa_discover", "", user_id=self.user_id)
+                        return {"text": f"🔍 Scanning for Echo devices...\n{result}", "action": "alexa_discover"}
+                    elif "timer" in lower_text:
+                        duration = lower_text.replace("alexa", "").replace("echo", "").replace("timer", "").strip() or "5 minutes"
+                        result = cloud_safe_execute("alexa_timer", duration, user_id=self.user_id)
+                        return {"text": f"⏰ Alexa timer: {duration}\n{result}", "action": "alexa_timer"}
+                    elif "routine" in lower_text:
+                        routine = lower_text.replace("alexa", "").replace("echo", "").replace("routine", "").replace("trigger", "").strip()
+                        result = cloud_safe_execute("alexa_routine", routine, user_id=self.user_id)
+                        return {"text": f"⚡ Alexa routine: {routine}\n{result}", "action": "alexa_routine"}
+                    else:
+                        # Generic Alexa command
+                        result = cloud_safe_execute("alexa_speak", lower_text.replace("alexa", "").replace("echo", "").strip(), user_id=self.user_id)
+                        return {"text": f"🔊 Alexa: {result}", "action": "alexa_speak"}
 
                 if is_device_cmd:
                     # Route to device_by_name action
