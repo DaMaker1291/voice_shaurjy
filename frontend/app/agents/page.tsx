@@ -13,35 +13,49 @@ interface Task {
   total_steps: number;
   steps: any[];
   log: string[];
+  started_at?: number;
+}
+
+interface Device {
+  ip: string;
+  name: string;
+  type: string;
+  protocol: string;
+  mac?: string;
+  is_online?: boolean;
 }
 
 export default function AgentsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [intent, setIntent] = useState("");
   const [starting, setStarting] = useState(false);
   const [headlessRunning, setHeadlessRunning] = useState(false);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"tasks" | "devices" | "logs">("tasks");
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  const fetchTasks = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/autonomous/tasks`);
-      const data = await res.json();
-      setTasks(data.tasks || []);
-    } catch {}
-    try {
-      const res = await fetch(`${API}/api/headless/status`);
-      const data = await res.json();
-      setHeadlessRunning(data.running);
+      const [tRes, dRes, hRes] = await Promise.all([
+        fetch(`${API}/api/autonomous/tasks`),
+        fetch(`${API}/api/relay/devices?user_id=local`),
+        fetch(`${API}/api/headless/status`),
+      ]);
+      const tData = await tRes.json();
+      const dData = await dRes.json();
+      const hData = await hRes.json();
+      setTasks(tData.tasks || []);
+      setDevices(dData.devices || []);
+      setHeadlessRunning(hData.running);
     } catch {}
   }, []);
 
-  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => {
-    const i = setInterval(fetchTasks, 2000);
+    const i = setInterval(fetchAll, 2000);
     return () => clearInterval(i);
-  }, [fetchTasks]);
-
+  }, [fetchAll]);
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [tasks]);
@@ -66,170 +80,270 @@ export default function AgentsPage() {
     await fetch(`${API}/api/autonomous/tasks/stop/${taskId}`, { method: "POST" });
   };
 
+  const handleDeviceControl = async (ip: string, action: string) => {
+    try {
+      await fetch(`${API}/api/real/tapo/turn_${action}?ip=${ip}`, { method: "POST" });
+      fetchAll();
+    } catch {}
+  };
+
   const activeTasks = tasks.filter(t => t.status === "running");
   const completedTasks = tasks.filter(t => t.status !== "running");
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--void)", color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#030303", color: "#e5e5e5", fontFamily: "'JetBrains Mono', monospace" }}>
       <style jsx global>{`
         @keyframes fade-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes pulse-glow { 0%,100% { box-shadow: 0 0 4px rgba(0,255,102,0.2); } 50% { box-shadow: 0 0 12px rgba(0,255,102,0.4); } }
-        .animate-fade { animation: fade-in 0.25s cubic-bezier(0.16,1,0.3,1) both; }
-        .pulse-active { animation: pulse-glow 2s ease-in-out infinite; }
+        @keyframes pulse-glow { 0%,100% { box-shadow: 0 0 4px rgba(0,255,102,0.15); } 50% { box-shadow: 0 0 16px rgba(0,255,102,0.3); } }
+        .af { animation: fade-in 0.25s cubic-bezier(0.16,1,0.3,1) both; }
+        .pg { animation: pulse-glow 2s ease-in-out infinite; }
       `}</style>
 
       {/* Header */}
-      <header style={{ height: 32, background: "var(--surface)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Link href="/" style={{ fontSize: 10, color: "var(--text-muted)", textDecoration: "none" }}>← BACK</Link>
-          <div style={{ width: 1, height: 14, background: "var(--border)" }} />
-          <span style={{ fontSize: 10, color: "var(--neon-green)", letterSpacing: "0.1em", fontWeight: 600 }}>AUTONOMOUS AGENTS</span>
-          <span style={{ fontSize: 9, color: activeTasks.length > 0 ? "var(--neon-green)" : "var(--text-muted)" }}>
-            {activeTasks.length} active
-          </span>
+      <header style={{ height: 40, background: "#0d0f12", borderBottom: "1px solid #1a1d23", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Link href="/" style={{ fontSize: 10, color: "#667085", textDecoration: "none" }}>← CHAT</Link>
+          <div style={{ width: 1, height: 16, background: "#1a1d23" }} />
+          <span style={{ fontSize: 11, color: "#00FF66", fontWeight: 600, letterSpacing: "0.08em" }}>AGENT COMMAND CENTER</span>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: headlessRunning ? "var(--neon-green)" : "var(--text-muted)" }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: headlessRunning ? "var(--neon-green)" : "var(--crimson)" }} />
-            HEADLESS {headlessRunning ? "ONLINE" : "OFFLINE"}
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: headlessRunning ? "#00FF66" : "#667085" }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: headlessRunning ? "#00FF66" : "#FF3333" }} />
+            HEADLESS
           </div>
+          <div style={{ fontSize: 9, color: "#667085" }}>{activeTasks.length} active</div>
         </div>
       </header>
 
-      <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+      {/* Tabs */}
+      <div style={{ display: "flex", borderBottom: "1px solid #1a1d23", background: "#0d0f12" }}>
+        {(["tasks", "devices", "logs"] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: "8px 16px", fontSize: 10, fontFamily: "inherit", cursor: "pointer",
+              background: "none", border: "none", borderBottom: activeTab === tab ? "2px solid #00FF66" : "2px solid transparent",
+              color: activeTab === tab ? "#00FF66" : "#667085", letterSpacing: "0.08em", fontWeight: 600,
+            }}
+          >
+            {tab === "tasks" ? "AUTONOMOUS TASKS" : tab === "devices" ? "DEVICES" : "EXECUTION LOG"}
+            {tab === "tasks" && activeTasks.length > 0 && (
+              <span style={{ marginLeft: 6, padding: "1px 5px", borderRadius: 8, background: "rgba(0,255,102,0.15)", fontSize: 9 }}>
+                {activeTasks.length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-          {/* Task Input */}
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, padding: 16, marginBottom: 16 }}>
-            <div style={{ fontSize: 9, color: "var(--neon-green)", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 8 }}>NEW AUTONOMOUS TASK</div>
-            <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 8 }}>
-              Describe what you want done. The agent will plan steps and execute them automatically until complete.
+      {/* Content */}
+      <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
+        {activeTab === "tasks" && (
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+            {/* Task Input */}
+            <div style={{ background: "#0d0f12", border: "1px solid #1a1d23", borderRadius: 8, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 9, color: "#00FF66", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 8 }}>NEW AUTONOMOUS TASK</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={intent}
+                  onChange={e => setIntent(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleStart()}
+                  placeholder="Describe what you want done — agent chains steps until complete..."
+                  style={{
+                    flex: 1, padding: "10px 14px", borderRadius: 6, border: "1px solid #1a1d23",
+                    background: "#030303", color: "#e5e5e5", fontSize: 13, outline: "none",
+                    fontFamily: "inherit",
+                  }}
+                />
+                <button
+                  onClick={handleStart}
+                  disabled={starting || !intent.trim()}
+                  style={{
+                    padding: "10px 20px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+                    fontFamily: "inherit", cursor: "pointer", background: "#00FF66", color: "#030303",
+                    border: "none", opacity: starting || !intent.trim() ? 0.4 : 1,
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  {starting ? "SPAWNING..." : "SPAWN"}
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                {["Check email for flights", "Check in for my flight", "Find passport photos", "Go to Gmail", "Scan all devices", "Alexa say hello"].map(s => (
+                  <button key={s} onClick={() => setIntent(s)} style={{
+                    padding: "4px 10px", borderRadius: 4, fontSize: 10, fontFamily: "inherit",
+                    cursor: "pointer", background: "#1a1d23", color: "#667085", border: "1px solid #252830",
+                  }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <input
-                value={intent}
-                onChange={e => setIntent(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleStart()}
-                placeholder="e.g. Check my email for flights and check me in..."
-                style={{ flex: 1, padding: "8px 12px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--surface-raised)", color: "var(--text-primary)", fontSize: 11, outline: "none", fontFamily: "var(--font-mono)" }}
-              />
+
+            {/* Active Tasks */}
+            {activeTasks.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 9, color: "#00FF66", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 8 }}>RUNNING</div>
+                {activeTasks.map(task => (
+                  <div
+                    key={task.task_id}
+                    className="af pg"
+                    onClick={() => setSelectedTask(selectedTask === task.task_id ? null : task.task_id)}
+                    style={{
+                      background: "#0d0f12", border: "1px solid rgba(0,255,102,0.15)",
+                      borderRadius: 8, padding: 14, marginBottom: 8, cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{task.intent}</div>
+                        <div style={{ fontSize: 10, color: "#667085" }}>
+                          Step {task.current_step + 1}/{task.total_steps || "?"} • {task.task_id}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ width: 80, height: 4, borderRadius: 2, background: "#1a1d23", overflow: "hidden" }}>
+                          <div style={{
+                            height: "100%", background: "linear-gradient(90deg, #00FF66, #FFB300)", borderRadius: 2,
+                            width: `${task.total_steps ? ((task.current_step + 1) / task.total_steps * 100) : 0}%`,
+                            transition: "width 0.3s",
+                          }} />
+                        </div>
+                        <button
+                          onClick={e => { e.stopPropagation(); handleStop(task.task_id); }}
+                          style={{
+                            padding: "4px 10px", borderRadius: 4, fontSize: 9, cursor: "pointer",
+                            background: "rgba(255,51,51,0.1)", color: "#FF3333", border: "1px solid rgba(255,51,51,0.2)",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          STOP
+                        </button>
+                      </div>
+                    </div>
+
+                    {selectedTask === task.task_id && task.log && (
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #1a1d23" }}>
+                        <div style={{ fontSize: 9, color: "#667085", letterSpacing: "0.08em", marginBottom: 6 }}>LIVE LOG</div>
+                        <div style={{
+                          maxHeight: 200, overflow: "auto", background: "#030303", borderRadius: 6,
+                          padding: 10, fontSize: 10, color: "#9ca3af",
+                        }}>
+                          {task.log.map((line: string, i: number) => (
+                            <div key={i} style={{ marginBottom: 2, color: line.includes("✓") ? "#00FF66" : line.includes("✗") ? "#FF3333" : "#9ca3af" }}>
+                              {line}
+                            </div>
+                          ))}
+                          <div ref={logEndRef} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Completed */}
+            {completedTasks.length > 0 && (
+              <div>
+                <div style={{ fontSize: 9, color: "#667085", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 8 }}>COMPLETED</div>
+                {completedTasks.map(task => (
+                  <div
+                    key={task.task_id}
+                    className="af"
+                    onClick={() => setSelectedTask(selectedTask === task.task_id ? null : task.task_id)}
+                    style={{
+                      background: "#0d0f12", border: "1px solid #1a1d23",
+                      borderRadius: 8, padding: 12, marginBottom: 6, cursor: "pointer", opacity: 0.7,
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: "#9ca3af" }}>{task.intent}</div>
+                    <div style={{ fontSize: 10, color: "#667085", marginTop: 2 }}>
+                      {task.status === "completed" ? "✓ Complete" : task.status === "stopped" ? "■ Stopped" : "✗ Failed"} • {task.total_steps} steps
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tasks.length === 0 && (
+              <div style={{ textAlign: "center", padding: "80px 20px" }}>
+                <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.3 }}>🤖</div>
+                <div style={{ fontSize: 12, color: "#667085" }}>No tasks running. Type a command above to spawn an agent.</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "devices" && (
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 9, color: "#00FF66", letterSpacing: "0.1em", fontWeight: 600 }}>
+                DISCOVERED DEVICES ({devices.length})
+              </div>
               <button
-                onClick={handleStart}
-                disabled={starting || !intent.trim()}
-                style={{ padding: "8px 18px", borderRadius: 4, fontSize: 10, fontWeight: 600, fontFamily: "var(--font-mono)", cursor: "pointer", background: "var(--neon-green)", color: "#000", border: "none", opacity: starting || !intent.trim() ? 0.4 : 1, letterSpacing: "0.05em" }}
+                onClick={() => fetch(`${API}/api/relay/action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action_id: "universal_scan", params: "", user_id: "local" }) }).then(fetchAll)}
+                style={{
+                  padding: "6px 12px", borderRadius: 4, fontSize: 10, fontFamily: "inherit",
+                  cursor: "pointer", background: "#1a1d23", color: "#00FF66", border: "1px solid rgba(0,255,102,0.2)",
+                }}
               >
-                {starting ? "SPAWNING..." : "SPAWN AGENT"}
+                SCAN NETWORK
               </button>
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-              {[
-                "Check email for flights",
-                "Check in for my flight",
-                "Do I have passport photos?",
-                "Go to Gmail",
-                "Open YouTube",
-                "Research flight deals",
-              ].map(suggestion => (
-                <button
-                  key={suggestion}
-                  onClick={() => setIntent(suggestion)}
-                  style={{ padding: "3px 8px", borderRadius: 3, fontSize: 9, fontFamily: "var(--font-mono)", cursor: "pointer", background: "var(--surface-raised)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
+              {devices.map((d, i) => (
+                <div
+                  key={i}
+                  className="af"
+                  style={{
+                    background: "#0d0f12", border: "1px solid #1a1d23", borderRadius: 8,
+                    padding: 14, transition: "all 0.15s",
+                  }}
                 >
-                  {suggestion}
-                </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#00FF66" }} />
+                    <span style={{ fontSize: 12, fontWeight: 500 }}>{d.name}</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: "#667085", marginBottom: 2 }}>{d.ip}</div>
+                  <div style={{ fontSize: 9, color: "#667085", marginBottom: 8 }}>{d.type} • {d.protocol}</div>
+                  {d.type === "TAPO_PLUG" && (
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button onClick={() => handleDeviceControl(d.ip, "on")} style={{ flex: 1, padding: "4px 0", borderRadius: 3, fontSize: 9, fontFamily: "inherit", cursor: "pointer", background: "rgba(0,255,102,0.1)", color: "#00FF66", border: "1px solid rgba(0,255,102,0.2)" }}>ON</button>
+                      <button onClick={() => handleDeviceControl(d.ip, "off")} style={{ flex: 1, padding: "4px 0", borderRadius: 3, fontSize: 9, fontFamily: "inherit", cursor: "pointer", background: "rgba(255,51,51,0.1)", color: "#FF3333", border: "1px solid rgba(255,51,51,0.2)" }}>OFF</button>
+                    </div>
+                  )}
+                </div>
               ))}
+              {devices.length === 0 && (
+                <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "60px 0", color: "#667085", fontSize: 12 }}>
+                  Click "Scan Network" to discover devices
+                </div>
+              )}
             </div>
           </div>
+        )}
 
-          {/* Active Tasks */}
-          {activeTasks.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 9, color: "var(--neon-green)", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 8 }}>ACTIVE TASKS</div>
-              {activeTasks.map(task => (
-                <div
-                  key={task.task_id}
-                  className="animate-fade pulse-active"
-                  onClick={() => setSelectedTask(selectedTask === task.task_id ? null : task.task_id)}
-                  style={{ background: "var(--surface)", border: "1px solid rgba(0,255,102,0.2)", borderRadius: 6, padding: 12, marginBottom: 8, cursor: "pointer" }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-primary)" }}>{task.intent}</div>
-                      <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 2 }}>
-                        Step {task.current_step + 1}/{task.total_steps || "?"} • Task ID: {task.task_id}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 60, height: 4, borderRadius: 2, background: "var(--surface-raised)", overflow: "hidden" }}>
-                        <div style={{ height: "100%", background: "var(--neon-green)", borderRadius: 2, width: `${task.total_steps ? ((task.current_step + 1) / task.total_steps * 100) : 0}%`, transition: "width 0.3s" }} />
-                      </div>
-                      <button
-                        onClick={e => { e.stopPropagation(); handleStop(task.task_id); }}
-                        style={{ padding: "3px 8px", borderRadius: 3, fontSize: 9, cursor: "pointer", background: "var(--crimson-dim)", color: "var(--crimson)", border: "1px solid rgba(255,51,51,0.2)", fontFamily: "var(--font-mono)" }}
-                      >
-                        STOP
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Live Log */}
-                  {selectedTask === task.task_id && (
-                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-                      <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6, letterSpacing: "0.08em" }}>EXECUTION LOG</div>
-                      <div style={{ maxHeight: 200, overflow: "auto", background: "var(--void)", borderRadius: 4, padding: 8, fontSize: 9, color: "var(--text-secondary)" }}>
-                        {(task.log || []).map((line: string, i: number) => (
-                          <div key={i} style={{ marginBottom: 2, opacity: line.includes("→") ? 1 : 0.7 }}>{line}</div>
-                        ))}
-                        <div ref={logEndRef} />
-                      </div>
-                    </div>
-                  )}
+        {activeTab === "logs" && (
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+            <div style={{ fontSize: 9, color: "#00FF66", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 8 }}>GLOBAL EXECUTION LOG</div>
+            <div style={{
+              background: "#0d0f12", border: "1px solid #1a1d23", borderRadius: 8,
+              padding: 16, fontFamily: "monospace", fontSize: 11, color: "#9ca3af",
+              maxHeight: "calc(100vh - 200px)", overflow: "auto",
+            }}>
+              {tasks.flatMap(t => (t.log || []).map(l => ({ task: t.intent, line: l }))).map((entry, i) => (
+                <div key={i} style={{ marginBottom: 2 }}>
+                  <span style={{ color: "#667085" }}>[{entry.task}]</span> {entry.line}
                 </div>
               ))}
+              {tasks.length === 0 && (
+                <div style={{ color: "#667085" }}>No logs yet. Start a task to see execution output.</div>
+              )}
             </div>
-          )}
-
-          {/* Completed Tasks */}
-          {completedTasks.length > 0 && (
-            <div>
-              <div style={{ fontSize: 9, color: "var(--steel)", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 8 }}>COMPLETED</div>
-              {completedTasks.map(task => (
-                <div
-                  key={task.task_id}
-                  className="animate-fade"
-                  onClick={() => setSelectedTask(selectedTask === task.task_id ? null : task.task_id)}
-                  style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, padding: 12, marginBottom: 6, cursor: "pointer", opacity: 0.7 }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{task.intent}</div>
-                      <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 2 }}>
-                        {task.status === "completed" ? "✓ Complete" : task.status === "stopped" ? "■ Stopped" : "✗ Failed"} • {task.total_steps} steps
-                      </div>
-                    </div>
-                  </div>
-                  {selectedTask === task.task_id && task.log && (
-                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-                      <div style={{ maxHeight: 200, overflow: "auto", background: "var(--void)", borderRadius: 4, padding: 8, fontSize: 9, color: "var(--text-secondary)" }}>
-                        {task.log.map((line: string, i: number) => (
-                          <div key={i} style={{ marginBottom: 2 }}>{line}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {tasks.length === 0 && (
-            <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-muted)", fontSize: 11 }}>
-              <div style={{ fontSize: 24, marginBottom: 12 }}>🤖</div>
-              <div>No autonomous tasks running.</div>
-              <div style={{ fontSize: 9, marginTop: 6, opacity: 0.5 }}>Describe a task above and the agent will plan and execute it automatically.</div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

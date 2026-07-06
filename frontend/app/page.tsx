@@ -10,6 +10,7 @@ const InterceptBar = dynamic(() => import("@/components/cockpit/InterceptBar"), 
 const KineticOrb = dynamic(() => import("@/components/cockpit/KineticOrb"), { ssr: false });
 const Markdown = dynamic(() => import("@/components/cockpit/Markdown"), { ssr: false });
 const ExecutionOverlay = dynamic(() => import("@/components/cockpit/ExecutionOverlay"), { ssr: false });
+const CommandPalette = dynamic(() => import("@/components/CommandPalette").then(m => m.CommandPalette), { ssr: false });
 
 interface Message { role: string; content: string; ts: number; agent?: string }
 
@@ -37,6 +38,7 @@ export default function Home() {
   const [executing, setExecuting] = useState(false);
   const [execAgent, setExecAgent] = useState("OS");
   const [execTask, setExecTask] = useState("");
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -125,7 +127,8 @@ export default function Home() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--void)", color: "var(--text-primary)", overflow: "hidden" }}>
-      <TopBar onNewChat={newChat} />
+      <TopBar onNewChat={newChat} onCommandPalette={() => setShowCommandPalette(true)} />
+      <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} onCommand={(cmd) => { setInput(cmd); }} />
       <ExecutionOverlay active={executing} agent={execAgent} task={execTask} />
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>

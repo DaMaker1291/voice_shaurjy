@@ -13,7 +13,7 @@ interface SystemStatus {
   uptime: string;
 }
 
-export default function TopBar({ onNewChat }: { onNewChat?: () => void }) {
+export default function TopBar({ onNewChat, onCommandPalette }: { onNewChat?: () => void; onCommandPalette?: () => void }) {
   const pathname = usePathname();
   const [status, setStatus] = useState<SystemStatus>({
     network: "OPTIMAL",
@@ -48,14 +48,23 @@ export default function TopBar({ onNewChat }: { onNewChat?: () => void }) {
     fetchStatus();
     const statusInterval = setInterval(fetchStatus, 10000);
 
-    return () => { clearInterval(interval); clearInterval(statusInterval); };
-  }, []);
+    // Cmd+K listener
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        onCommandPalette?.();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => { clearInterval(interval); clearInterval(statusInterval); window.removeEventListener("keydown", handleKeyDown); };
+  }, [onCommandPalette]);
 
   const navItems = [
-    { href: "/", label: "CHAT" },
-    { href: "/agents", label: "AGENTS" },
-    { href: "/sovereign", label: "NETWORK" },
-    { href: "/settings", label: "CONFIG" },
+    { href: "/", label: "CHAT", icon: "💬" },
+    { href: "/agents", label: "AGENTS", icon: "🤖" },
+    { href: "/sovereign", label: "DEVICES", icon: "📡" },
+    { href: "/settings", label: "CONFIG", icon: "⚙️" },
   ];
 
   return (
@@ -92,15 +101,23 @@ export default function TopBar({ onNewChat }: { onNewChat?: () => void }) {
         )}
       </div>
 
-      {/* Right: Status */}
+      {/* Right: Status + Cmd+K */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* Command Palette Trigger */}
+        <button onClick={onCommandPalette} style={{
+          display: "flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 4,
+          background: "var(--surface-raised)", border: "1px solid var(--border)",
+          cursor: "pointer", fontFamily: "var(--font-mono)",
+        }}>
+          <span style={{ fontSize: 8, color: "var(--text-muted)" }}>⌘K</span>
+          <span style={{ fontSize: 8, color: "var(--text-muted)" }}>Commands</span>
+        </button>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--neon-green)", boxShadow: "0 0 6px rgba(0,255,102,0.4)" }} />
           <span style={{ fontSize: 8, color: "var(--neon-green)", letterSpacing: "0.08em" }}>SECURE</span>
         </div>
         <span style={{ fontSize: 8, color: "var(--text-muted)" }}>NET {status.network}</span>
         <span style={{ fontSize: 8, color: "var(--text-muted)" }}>{status.model}</span>
-        <span style={{ fontSize: 8, color: "var(--text-muted)" }}>VAULT {status.vaultStatus}</span>
         <span style={{ fontSize: 8, color: "var(--text-muted)" }}>{status.uptime}</span>
       </div>
     </header>
