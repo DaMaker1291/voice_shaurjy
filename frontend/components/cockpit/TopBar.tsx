@@ -23,6 +23,8 @@ export default function TopBar({ onNewChat, onCommandPalette }: { onNewChat?: ()
     sandboxStatus: "AIRGAPPED",
     uptime: "00:00:00",
   });
+  const [agentCount, setAgentCount] = useState(0);
+  const [deviceCount, setDeviceCount] = useState(0);
 
   useEffect(() => {
     const start = Date.now();
@@ -44,6 +46,16 @@ export default function TopBar({ onNewChat, onCommandPalette }: { onNewChat?: ()
           model: data.models?.llm || "CLOUD_GROQ",
         }));
       } catch {}
+      try {
+        const res = await fetch("/api/autonomous/tasks");
+        const data = await res.json();
+        setAgentCount((data.tasks || []).filter((t: any) => t.status === "running").length);
+      } catch {}
+      try {
+        const res = await fetch("/api/relay/devices?user_id=local");
+        const data = await res.json();
+        setDeviceCount((data.devices || []).length);
+      } catch {}
     };
     fetchStatus();
     const statusInterval = setInterval(fetchStatus, 10000);
@@ -61,10 +73,10 @@ export default function TopBar({ onNewChat, onCommandPalette }: { onNewChat?: ()
   }, [onCommandPalette]);
 
   const navItems = [
-    { href: "/", label: "CHAT", icon: "💬" },
-    { href: "/agents", label: "AGENTS", icon: "🤖" },
-    { href: "/sovereign", label: "DEVICES", icon: "📡" },
-    { href: "/feed", label: "FEED", icon: "📋" },
+    { href: "/", label: "CHAT", icon: "💬", shortcut: "⌘1" },
+    { href: "/agents", label: "AGENTS", icon: "🤖", shortcut: "⌘2" },
+    { href: "/sovereign", label: "DEVICES", icon: "📡", shortcut: "⌘3" },
+    { href: "/feed", label: "FEED", icon: "📋", shortcut: "⌘4" },
     { href: "/settings", label: "CONFIG", icon: "⚙️" },
   ];
 
@@ -81,10 +93,14 @@ export default function TopBar({ onNewChat, onCommandPalette }: { onNewChat?: ()
           <Link key={item.href} href={item.href} style={{
             padding: "3px 8px", borderRadius: 3, fontSize: 9, fontWeight: 600, textDecoration: "none",
             fontFamily: "var(--font-mono)", letterSpacing: "0.08em", transition: "all 0.15s",
+            display: "flex", alignItems: "center", gap: 4,
             background: pathname === item.href ? "var(--neon-green-dim)" : "transparent",
             color: pathname === item.href ? "var(--neon-green)" : "var(--text-muted)",
           }}>
             {item.label}
+            {item.shortcut && (
+              <span style={{ fontSize: 7, opacity: 0.4, marginLeft: 2 }}>{item.shortcut}</span>
+            )}
           </Link>
         ))}
         {pathname === "/" && onNewChat && (
@@ -103,7 +119,7 @@ export default function TopBar({ onNewChat, onCommandPalette }: { onNewChat?: ()
       </div>
 
       {/* Right: Status + Cmd+K */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {/* Command Palette Trigger */}
         <button onClick={onCommandPalette} style={{
           display: "flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 4,
@@ -113,13 +129,27 @@ export default function TopBar({ onNewChat, onCommandPalette }: { onNewChat?: ()
           <span style={{ fontSize: 8, color: "var(--text-muted)" }}>⌘K</span>
           <span style={{ fontSize: 8, color: "var(--text-muted)" }}>Commands</span>
         </button>
+        {/* Live Agent Count */}
+        {agentCount > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 3, background: "rgba(0,255,102,0.1)", border: "1px solid rgba(0,255,102,0.2)" }}>
+            <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#00FF66", animation: "glow-pulse 1.5s ease-in-out infinite" }} />
+            <span style={{ fontSize: 8, color: "#00FF66", letterSpacing: "0.06em" }}>{agentCount} AGENT{agentCount > 1 ? "S" : ""}</span>
+          </div>
+        )}
+        {/* Device Count */}
+        {deviceCount > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontSize: 8, color: "var(--text-muted)" }}>{deviceCount} DEV</span>
+          </div>
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--neon-green)", boxShadow: "0 0 6px rgba(0,255,102,0.4)" }} />
-          <span style={{ fontSize: 8, color: "var(--neon-green)", letterSpacing: "0.08em" }}>SECURE</span>
+          <div style={{ width: 5, height: 5, borderRadius: "50%", background: status.network === "OPTIMAL" ? "var(--neon-green)" : "var(--amber)", boxShadow: `0 0 6px ${status.network === "OPTIMAL" ? "rgba(0,255,102,0.4)" : "rgba(255,179,0,0.4)"}` }} />
+          <span style={{ fontSize: 8, color: status.network === "OPTIMAL" ? "var(--neon-green)" : "var(--amber)", letterSpacing: "0.08em" }}>
+            {status.network === "OPTIMAL" ? "ONLINE" : "STANDBY"}
+          </span>
         </div>
-        <span style={{ fontSize: 8, color: "var(--text-muted)" }}>NET {status.network}</span>
         <span style={{ fontSize: 8, color: "var(--text-muted)" }}>{status.model}</span>
-        <span style={{ fontSize: 8, color: "var(--text-muted)" }}>{status.uptime}</span>
+        <span style={{ fontSize: 8, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{status.uptime}</span>
       </div>
     </header>
   );

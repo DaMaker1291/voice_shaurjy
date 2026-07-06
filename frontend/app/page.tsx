@@ -58,6 +58,23 @@ export default function Home() {
     else setInputState("idle");
   }, [thinking, listening]);
 
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const cmd = e.metaKey || e.ctrlKey;
+      if (cmd && e.key === "k") { e.preventDefault(); setShowCommandPalette(p => !p); }
+      if (cmd && e.key === "1") { e.preventDefault(); window.location.href = "/"; }
+      if (cmd && e.key === "2") { e.preventDefault(); window.location.href = "/agents"; }
+      if (cmd && e.key === "3") { e.preventDefault(); window.location.href = "/sovereign"; }
+      if (cmd && e.key === "4") { e.preventDefault(); window.location.href = "/feed"; }
+      if (cmd && e.key === "/") { e.preventDefault(); inputRef.current?.focus(); }
+      if (cmd && e.key === "Escape") { e.preventDefault(); newChat(); }
+      if (e.key === "Escape") { setShowCommandPalette(false); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [newChat]);
+
   const send = useCallback(async () => {
     const text = input.trim(); if (!text) return;
     setInput(""); setShowSuggestions(false);
