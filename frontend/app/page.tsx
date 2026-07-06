@@ -11,6 +11,7 @@ const KineticOrb = dynamic(() => import("@/components/cockpit/KineticOrb"), { ss
 const Markdown = dynamic(() => import("@/components/cockpit/Markdown"), { ssr: false });
 const ExecutionOverlay = dynamic(() => import("@/components/cockpit/ExecutionOverlay"), { ssr: false });
 const StatusBar = dynamic(() => import("@/components/cockpit/StatusBar"), { ssr: false });
+const WelcomeToast = dynamic(() => import("@/components/cockpit/WelcomeToast"), { ssr: false });
 const CommandPalette = dynamic(() => import("@/components/CommandPalette").then(m => m.CommandPalette), { ssr: false });
 const ShortcutsModal = dynamic(() => import("@/components/ShortcutsModal"), { ssr: false });
 
@@ -316,6 +317,7 @@ export default function Home() {
 
       <InterceptBar onApprove={handleApprove} onDeny={handleDeny} />
       <StatusBar />
+      <WelcomeToast />
     </div>
   );
 }
