@@ -32,6 +32,9 @@ _KEYWORD_MAP: dict[str, str] = {
     # Network & Smart Home
     "scan network": "network_scan_deep", "deep scan": "network_scan_deep",
     "scan my network": "network_scan_deep", "network scan": "network_scan_deep",
+    "scan all devices": "network_scan_deep", "find all devices": "network_scan_deep",
+    "scan wifi": "network_scan_deep", "what devices": "network_scan_deep",
+    "what's on my network": "network_scan_deep", "scan everything": "network_scan_deep",
     "quick scan": "network_scan_quick", "arp scan": "network_scan_quick",
     "who is on the network": "network_scan_quick",
     "what devices": "network_scan_quick",

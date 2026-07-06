@@ -245,6 +245,228 @@ def _send_wol(mac):
     s.close()
     return f"WoL sent to {mac}"
 
+# ── Universal Device Discovery & Control ─────────────────────────────
+
+def _universal_scan():
+    """Scan entire WiFi network for ALL devices — no login needed."""
+    devices = []
+
+    # Phase 1: ARP table (instant)
+    arp = run("arp -a", timeout=10)
+    for line in arp.split("\n"):
+        ip_match = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)', line)
+        mac_match = re.search(r'([0-9a-fA-F:]{17})', line)
+        if ip_match:
+            ip = ip_match.group(1)
+            mac = mac_match.group(1) if mac_match else ""
+            name = _identify_device_by_mac(mac) if mac else f"Device ({ip})"
+            devices.append({"ip": ip, "name": name, "mac": mac, "type": _type_by_mac(mac)})
+
+    # Phase 2: Probe alive devices
+    for dev in devices:
+        ip = dev["ip"]
+        # Check HTTP
+        for port in [80, 8080, 443]:
+            try:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                conn = http.client.HTTPSConnection(ip, port, timeout=2, context=ctx) if port == 443 else http.client.HTTPConnection(ip, port, timeout=2)
+                conn.request("GET", "/")
+                resp = conn.getresponse()
+                body = resp.read(1000).decode(errors="ignore").lower()
+                server = resp.getheader("Server", "").lower()
+                if "esphome" in body: dev["type"] = "ESPHOME"; dev["name"] = f"ESPHome ({ip})"
+                elif "wled" in body: dev["type"] = "WLED"; dev["name"] = f"WLED Strip ({ip})"
+                elif "tapo" in body or "tp-link" in body: dev["type"] = "TAPO"; dev["name"] = f"Tapo ({ip})"
+                elif "hue" in body or "philips" in body: dev["type"] = "HUE"; dev["name"] = f"Hue Bridge ({ip})"
+                elif "tuya" in body: dev["type"] = "TUYA"; dev["name"] = f"Tuya ({ip})"
+                elif "sonos" in body: dev["type"] = "SONOS"; dev["name"] = f"Sonos ({ip})"
+                elif "<html" in body: dev["type"] = "HTTP_DEVICE"; dev["name"] = f"Web Device ({ip})"
+                conn.close()
+                break
+            except:
+                pass
+
+        # Check MQTT
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(0.3)
+            if s.connect_ex((ip, 1883)) == 0:
+                dev["type"] = "MQTT_BROKER"; dev["name"] = f"MQTT ({ip})"
+            s.close()
+        except:
+            pass
+
+    # Phase 3: Quick subnet scan for missed devices
+    try:
+        local_ip = run("ipconfig getifaddr en0 2>/dev/null || ip -4 addr show | grep -oP '(?<=inet )\\d+\\.\\d+\\.\\d+\\.\\d+'")
+        subnet = ".".join(local_ip.strip().split(".")[:3]) if local_ip.strip() else "192.168.0"
+        # Quick port check on common IPs
+        for i in [1, 2, 100, 101, 200, 254]:
+            ip = f"{subnet}.{i}"
+            if not any(d["ip"] == ip for d in devices):
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(0.3)
+                    if s.connect_ex((ip, 80)) == 0 or s.connect_ex((ip, 443)) == 0:
+                        devices.append({"ip": ip, "name": f"Device ({ip})", "type": "UNKNOWN"})
+                    s.close()
+                except:
+                    pass
+    except:
+        pass
+
+    return json.dumps({"devices": devices, "count": len(devices), "scan": "full"})
+
+def _universal_control(params):
+    """Control any device using every known protocol."""
+    parts = params.split(" ", 2)
+    if len(parts) < 2:
+        return "Usage: <ip> <action> [params]"
+    ip = parts[0]
+    action = parts[1].lower()
+    extra = parts[2] if len(parts) > 2 else ""
+
+    protocols_tried = []
+
+    # 1. Try HTTP REST
+    http_result = _try_http(ip, action)
+    if http_result: return f"[HTTP] {http_result}"
+    protocols_tried.append("http")
+
+    # 2. Try ESPHome
+    esphome_result = _try_esphome(ip, action)
+    if esphome_result: return f"[ESPHOME] {esphome_result}"
+    protocols_tried.append("esphome")
+
+    # 3. Try WLED
+    wled_result = _try_wled(ip, action)
+    if wled_result: return f"[WLED] {wled_result}"
+    protocols_tried.append("wled")
+
+    # 4. Try Tapo with defaults
+    tapo_result = _try_tapo_defaults(ip, action)
+    if tapo_result: return f"[TAPO] {tapo_result}"
+    protocols_tried.append("tapo")
+
+    # 5. Try UPnP
+    upnp_result = _try_upnp(ip, action)
+    if upnp_result: return f"[UPNP] {upnp_result}"
+    protocols_tried.append("upnp")
+
+    return f"No supported protocol found at {ip}. Tried: {', '.join(protocols_tried)}"
+
+def _try_http(ip, action):
+    """Try HTTP control endpoints."""
+    endpoints = {
+        "on": ["/relay?state=on", "/control?state=on", "/api/relay/on", "/cm?cmnd=Power1%20ON", "/switch/relay/turn_on"],
+        "off": ["/relay?state=off", "/control?state=off", "/api/relay/off", "/cm?cmnd=Power1%20OFF", "/switch/relay/turn_off"],
+        "toggle": ["/relay?state=toggle", "/toggle", "/api/relay/toggle", "/switch/relay/toggle"],
+        "status": ["/status", "/api/status", "/cm?cmnd=Status", "/switch/relay"],
+    }
+    for ep in endpoints.get(action, []):
+        for port in [80, 8080, 8443]:
+            try:
+                conn = http.client.HTTPConnection(ip, port, timeout=2)
+                conn.request("GET", ep)
+                r = conn.getresponse()
+                if r.status in (200, 201, 202, 204):
+                    return r.read().decode(errors="ignore")
+                conn.close()
+            except:
+                pass
+    return None
+
+def _try_esphome(ip, action):
+    """Try ESPHome native API."""
+    try:
+        endpoints = {"on": "/switch/relay/turn_on", "off": "/switch/relay/turn_off", "toggle": "/switch/relay/toggle"}
+        conn = http.client.HTTPConnection(ip, 80, timeout=2)
+        conn.request("GET", endpoints.get(action, "/"))
+        r = conn.getresponse()
+        if r.status in (200, 201, 202):
+            return r.read().decode(errors="ignore")
+        conn.close()
+    except:
+        pass
+    return None
+
+def _try_wled(ip, action):
+    """Try WLED JSON API."""
+    try:
+        payloads = {"on": '{"on":true}', "off": '{"on":false}', "toggle": '{"on":true,"bri":255}'}
+        if action in payloads:
+            conn = http.client.HTTPConnection(ip, 80, timeout=2)
+            conn.request("POST", "/json", body=payloads[action], headers={"Content-Type": "application/json"})
+            r = conn.getresponse()
+            if r.status in (200, 201, 202):
+                return r.read().decode(errors="ignore")
+            conn.close()
+    except:
+        pass
+    return None
+
+def _try_tapo_defaults(ip, action):
+    """Try Tapo with common default credentials."""
+    defaults = [("admin", "admin"), ("admin", "password"), ("admin", "1234"), ("tplink", "tplink")]
+    for user, pwd in defaults:
+        try:
+            os.environ["TAPO_USERNAME"] = user
+            os.environ["TAPO_PASSWORD"] = pwd
+            from tapo_client import TapoClient
+            c = TapoClient()
+            c.set_credentials(user, pwd)
+            if action == "on": r = c.turn_on(ip)
+            elif action == "off": r = c.turn_off(ip)
+            elif action == "toggle": r = c.toggle(ip)
+            else: r = c.get_device_info(ip)
+            if r and r.get("success"):
+                return f"Tapo ({user}): {r}"
+        except:
+            pass
+    return None
+
+def _try_upnp(ip, action):
+    """Try UPnP/SOAP control."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(2)
+        s.connect((ip, 49152))
+        s.send(f"GET /rootDesc.xml HTTP/1.1\r\nHost: {ip}:49152\r\n\r\n".encode())
+        resp = s.recv(4096).decode(errors="ignore")
+        s.close()
+        if "xml" in resp.lower():
+            return f"UPnP device found at {ip}"
+    except:
+        pass
+    return None
+
+def _identify_device_by_mac(mac):
+    """Identify device by MAC OUI."""
+    mac = mac.lower().replace(":", "")[:6]
+    oui = {
+        "f0272d": "Amazon Echo", "f0f0a4": "Amazon Echo", "443583": "Amazon Echo",
+        "b04e26": "TP-Link", "50c7bf": "TP-Link", "14cc20": "TP-Link",
+        "001a2b": "Google", "3c5ab4": "Google",
+        "dca632": "Raspberry Pi", "b827eb": "Raspberry Pi",
+        "001132": "Sonos", "b8e937": "Sonos",
+        "0024d7": "Philips Hue", "ecb5fa": "Philips Hue",
+        "30b5c2": "TP-Link Tapo",
+    }
+    for prefix, name in oui.items():
+        if mac.startswith(prefix): return name
+    return "Network Device"
+
+def _type_by_mac(mac):
+    name = _identify_device_by_mac(mac)
+    if "Echo" in name: return "ALEXA"
+    if "TP-Link" in name: return "TAPO_PLUG"
+    if "Sonos" in name: return "SONOS"
+    if "Philips" in name: return "HUE_BRIDGE"
+    if "Raspberry" in name: return "RASPBERRY_PI"
+    return "UNKNOWN"
+
 # ── Alexa WiFi Controller ───────────────────────────────────────────
 
 def _alexa_discover():
@@ -582,6 +804,9 @@ def macos_exec(action, params=""):
         "finder_open": lambda: run(f"open '{params}'") if params else "Open what?",
         "network_scan_quick": lambda: run("arp -a"),
         "network_scan_deep": lambda: _net_scan_deep(),
+        "device_scan": lambda: _universal_scan(),
+        "universal_scan": lambda: _universal_scan(),
+        "device_control": lambda: _universal_control(params),
         "wake_on_lan": lambda: _send_wol(params),
         "camera_snap": lambda: run("which imagesnap && imagesnap -w 1 ~/Desktop/jarvis_cam.jpg 2>/dev/null || ffmpeg -f avfoundation -framerate 1 -video_size 640x480 -i '0' -frames:v 1 ~/Desktop/jarvis_cam.jpg -y 2>/dev/null; echo 'Photo taken'"),
         "who_is_online": lambda: run("arp -a | grep -v incomplete | head -20"),
