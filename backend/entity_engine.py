@@ -500,6 +500,23 @@ class Entity:
                 is_device_cmd = any(kw in lower_text for kw in device_keywords)
 
                 if is_device_cmd:
+                    # Route to device_by_name action
+                    action = "on" if "on" in lower_text else ("off" if "off" in lower_text else "toggle")
+                    # Extract device name from text
+                    device_name = lower_text
+                    for word in ["turn", "off", "on", "the", "light", "lights", "plug", "switch", "toggle"]:
+                        device_name = device_name.replace(word, "")
+                    device_name = device_name.strip()
+
+                    if device_name:
+                        result = cloud_safe_execute("device_by_name", f"{device_name} {action}", user_id=self.user_id)
+                        if result and "not found" not in result.lower() and "error" not in result.lower():
+                            return {"text": result, "action": "device_control"}
+                        # If device_by_name fails, try smart_home_control with name
+                        result2 = cloud_safe_execute("smart_home_control", f"{device_name} {action}", user_id=self.user_id)
+                        if result2 and "not found" not in result2.lower():
+                            return {"text": result2, "action": "device_control"}
+
                     known_devices = []
                     try:
                         from device_manager import DeviceManager

@@ -42,6 +42,8 @@ _KEYWORD_MAP: dict[str, str] = {
     "turn on": "smart_home_control", "turn off": "smart_home_control",
     "toggle": "smart_home_control", "lights": "smart_home_control",
     "light on": "smart_home_control", "light off": "smart_home_control",
+    "set credentials": "set_device_credentials", "set tapo credentials": "set_device_credentials",
+    "device credentials": "set_device_credentials", "tapo login": "set_device_credentials",
     "camera": "camera_snap", "take a photo": "camera_snap",
     "take photo": "camera_snap", "snap": "camera_snap",
     "notify phone": "phone_notify", "push notification": "phone_notify",
@@ -4156,6 +4158,81 @@ if sys.platform == "darwin":
             results.append(f"No known smart device protocols responded at {ip}")
 
         return "\n".join(results)
+
+    @register("set_device_credentials")
+    def _mac_set_device_creds(text):
+        """Set Tapo device credentials. Usage: set_device_credentials <username> <password>"""
+        parts = text.strip().split()
+        if len(parts) < 2:
+            return "Usage: set_device_credentials <tapo_username> <tapo_password>"
+        username = parts[0]
+        password = parts[1]
+        os.environ["TAPO_USERNAME"] = username
+        os.environ["TAPO_PASSWORD"] = password
+        # Reset the Tapo client
+        try:
+            import tapo_client
+            tapo_client._tapo = None
+        except:
+            pass
+        return f"✅ Tapo credentials set for user: {username}\nDevice control is now active."
+
+    @register("device_by_name")
+    def _mac_device_by_name(text):
+        """Control a device by name. Usage: device_by_name <name> <on|off|toggle>"""
+        parts = text.strip().split()
+        if len(parts) < 2:
+            return "Usage: device_by_name <device_name> <on|off|toggle>"
+        device_name = parts[0].lower()
+        action = parts[1].lower()
+
+        try:
+            from device_manager import DeviceManager
+            dm = DeviceManager()
+            devices = dm.get_all_devices()
+
+            # Find matching device
+            target = None
+            for d in devices:
+                name = d.get("name", "").lower()
+                # Exact match
+                if name == device_name:
+                    target = d
+                    break
+                # Partial match
+                if device_name in name or name in device_name:
+                    target = d
+                    break
+                # Word match
+                if any(w in name for w in device_name.split()):
+                    target = d
+                    break
+
+            if not target:
+                device_list = ", ".join(d.get("name", "?") for d in devices[:10])
+                return f"Device '{device_name}' not found. Available: {device_list or 'none discovered yet'}"
+
+            ip = target.get("ip", "")
+            if not ip:
+                return f"Device '{target.get('name')}' has no IP address assigned."
+
+            # Control via Tapo
+            from tapo_client import TapoClient
+            client = TapoClient()
+            if action == "on":
+                result = client.turn_on(ip)
+            elif action == "off":
+                result = client.turn_off(ip)
+            elif action == "toggle":
+                result = client.toggle(ip)
+            elif action == "status":
+                result = client.get_device_info(ip)
+            else:
+                return f"Unknown action: {action}. Use: on, off, toggle, status"
+
+            return f"✅ {target.get('name')} ({ip}) → {action.upper()}\n{result}"
+        except Exception as e:
+            return f"Device control error: {e}"
 
     # ── Phone & Notifications ────────────────────────────────────
 
