@@ -11,6 +11,7 @@ const KineticOrb = dynamic(() => import("@/components/cockpit/KineticOrb"), { ss
 const Markdown = dynamic(() => import("@/components/cockpit/Markdown"), { ssr: false });
 const ExecutionOverlay = dynamic(() => import("@/components/cockpit/ExecutionOverlay"), { ssr: false });
 const CommandPalette = dynamic(() => import("@/components/CommandPalette").then(m => m.CommandPalette), { ssr: false });
+const ShortcutsModal = dynamic(() => import("@/components/ShortcutsModal"), { ssr: false });
 
 interface Message { role: string; content: string; ts: number; agent?: string }
 
@@ -39,6 +40,7 @@ export default function Home() {
   const [execAgent, setExecAgent] = useState("OS");
   const [execTask, setExecTask] = useState("");
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -68,6 +70,7 @@ export default function Home() {
       if (cmd && e.key === "3") { e.preventDefault(); window.location.href = "/sovereign"; }
       if (cmd && e.key === "4") { e.preventDefault(); window.location.href = "/feed"; }
       if (cmd && e.key === "/") { e.preventDefault(); inputRef.current?.focus(); }
+      if (cmd && e.shiftKey && e.key === "?") { e.preventDefault(); setShowShortcuts(p => !p); }
       if (cmd && e.key === "Escape") { e.preventDefault(); newChat(); }
       if (e.key === "Escape") { setShowCommandPalette(false); }
     };
@@ -146,6 +149,7 @@ export default function Home() {
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--void)", color: "var(--text-primary)", overflow: "hidden" }}>
       <TopBar onNewChat={newChat} onCommandPalette={() => setShowCommandPalette(true)} />
       <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} onCommand={(cmd) => { setInput(cmd); }} />
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
       <ExecutionOverlay active={executing} agent={execAgent} task={execTask} />
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
@@ -290,9 +294,9 @@ export default function Home() {
             <div style={{ display: "flex", gap: 12, marginTop: 6, paddingLeft: 4 }}>
               {[
                 { key: "⌘K", label: "Commands" },
+                { key: "⌘⇧?", label: "Shortcuts" },
                 { key: "⌘/", label: "Focus" },
                 { key: "⌘1-4", label: "Navigate" },
-                { key: "⏎", label: "Send" },
               ].map(h => (
                 <div key={h.key} style={{ display: "flex", alignItems: "center", gap: 3 }}>
                   <span style={{ fontSize: 7, padding: "1px 4px", borderRadius: 2, background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{h.key}</span>
