@@ -64,6 +64,7 @@ export default function TopBar({ onNewChat, onCommandPalette }: { onNewChat?: ()
     { href: "/", label: "CHAT", icon: "💬" },
     { href: "/agents", label: "AGENTS", icon: "🤖" },
     { href: "/sovereign", label: "DEVICES", icon: "📡" },
+    { href: "/feed", label: "FEED", icon: "📋" },
     { href: "/settings", label: "CONFIG", icon: "⚙️" },
   ];
 

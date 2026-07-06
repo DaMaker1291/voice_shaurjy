@@ -27,6 +27,7 @@ export function CommandPalette({ open, onClose, onCommand }: Props) {
     { id: "nav:chat", label: "Go to Chat", category: "Navigation", icon: "💬", action: () => { window.location.href = "/"; onClose(); } },
     { id: "nav:agents", label: "Go to Agents", category: "Navigation", icon: "🤖", action: () => { window.location.href = "/agents"; onClose(); } },
     { id: "nav:devices", label: "Go to Devices", category: "Navigation", icon: "📡", action: () => { window.location.href = "/sovereign"; onClose(); } },
+    { id: "nav:feed", label: "Go to Data Feed", category: "Navigation", icon: "📋", action: () => { window.location.href = "/feed"; onClose(); } },
     { id: "nav:settings", label: "Go to Settings", category: "Navigation", icon: "⚙️", action: () => { window.location.href = "/settings"; onClose(); } },
 
     // Device Control
