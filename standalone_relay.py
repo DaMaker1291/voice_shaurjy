@@ -300,6 +300,27 @@ def _ai_computer_task(text):
     """Handle complex autonomous tasks using browser + screen."""
     lower = text.lower()
 
+    # ── Direct app opening (catch "go to outlook", "open VS Code", etc) ──
+    go_match = re.match(r'^(?:go\s+to|open|launch|start)\s+(?:the\s+|app\s+)?(.+?)$', lower.strip())
+    if go_match:
+        app_name = go_match.group(1).strip()
+        # Check if it's a website
+        sites = {
+            "gmail": "https://mail.google.com", "google": "https://google.com",
+            "youtube": "https://youtube.com", "outlook": "https://outlook.live.com",
+            "photos": "https://photos.google.com", "drive": "https://drive.google.com",
+            "calendar": "https://calendar.google.com", "maps": "https://maps.google.com",
+            "github": "https://github.com", "twitter": "https://x.com",
+            "linkedin": "https://linkedin.com", "facebook": "https://facebook.com",
+            "reddit": "https://reddit.com", "netflix": "https://netflix.com",
+            "amazon": "https://amazon.com", "apple": "https://apple.com",
+            "microsoft": "https://microsoft.com",
+        }
+        if app_name in sites:
+            return _browser_open(sites[app_name])
+        # Otherwise try to open as a macOS app
+        return _open_app(app_name)
+
     # Flight/check-in tasks
     if any(kw in lower for kw in ["check in", "check-in", "flight", "boarding", "airline"]):
         if any(kw in lower for kw in ["scan", "email", "find", "search", "look"]):

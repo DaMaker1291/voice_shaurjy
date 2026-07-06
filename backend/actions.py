@@ -25,6 +25,7 @@ _KEYWORD_MAP: dict[str, str] = {
     "run shell": "run_shell", "run command": "run_shell", "execute command": "run_shell",
     "run code": "run_python",
     "open app": "open_app", "launch app": "open_app", "start app": "open_app",
+    "go to": "open_app", "navigate to": "open_app", "browse to": "open_app",
     "research": "fetch_search", "investigate": "fetch_search",
     "scrape": "fetch_search", "read the web": "fetch_search",
     "fetch": "fetch_search",
