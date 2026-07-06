@@ -174,28 +174,33 @@ export default function Home() {
 
             {messages.map((msg, i) => (
               <div key={i} className="animate-fade" style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start", marginBottom: 12 }}>
-                <div style={{
-                  maxWidth: "75%", padding: "12px 16px", fontSize: 13, lineHeight: 1.6,
-                  fontFamily: "var(--font-mono)",
-                  borderRadius: msg.role === "user" ? "8px 8px 2px 8px" : "8px 8px 8px 2px",
-                  background: msg.role === "user" ? "rgba(0,255,102,0.06)" : "var(--surface)",
-                  border: `1px solid ${msg.role === "user" ? "rgba(0,255,102,0.12)" : "var(--border)"}`,
-                  color: msg.role === "user" ? "var(--text-primary)" : "var(--text-secondary)",
-                }}>
-                  {msg.role === "assistant" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                      <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--neon-green)", boxShadow: "0 0 4px rgba(0,255,102,0.4)" }} />
-                      <span style={{ fontSize: 8, color: "var(--neon-green)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em", opacity: 0.8 }}>JARVIS</span>
-                      {msg.agent && (
-                        <span style={{ fontSize: 7, padding: "1px 4px", borderRadius: 2, background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--steel)", fontFamily: "var(--font-mono)" }}>{msg.agent}</span>
-                      )}
-                    </div>
-                  )}
-                  {msg.role === "assistant" ? (
-                    <Markdown content={msg.content} />
-                  ) : (
-                    msg.content
-                  )}
+                <div style={{ maxWidth: "75%" }}>
+                  <div style={{
+                    padding: "12px 16px", fontSize: 13, lineHeight: 1.6,
+                    fontFamily: "var(--font-mono)",
+                    borderRadius: msg.role === "user" ? "8px 8px 2px 8px" : "8px 8px 8px 2px",
+                    background: msg.role === "user" ? "rgba(0,255,102,0.06)" : "var(--surface)",
+                    border: `1px solid ${msg.role === "user" ? "rgba(0,255,102,0.12)" : "var(--border)"}`,
+                    color: msg.role === "user" ? "var(--text-primary)" : "var(--text-secondary)",
+                  }}>
+                    {msg.role === "assistant" && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                        <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--neon-green)", boxShadow: "0 0 4px rgba(0,255,102,0.4)" }} />
+                        <span style={{ fontSize: 8, color: "var(--neon-green)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em", opacity: 0.8 }}>JARVIS</span>
+                        {msg.agent && (
+                          <span style={{ fontSize: 7, padding: "1px 4px", borderRadius: 2, background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--steel)", fontFamily: "var(--font-mono)" }}>{msg.agent}</span>
+                        )}
+                      </div>
+                    )}
+                    {msg.role === "assistant" ? (
+                      <Markdown content={msg.content} />
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
+                  <div style={{ fontSize: 8, color: "var(--text-muted)", opacity: 0.4, marginTop: 3, fontFamily: "var(--font-mono)", textAlign: msg.role === "user" ? "right" : "left", padding: "0 4px" }}>
+                    {new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </div>
                 </div>
               </div>
             ))}
@@ -280,6 +285,20 @@ export default function Home() {
                   <polyline points="12 5 19 12 12 19" />
                 </svg>
               </button>
+            </div>
+            {/* Keyboard hints */}
+            <div style={{ display: "flex", gap: 12, marginTop: 6, paddingLeft: 4 }}>
+              {[
+                { key: "⌘K", label: "Commands" },
+                { key: "⌘/", label: "Focus" },
+                { key: "⌘1-4", label: "Navigate" },
+                { key: "⏎", label: "Send" },
+              ].map(h => (
+                <div key={h.key} style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                  <span style={{ fontSize: 7, padding: "1px 4px", borderRadius: 2, background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{h.key}</span>
+                  <span style={{ fontSize: 7, color: "var(--text-muted)", opacity: 0.5 }}>{h.label}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
