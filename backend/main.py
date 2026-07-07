@@ -3429,6 +3429,32 @@ async def autonomous_start(req: dict):
     result = loop.start_task(task_id, intent, user_id)
     return result
 
+@app.post("/api/autonomous/start_parallel")
+async def autonomous_start_parallel(req: dict):
+    """Start multiple autonomous tasks in parallel."""
+    from autonomous_loop import get_task_loop
+    loop = get_task_loop()
+    intents = req.get("intents", [])
+    user_id = req.get("user_id", "local")
+    return loop.start_parallel(intents, user_id)
+
+@app.get("/api/autonomous/stats")
+async def autonomous_stats():
+    """Get stats about all tasks."""
+    from autonomous_loop import get_task_loop
+    loop = get_task_loop()
+    tasks = loop.active_tasks
+    running = sum(1 for t in tasks.values() if t["status"] == "running")
+    completed = sum(1 for t in tasks.values() if t["status"] == "completed")
+    failed = sum(1 for t in tasks.values() if t["status"] == "failed")
+    return {
+        "total": len(tasks),
+        "running": running,
+        "completed": completed,
+        "failed": failed,
+        "max_parallel": loop._max_parallel,
+    }
+
 @app.get("/api/headless/status")
 async def headless_status():
     """Check if headless browser is running."""

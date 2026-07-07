@@ -22,14 +22,21 @@ class AutonomousTaskLoop:
     """
     Runs a multi-step task autonomously.
     Plans steps, executes them, evaluates results, and continues until DONE.
+    Supports parallel execution of multiple tasks.
     """
 
     def __init__(self):
         self.active_tasks = {}
         self._lock = threading.Lock()
+        self._max_parallel = 5
 
     def start_task(self, task_id: str, intent: str, user_id: str = "local"):
         """Start an autonomous task in background."""
+        # Check parallel limit
+        running = sum(1 for t in self.active_tasks.values() if t["status"] == "running")
+        if running >= self._max_parallel:
+            return {"task_id": task_id, "status": "error", "message": f"Max {self._max_parallel} parallel tasks"}
+
         thread = threading.Thread(
             target=self._run_task,
             args=(task_id, intent, user_id),
@@ -37,6 +44,16 @@ class AutonomousTaskLoop:
         )
         thread.start()
         return {"task_id": task_id, "status": "started"}
+
+    def start_parallel(self, intents: List[str], user_id: str = "local"):
+        """Start multiple tasks in parallel."""
+        import uuid
+        results = []
+        for intent in intents:
+            task_id = f"parallel-{uuid.uuid4().hex[:8]}"
+            result = self.start_task(task_id, intent, user_id)
+            results.append({"task_id": task_id, "intent": intent, **result})
+        return {"tasks": results, "total": len(results)}
 
     def _run_task(self, task_id: str, intent: str, user_id: str):
         """Execute the full autonomous task loop."""

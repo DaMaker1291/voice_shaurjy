@@ -64,14 +64,42 @@ export default function AgentsPage() {
     if (!intent.trim()) return;
     setStarting(true);
     try {
-      const res = await fetch(`${API}/api/autonomous/start`, {
+      // Check if multi-line (parallel)
+      const lines = intent.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length > 1) {
+        // Parallel execution
+        const res = await fetch(`${API}/api/autonomous/start_parallel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ intents: lines, user_id: "local" }),
+        });
+        const data = await res.json();
+        if (data.tasks?.length > 0) setSelectedTask(data.tasks[0].task_id);
+      } else {
+        // Single execution
+        const res = await fetch(`${API}/api/autonomous/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ intent: intent.trim(), user_id: "local" }),
+        });
+        const data = await res.json();
+        setSelectedTask(data.task_id);
+      }
+      setIntent("");
+    } catch {}
+    setStarting(false);
+  };
+
+  const handleParallel = async (intents: string[]) => {
+    setStarting(true);
+    try {
+      const res = await fetch(`${API}/api/autonomous/start_parallel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent: intent.trim(), user_id: "local" }),
+        body: JSON.stringify({ intents, user_id: "local" }),
       });
       const data = await res.json();
-      setSelectedTask(data.task_id);
-      setIntent("");
+      if (data.tasks?.length > 0) setSelectedTask(data.tasks[0].task_id);
     } catch {}
     setStarting(false);
   };
@@ -143,17 +171,21 @@ export default function AgentsPage() {
           <div style={{ maxWidth: 900, margin: "0 auto" }}>
             {/* Task Input */}
             <div style={{ background: "#0d0f12", border: "1px solid #1a1d23", borderRadius: 8, padding: 16, marginBottom: 16 }}>
-              <div style={{ fontSize: 9, color: "#00FF66", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 8 }}>NEW AUTONOMOUS TASK</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 9, color: "#00FF66", letterSpacing: "0.1em", fontWeight: 600 }}>NEW AUTONOMOUS TASK</div>
+                <div style={{ fontSize: 8, color: "#667085" }}>Multi-line = parallel execution</div>
+              </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <input
+                <textarea
                   value={intent}
                   onChange={e => setIntent(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleStart()}
-                  placeholder="Describe what you want done — agent chains steps until complete..."
+                  onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleStart(); } }}
+                  placeholder={"Describe what you want done...\n\nOne task per line for parallel execution:\nCheck email for flights\nScan network devices\nAlexa say hello"}
+                  rows={3}
                   style={{
                     flex: 1, padding: "10px 14px", borderRadius: 6, border: "1px solid #1a1d23",
-                    background: "#030303", color: "#e5e5e5", fontSize: 13, outline: "none",
-                    fontFamily: "inherit",
+                    background: "#030303", color: "#e5e5e5", fontSize: 12, outline: "none",
+                    fontFamily: "inherit", resize: "none", lineHeight: 1.5,
                   }}
                 />
                 <button
@@ -178,6 +210,13 @@ export default function AgentsPage() {
                     {s}
                   </button>
                 ))}
+                <button onClick={() => handleParallel(["Check email for flights", "Scan all network devices", "Check system health"])} style={{
+                  padding: "4px 10px", borderRadius: 4, fontSize: 10, fontFamily: "inherit",
+                  cursor: "pointer", background: "rgba(0,255,102,0.1)", color: "#00FF66", border: "1px solid rgba(0,255,102,0.2)",
+                  fontWeight: 600,
+                }}>
+                  ⚡ Run All (3 parallel)
+                </button>
               </div>
             </div>
 
