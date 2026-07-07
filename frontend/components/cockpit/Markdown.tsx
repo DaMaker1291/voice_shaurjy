@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 
 interface MarkdownProps {
   content: string;
@@ -60,12 +60,38 @@ function parseInline(text: string): React.ReactNode[] {
       continue;
     }
 
+    // Strikethrough: ~~text~~
+    const strikeMatch = remaining.match(/^(.*?)~~(.+?)~~(.*)$/);
+    if (strikeMatch) {
+      if (strikeMatch[1]) parts.push(<span key={key++}>{strikeMatch[1]}</span>);
+      parts.push(<del key={key++} style={{ color: "var(--text-muted)" }}>{strikeMatch[2]}</del>);
+      remaining = strikeMatch[3];
+      continue;
+    }
+
     // No more matches, push rest
     parts.push(<span key={key++}>{remaining}</span>);
     break;
   }
 
   return parts;
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+      style={{
+        padding: "2px 6px", borderRadius: 3, fontSize: 8, fontFamily: "var(--font-mono)",
+        background: copied ? "rgba(0,255,102,0.15)" : "var(--surface-raised)",
+        color: copied ? "#00FF66" : "var(--text-muted)",
+        border: "1px solid var(--border)", cursor: "pointer", transition: "all 0.15s",
+      }}
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
 }
 
 export default function Markdown({ content, style }: MarkdownProps) {
@@ -87,26 +113,95 @@ export default function Markdown({ content, style }: MarkdownProps) {
         i++;
       }
       i++; // skip closing ```
+      const codeText = codeLines.join("\n");
       elements.push(
         <div key={key++} style={{
-          margin: "8px 0", borderRadius: 4, overflow: "hidden",
+          margin: "8px 0", borderRadius: 6, overflow: "hidden",
           border: "1px solid var(--border)", background: "#080a0d",
         }}>
-          {lang && (
-            <div style={{
-              padding: "4px 10px", fontSize: 8, fontFamily: "var(--font-mono)",
-              color: "var(--steel)", borderBottom: "1px solid var(--border)",
-              letterSpacing: "0.08em", textTransform: "uppercase",
-            }}>{lang}</div>
-          )}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "4px 10px", fontSize: 8, fontFamily: "var(--font-mono)",
+            color: "var(--steel)", borderBottom: "1px solid var(--border)",
+            letterSpacing: "0.08em", textTransform: "uppercase",
+          }}>
+            <span>{lang || "code"}</span>
+            <CopyButton text={codeText} />
+          </div>
           <pre style={{
             margin: 0, padding: "10px 12px", fontSize: 11, lineHeight: 1.5,
             fontFamily: "var(--font-mono)", color: "var(--text-secondary)",
             overflowX: "auto", whiteSpace: "pre",
-          }}>{codeLines.join("\n")}</pre>
+          }}>{codeText}</pre>
         </div>
       );
       continue;
+    }
+
+    // Blockquote: > text
+    const quoteMatch = line.match(/^>\s+(.+)$/);
+    if (quoteMatch) {
+      elements.push(
+        <div key={key++} style={{
+          margin: "6px 0", padding: "8px 12px", borderLeft: "3px solid var(--neon-green)",
+          background: "rgba(0,255,102,0.03)", borderRadius: "0 4px 4px 0",
+          fontSize: 12, lineHeight: 1.6, color: "var(--text-secondary)",
+          fontStyle: "italic", fontFamily: "var(--font-mono)",
+        }}>
+          {parseInline(quoteMatch[1])}
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // Table: | ... | ... |
+    if (line.includes("|") && line.trim().startsWith("|")) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].includes("|") && lines[i].trim().startsWith("|")) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+      if (tableLines.length >= 2) {
+        const parseRow = (row: string) => row.split("|").slice(1, -1).map(c => c.trim());
+        const headers = parseRow(tableLines[0]);
+        const separator = tableLines[1];
+        const dataRows = tableLines.slice(2).map(parseRow);
+        elements.push(
+          <div key={key++} style={{ margin: "8px 0", overflow: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr>
+                  {headers.map((h, hi) => (
+                    <th key={hi} style={{
+                      padding: "6px 10px", textAlign: "left", fontWeight: 600,
+                      color: "var(--neon-green)", borderBottom: "1px solid var(--border)",
+                      fontFamily: "var(--font-mono)", fontSize: 10,
+                    }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {dataRows.map((row, ri) => (
+                  <tr key={ri}>
+                    {row.map((cell, ci) => (
+                      <td key={ci} style={{
+                        padding: "6px 10px", borderBottom: "1px solid var(--border)",
+                        color: "var(--text-secondary)", fontFamily: "var(--font-mono)",
+                      }}>
+                        {parseInline(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        continue;
+      }
     }
 
     // Header: ### text
@@ -171,7 +266,7 @@ export default function Markdown({ content, style }: MarkdownProps) {
 
     // Regular paragraph
     const paraLines: string[] = [];
-    while (i < lines.length && lines[i].trim() !== "" && !lines[i].trimStart().startsWith("```") && !lines[i].match(/^#{1,3}\s/) && !lines[i].match(/^(\s*)([-*]|\d+\.)\s+/) && !/^[-*_]{3,}$/.test(lines[i].trim())) {
+    while (i < lines.length && lines[i].trim() !== "" && !lines[i].trimStart().startsWith("```") && !lines[i].match(/^#{1,3}\s/) && !lines[i].match(/^(\s*)([-*]|\d+\.)\s+/) && !/^[-*_]{3,}$/.test(lines[i].trim()) && !lines[i].match(/^>\s+/) && !(lines[i].includes("|") && lines[i].trim().startsWith("|"))) {
       paraLines.push(lines[i]);
       i++;
     }
