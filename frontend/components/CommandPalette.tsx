@@ -28,6 +28,7 @@ export function CommandPalette({ open, onClose, onCommand }: Props) {
     { id: "nav:agents", label: "Go to Agents", category: "Navigation", icon: "🤖", action: () => { window.location.href = "/agents"; onClose(); } },
     { id: "nav:devices", label: "Go to Devices", category: "Navigation", icon: "📡", action: () => { window.location.href = "/sovereign"; onClose(); } },
     { id: "nav:feed", label: "Go to Data Feed", category: "Navigation", icon: "📋", action: () => { window.location.href = "/feed"; onClose(); } },
+    { id: "nav:workspace", label: "Go to Workspace", category: "Navigation", icon: "📂", action: () => { window.location.href = "/workspace"; onClose(); } },
     { id: "nav:settings", label: "Go to Settings", category: "Navigation", icon: "⚙️", action: () => { window.location.href = "/settings"; onClose(); } },
 
     // Device Control
