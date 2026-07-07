@@ -29,6 +29,7 @@ export function CommandPalette({ open, onClose, onCommand }: Props) {
     { id: "nav:devices", label: "Go to Devices", category: "Navigation", icon: "📡", action: () => { window.location.href = "/sovereign"; onClose(); } },
     { id: "nav:feed", label: "Go to Data Feed", category: "Navigation", icon: "📋", action: () => { window.location.href = "/feed"; onClose(); } },
     { id: "nav:workspace", label: "Go to Workspace", category: "Navigation", icon: "📂", action: () => { window.location.href = "/workspace"; onClose(); } },
+    { id: "nav:capabilities", label: "View All Capabilities", category: "Navigation", icon: "⚡", action: () => { window.location.href = "/capabilities"; onClose(); } },
     { id: "nav:settings", label: "Go to Settings", category: "Navigation", icon: "⚙️", action: () => { window.location.href = "/settings"; onClose(); } },
 
     // Device Control
@@ -50,6 +51,20 @@ export function CommandPalette({ open, onClose, onCommand }: Props) {
     { id: "task:checkin", label: "Check In for Flight", category: "Tasks", icon: "✈️", action: () => { onCommand("check in for my flight"); onClose(); } },
     { id: "task:passport", label: "Find Passport Photos", category: "Tasks", icon: "📷", action: () => { onCommand("do I have passport photos"); onClose(); } },
     { id: "task:time", label: "What Time Is It?", category: "Tasks", icon: "🕐", action: () => { onCommand("what time is it"); onClose(); } },
+
+    // Universal Actions
+    { id: "univ:flights", label: "Search Flights", category: "Universal", icon: "✈️", action: () => { onCommand("find flights"); onClose(); } },
+    { id: "univ:checkin", label: "Check-in for Flight", category: "Universal", icon: "✅", action: () => { onCommand("check in for my flight"); onClose(); } },
+    { id: "univ:visa", label: "Check Visa Requirements", category: "Universal", icon: "📋", action: () => { onCommand("visa requirements for Japan"); onClose(); } },
+    { id: "univ:email", label: "Check Email", category: "Universal", icon: "📧", action: () => { onCommand("check my email"); onClose(); } },
+    { id: "univ:hotel", label: "Search Hotels", category: "Universal", icon: "🏨", action: () => { onCommand("find hotels"); onClose(); } },
+    { id: "univ:discount", label: "Find Discounts", category: "Universal", icon: "🏷️", action: () => { onCommand("find discounts for products"); onClose(); } },
+    { id: "univ:homework", label: "Homework Help", category: "Universal", icon: "📚", action: () => { onCommand("help with homework"); onClose(); } },
+    { id: "univ:form", label: "Fill Form", category: "Universal", icon: "📝", action: () => { onCommand("fill out this form"); onClose(); } },
+    { id: "univ:trip", label: "Plan Trip", category: "Universal", icon: "🗺️", action: () => { onCommand("plan a trip"); onClose(); } },
+    { id: "univ:news", label: "Read News", category: "Universal", icon: "📰", action: () => { onCommand("what's the news today"); onClose(); } },
+    { id: "univ:essay", label: "Write Essay", category: "Universal", icon: "✍️", action: () => { onCommand("write an essay"); onClose(); } },
+    { id: "univ:calendar", label: "Check Calendar", category: "Universal", icon: "📅", action: () => { onCommand("what's on my calendar"); onClose(); } },
 
     // System
     { id: "sys:screenshot", label: "Take Screenshot", category: "System", icon: "📸", action: () => { onCommand("screenshot"); onClose(); } },
