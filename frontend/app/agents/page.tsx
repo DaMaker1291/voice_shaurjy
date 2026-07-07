@@ -2,6 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const AgentWorksheet = dynamic(() => import("@/components/AgentWorksheet"), { ssr: false });
 
 const API = "";
 
@@ -32,6 +35,7 @@ export default function AgentsPage() {
   const [starting, setStarting] = useState(false);
   const [headlessRunning, setHeadlessRunning] = useState(false);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [worksheetTask, setWorksheetTask] = useState<Task | null>(null);
   const [activeTab, setActiveTab] = useState<"tasks" | "devices" | "logs">("tasks");
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -228,7 +232,7 @@ export default function AgentsPage() {
                   <div
                     key={task.task_id}
                     className="af pg"
-                    onClick={() => setSelectedTask(selectedTask === task.task_id ? null : task.task_id)}
+                    onClick={() => { setWorksheetTask(task); setSelectedTask(task.task_id); }}
                     style={{
                       background: "#0d0f12", border: "1px solid rgba(0,255,102,0.15)",
                       borderRadius: 8, padding: 14, marginBottom: 8, cursor: "pointer",
@@ -384,6 +388,11 @@ export default function AgentsPage() {
           </div>
         )}
       </div>
+
+      {/* Agent Worksheet Modal */}
+      {worksheetTask && (
+        <AgentWorksheet task={worksheetTask} onClose={() => { setWorksheetTask(null); setSelectedTask(null); }} />
+      )}
     </div>
   );
 }
