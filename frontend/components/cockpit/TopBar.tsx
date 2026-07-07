@@ -13,7 +13,14 @@ interface SystemStatus {
   uptime: string;
 }
 
-export default function TopBar({ onNewChat, onCommandPalette }: { onNewChat?: () => void; onCommandPalette?: () => void }) {
+export default function TopBar({ onNewChat, onCommandPalette, onToggleLivePanel, showLivePanel, rateLimited, rateLimitRetry }: {
+  onNewChat?: () => void;
+  onCommandPalette?: () => void;
+  onToggleLivePanel?: () => void;
+  showLivePanel?: boolean;
+  rateLimited?: boolean;
+  rateLimitRetry?: number;
+}) {
   const pathname = usePathname();
   const [status, setStatus] = useState<SystemStatus>({
     network: "OPTIMAL",
@@ -120,6 +127,25 @@ export default function TopBar({ onNewChat, onCommandPalette }: { onNewChat?: ()
 
       {/* Right: Status + Cmd+K */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {/* Rate Limit Indicator */}
+        {rateLimited && (
+          <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 3, background: "rgba(255,179,0,0.1)", border: "1px solid rgba(255,179,0,0.2)" }}>
+            <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#FFB300", animation: "glow-pulse 1s ease-in-out infinite" }} />
+            <span style={{ fontSize: 8, color: "#FFB300", fontVariantNumeric: "tabular-nums" }}>RATE LIMITED {rateLimitRetry}s</span>
+          </div>
+        )}
+        {/* Live Panel Toggle */}
+        {agentCount > 0 && (
+          <button onClick={onToggleLivePanel} style={{
+            display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 4,
+            background: showLivePanel ? "rgba(0,255,102,0.12)" : "var(--surface-raised)",
+            border: `1px solid ${showLivePanel ? "rgba(0,255,102,0.3)" : "var(--border)"}`,
+            cursor: "pointer", fontFamily: "var(--font-mono)",
+          }}>
+            <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#00FF66", animation: "glow-pulse 1.5s ease-in-out infinite" }} />
+            <span style={{ fontSize: 8, color: showLivePanel ? "#00FF66" : "var(--text-muted)" }}>LIVE</span>
+          </button>
+        )}
         {/* Command Palette Trigger */}
         <button onClick={onCommandPalette} style={{
           display: "flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 4,

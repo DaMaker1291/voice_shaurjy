@@ -121,7 +121,19 @@ class AutonomousTaskLoop:
             self.active_tasks[task_id]["log"].append(entry)
 
     def _plan_steps(self, intent: str, user_id: str) -> List[dict]:
-        """Plan execution steps based on user intent."""
+        """Plan execution steps based on user intent using Universal Engine."""
+        try:
+            from universal_engine import get_engine
+            engine = get_engine()
+            recognition = engine.recognize_intent(intent)
+            workflow = engine.create_workflow(recognition["intent"], recognition.get("params", {}))
+            return workflow
+        except Exception as e:
+            # Fallback to basic planning
+            return self._basic_plan_steps(intent, user_id)
+
+    def _basic_plan_steps(self, intent: str, user_id: str) -> List[dict]:
+        """Basic fallback planning."""
         lower = intent.lower()
         steps = []
 

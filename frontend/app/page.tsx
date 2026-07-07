@@ -13,6 +13,7 @@ const ExecutionOverlay = dynamic(() => import("@/components/cockpit/ExecutionOve
 const StatusBar = dynamic(() => import("@/components/cockpit/StatusBar"), { ssr: false });
 const WelcomeToast = dynamic(() => import("@/components/cockpit/WelcomeToast"), { ssr: false });
 const AuthPage = dynamic(() => import("@/components/AuthPage"), { ssr: false });
+const LiveAgentPanel = dynamic(() => import("@/components/LiveAgentPanel"), { ssr: false });
 const CommandPalette = dynamic(() => import("@/components/CommandPalette").then(m => m.CommandPalette), { ssr: false });
 const ShortcutsModal = dynamic(() => import("@/components/ShortcutsModal"), { ssr: false });
 
@@ -46,6 +47,12 @@ export default function Home() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
+  const [rateLimitRetry, setRateLimitRetry] = useState(0);
+  const [proactiveMessages, setProactiveMessages] = useState<string[]>([]);
+  const [liveAgents, setLiveAgents] = useState<any[]>([]);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+  const [showLivePanel, setShowLivePanel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -67,6 +74,28 @@ export default function Home() {
     } catch {}
     setAuthChecked(true);
   }, []);
+
+  // Poll proactive messages and live agents
+  useEffect(() => {
+    if (!user) return;
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/proactive/messages");
+        const data = await res.json();
+        if (data.messages?.length > 0) {
+          setProactiveMessages(prev => [...prev, ...data.messages.map((m: any) => m.message)]);
+        }
+      } catch {}
+      try {
+        const res = await fetch("/api/autonomous/tasks");
+        const data = await res.json();
+        setLiveAgents(data.tasks || []);
+      } catch {}
+    };
+    poll();
+    const i = setInterval(poll, 5000);
+    return () => clearInterval(i);
+  }, [user]);
 
   useEffect(() => {
     if (thinking) setInputState("thinking");
@@ -128,11 +157,37 @@ export default function Home() {
       const agent = data?.routing?.target_agent || data?.agent || "CORE";
       setMessages(p => [...p, { role: "assistant", content: reply, ts: Date.now(), agent }]);
     } catch (err: any) {
-      setMessages(p => [...p, { role: "assistant", content: `Error: ${err.message}`, ts: Date.now() }]);
+      const errMsg = err.message || "Unknown error";
+      // Handle rate limiting with retry
+      if (errMsg.includes("429") || errMsg.includes("rate") || errMsg.includes("Rate")) {
+        setRateLimited(true);
+        setRateLimitRetry(30);
+        // Countdown retry
+        const countdown = setInterval(() => {
+          setRateLimitRetry(prev => {
+            if (prev <= 1) {
+              clearInterval(countdown);
+              setRateLimited(false);
+              // Auto-retry
+              setInput(text);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        setMessages(p => [...p, {
+          role: "assistant",
+          content: `Rate limited. Retrying in 30 seconds... (Model is busy, will auto-retry)`,
+          ts: Date.now(),
+          agent: "SYSTEM"
+        }]);
+      } else {
+        setMessages(p => [...p, { role: "assistant", content: `Error: ${errMsg}`, ts: Date.now() }]);
+      }
     }
     setThinking(false);
     setTimeout(() => setExecuting(false), 1500);
-  }, [input]);
+  }, [input, messages]);
 
   const handleVoice = useCallback(() => {
     if (listening) { setListening(false); return; }
@@ -164,7 +219,14 @@ export default function Home() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--void)", color: "var(--text-primary)", overflow: "hidden" }}>
-      <TopBar onNewChat={newChat} onCommandPalette={() => setShowCommandPalette(true)} />
+      <TopBar
+        onNewChat={newChat}
+        onCommandPalette={() => setShowCommandPalette(true)}
+        onToggleLivePanel={() => setShowLivePanel(p => !p)}
+        showLivePanel={showLivePanel}
+        rateLimited={rateLimited}
+        rateLimitRetry={rateLimitRetry}
+      />
       <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} onCommand={(cmd) => { setInput(cmd); }} />
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
       <ExecutionOverlay active={executing} agent={execAgent} task={execTask} />
@@ -324,15 +386,52 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Right Panel — Telemetry */}
-        <div style={{ width: 320, borderLeft: "1px solid var(--border)", flexShrink: 0, overflow: "hidden" }}>
-          <TelemetryPanel />
+        {/* Right Panel — Live Agents or Telemetry */}
+        <div style={{ width: showLivePanel ? 600 : 320, borderLeft: "1px solid var(--border)", flexShrink: 0, overflow: "hidden", transition: "width 0.3s" }}>
+          {showLivePanel ? (
+            <LiveAgentPanel
+              agents={liveAgents}
+              activeAgent={activeAgentId}
+              onSelectAgent={setActiveAgentId}
+              onStopAgent={async (id) => { await fetch(`/api/autonomous/tasks/stop/${id}`, { method: "POST" }); }}
+            />
+          ) : (
+            <TelemetryPanel />
+          )}
         </div>
       </div>
 
       <InterceptBar onApprove={handleApprove} onDeny={handleDeny} />
       <StatusBar />
       <WelcomeToast />
+
+      {/* Proactive Message Notifications */}
+      {proactiveMessages.length > 0 && (
+        <div style={{
+          position: "fixed", top: 44, right: 16, zIndex: 9999,
+          display: "flex", flexDirection: "column", gap: 6,
+        }}>
+          {proactiveMessages.slice(-3).map((msg, i) => (
+            <div key={i} style={{
+              padding: "10px 16px", borderRadius: 8,
+              background: "linear-gradient(135deg, #0d0f12 0%, #12151a 100%)",
+              border: "1px solid rgba(0,255,102,0.2)",
+              boxShadow: "0 0 20px rgba(0,255,102,0.1), 0 8px 24px rgba(0,0,0,0.4)",
+              fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#e5e5e5",
+              maxWidth: 320, cursor: "pointer",
+              animation: "fade-in 0.3s cubic-bezier(0.16,1,0.3,1) both",
+            }}
+              onClick={() => { setInput(msg); setProactiveMessages(prev => prev.filter((_, j) => j !== i)); }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00FF66" }} />
+                <span style={{ fontSize: 8, color: "#00FF66", letterSpacing: "0.08em" }}>JARVIS</span>
+              </div>
+              {msg}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

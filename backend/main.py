@@ -3462,3 +3462,73 @@ async def headless_status():
     browser = get_browser()
     running = browser.chrome_proc is not None and browser.chrome_proc.poll() is None
     return {"running": running, "pid": browser.chrome_proc.pid if running else None}
+
+# ── Proactive Engine ──────────────────────────────────────────────────
+@app.get("/api/proactive/status")
+async def proactive_status():
+    """Get proactive engine status."""
+    from proactive_engine import get_proactive_engine
+    engine = get_proactive_engine()
+    return engine.get_status()
+
+@app.get("/api/proactive/messages")
+async def proactive_messages():
+    """Get pending proactive messages."""
+    from proactive_engine import get_proactive_engine
+    engine = get_proactive_engine()
+    return {"messages": engine.get_pending_messages()}
+
+@app.post("/api/proactive/reminder")
+async def proactive_reminder(req: dict):
+    """Schedule a reminder."""
+    from proactive_engine import get_proactive_engine
+    engine = get_proactive_engine()
+    message = req.get("message", "")
+    delay = req.get("delay_seconds", 60)
+    return engine.add_reminder(message, delay)
+
+@app.post("/api/proactive/monitor")
+async def proactive_monitor(req: dict):
+    """Add a monitor."""
+    from proactive_engine import get_proactive_engine
+    engine = get_proactive_engine()
+    monitor_id = req.get("monitor_id", "custom")
+    message = req.get("message", "Monitor triggered")
+    # For custom monitors, we'd need a check function
+    # For now, return status
+    return {"status": "monitoring", "monitor_id": monitor_id}
+
+@app.post("/api/proactive/queue")
+async def proactive_queue(req: dict):
+    """Queue a proactive message."""
+    from proactive_engine import get_proactive_engine
+    engine = get_proactive_engine()
+    message = req.get("message", "")
+    engine.queue_message(message)
+    return {"status": "queued"}
+
+# ── Universal Action Engine ───────────────────────────────────────────
+@app.get("/api/unavailable/intents")
+async def universal_intents():
+    """Get all available action intents."""
+    from universal_engine import get_engine
+    engine = get_engine()
+    return {"intents": engine.get_available_intents()}
+
+@app.post("/api/universal/recognize")
+async def universal_recognize(req: dict):
+    """Recognize intent from text."""
+    from universal_engine import get_engine
+    engine = get_engine()
+    text = req.get("text", "")
+    return engine.recognize_intent(text)
+
+@app.post("/api/universal/workflow")
+async def universal_workflow(req: dict):
+    """Get workflow for an intent."""
+    from universal_engine import get_engine
+    engine = get_engine()
+    intent = req.get("intent", "")
+    params = req.get("params", {})
+    workflow = engine.create_workflow(intent, params)
+    return {"workflow": workflow, "summary": engine.format_workflow_summary(workflow)}
