@@ -12,6 +12,7 @@ const Markdown = dynamic(() => import("@/components/cockpit/Markdown"), { ssr: f
 const ExecutionOverlay = dynamic(() => import("@/components/cockpit/ExecutionOverlay"), { ssr: false });
 const StatusBar = dynamic(() => import("@/components/cockpit/StatusBar"), { ssr: false });
 const WelcomeToast = dynamic(() => import("@/components/cockpit/WelcomeToast"), { ssr: false });
+const AuthPage = dynamic(() => import("@/components/AuthPage"), { ssr: false });
 const CommandPalette = dynamic(() => import("@/components/CommandPalette").then(m => m.CommandPalette), { ssr: false });
 const ShortcutsModal = dynamic(() => import("@/components/ShortcutsModal"), { ssr: false });
 
@@ -43,6 +44,8 @@ export default function Home() {
   const [execTask, setExecTask] = useState("");
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -55,6 +58,15 @@ export default function Home() {
   }, []);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // Check auth on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("jarvis-user");
+      if (stored) setUser(JSON.parse(stored));
+    } catch {}
+    setAuthChecked(true);
+  }, []);
 
   useEffect(() => {
     if (thinking) setInputState("thinking");
@@ -146,6 +158,9 @@ export default function Home() {
   const handleDeny = async (id: string) => { await fetch(`${BASE}/api/sovereign/deny/${id}`, { method: "POST" }); };
 
   const inputBorderColor = inputState === "listening" ? "var(--neon-green)" : inputState === "thinking" ? "var(--amber)" : "var(--border)";
+
+  if (!authChecked) return null;
+  if (!user) return <AuthPage onAuth={(u) => setUser(u)} />;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--void)", color: "var(--text-primary)", overflow: "hidden" }}>
