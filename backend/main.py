@@ -255,14 +255,27 @@ async def relay_download():
     return {"error": "Relay agent not found"}
 
 @app.get("/health")
+@app.get("/api/health")
 async def health():
     livekit_url = os.getenv("LIVEKIT_URL", "")
+    try:
+        from relay import is_relay_alive
+        relay_alive = is_relay_alive()
+    except Exception:
+        relay_alive = False
+    try:
+        from device_manager import DeviceManager
+        devices = DeviceManager().get_all_devices()
+    except Exception:
+        devices = []
     return {
         "status": "ok",
         "assistant": "jarvis",
         "tier": get_tier(),
         "livekit": bool(livekit_url),
         "livekit_url": livekit_url,
+        "relay": relay_alive,
+        "devices": len(devices),
         "models": {
             "llm": "Groq Llama3-70B (cloud, instant)",
             "stt": "Web Speech API",
@@ -3476,10 +3489,13 @@ async def autonomous_stats():
 @app.get("/api/headless/status")
 async def headless_status():
     """Check if headless browser is running."""
-    from headless_browser import get_browser
-    browser = get_browser()
-    running = browser.chrome_proc is not None and browser.chrome_proc.poll() is None
-    return {"running": running, "pid": browser.chrome_proc.pid if running else None}
+    try:
+        from headless_browser import get_browser
+        browser = get_browser()
+        running = browser.chrome_proc is not None and browser.chrome_proc.poll() is None
+        return {"running": running, "pid": browser.chrome_proc.pid if running else None}
+    except Exception as e:
+        return {"running": False, "error": str(e)}
 
 # ── Proactive Engine ──────────────────────────────────────────────────
 @app.get("/api/proactive/status")

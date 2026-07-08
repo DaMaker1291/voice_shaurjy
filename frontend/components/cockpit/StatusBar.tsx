@@ -16,6 +16,7 @@ export default function StatusBar() {
   const [agents, setAgents] = useState(0);
   const [devices, setDevices] = useState(0);
   const [sys, setSys] = useState<SystemStatus | null>(null);
+  const [deviceInfo, setDeviceInfo] = useState<{ platform?: string; hostname?: string }>({});
 
   useEffect(() => {
     const poll = async () => {
@@ -32,7 +33,11 @@ export default function StatusBar() {
       try {
         const res = await window.fetch("/api/relay/devices?user_id=local");
         const data = await res.json();
-        setDevices((data.devices || []).length);
+        const devs = data.devices || [];
+        setDevices(devs.length);
+        if (devs.length > 0 && devs[0].platform) {
+          setDeviceInfo({ platform: devs[0].platform, hostname: devs[0].hostname });
+        }
       } catch {}
       try {
         const res = await window.fetch("/api/system/status");
@@ -63,6 +68,9 @@ export default function StatusBar() {
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <div style={{ width: 4, height: 4, borderRadius: "50%", background: relay ? "#00FF66" : "#FF3333", boxShadow: `0 0 4px ${relay ? "rgba(0,255,102,0.4)" : "rgba(255,51,51,0.4)"}` }} />
           <span style={{ color: relay ? "#00FF66" : "#FF3333" }}>RELAY {relay ? "ONLINE" : "OFFLINE"}</span>
+          {relay && deviceInfo.platform && (
+            <span style={{ color: "#667085" }}>{deviceInfo.platform}</span>
+          )}
         </div>
 
         {/* Agent Count */}

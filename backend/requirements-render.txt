@@ -31,3 +31,6 @@ PyJWT>=2.8.0
 
 # CORS
 starlette>=0.36.0
+
+# WebSocket (for headless browser)
+websocket-client>=1.6.0

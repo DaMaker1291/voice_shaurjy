@@ -218,6 +218,28 @@ def _gather_system_context() -> dict:
     elif ctx.get("hour", 12) < 12: ctx["time_of_day"] = "morning"
     elif ctx.get("hour", 12) < 18: ctx["time_of_day"] = "afternoon"
     else: ctx["time_of_day"] = "evening"
+
+    # Device & relay context
+    try:
+        from relay import is_relay_alive
+        from device_manager import DeviceManager
+        ctx["relay_alive"] = is_relay_alive()
+        devices = DeviceManager().get_all_devices()
+        ctx["device_count"] = len(devices)
+        ctx["device_names"] = [d.get("name", d.get("ip", "unknown")) for d in devices[:10]]
+        # Check if any device was seen recently (last 5 min)
+        ctx["device_recent"] = any((time.time() - d.get("last_seen", 0)) < 300 for d in devices)
+        # Platform info from relay
+        try:
+            from main import _relay_devices
+            relay_info = _relay_devices.get("local", {})
+            ctx["relay_platform"] = relay_info.get("platform", "")
+            ctx["relay_hostname"] = relay_info.get("hostname", "")
+        except Exception:
+            pass
+    except Exception:
+        pass
+
     return ctx
 
 
@@ -475,10 +497,37 @@ class Entity:
             if result.startswith("__NEEDS_RELAY__:"):
                 msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
 
+                # Check device registry — if devices exist AND were recently seen, relay was connected
+                _devices_in_registry = False
+                _relay_was_recent = False
+                try:
+                    from device_manager import DeviceManager
+                    import time as _time
+                    _all_devs = DeviceManager().get_all_devices()
+                    _devices_in_registry = len(_all_devs) > 0
+                    # Check if any device was seen in last 5 minutes = relay was recently connected
+                    _relay_was_recent = any((_time.time() - d.get("last_seen", 0)) < 300 for d in _all_devs)
+                except Exception:
+                    pass
+
                 lower_text = text.lower().strip()
 
                 # Smart clarification based on action type
                 if action == "screenshot":
+                    if _relay_was_recent:
+                        return {"text": (
+                            "Relay just disconnected — it may reconnect automatically.\n\n"
+                            "**What I'll do:**\n"
+                            "  • Capture your full screen\n"
+                            "  • Save it to your Desktop as `jarvis_screenshot.png`\n\n"
+                            "Give me a moment — trying again..."
+                        ), "action": "screenshot", "relay_id": "retry"}
+                    elif _devices_in_registry:
+                        return {"text": (
+                            "Your computer was previously connected but seems offline now.\n\n"
+                            f"**Restart the relay:** `python3 relay.py --user {self.user_id}`\n\n"
+                            "Once it's back, I'll take that screenshot."
+                        ), "action": "ask_clarify"}
                     return {"action": "ask_clarify", "text": (
                         "I can take a screenshot of your screen, but I need the relay running first.\n\n"
                         "**What I'll do:**\n"
@@ -490,6 +539,18 @@ class Entity:
 
                 if action == "open_app":
                     app_name = text.lower().replace("open", "").replace("launch", "").strip()
+                    if _relay_was_recent:
+                        return {"text": (
+                            "Relay just disconnected — it may reconnect automatically.\n\n"
+                            f"I'll try to open **{app_name or 'an application'}** on your Mac.\n\n"
+                            "Give me a moment..."
+                        ), "action": "open_app", "relay_id": "retry"}
+                    elif _devices_in_registry:
+                        return {"text": (
+                            f"Your computer was previously connected but seems offline now.\n\n"
+                            f"**Restart the relay:** `python3 relay.py --user {self.user_id}`\n\n"
+                            f"Then I'll open **{app_name or 'the app'}** on your Mac."
+                        ), "action": "ask_clarify"}
                     return {"action": "ask_clarify", "text": (
                         f"I can open **{app_name or 'an application'}** on your Mac, but the relay needs to be running.\n\n"
                         f"**Start the relay:** `python3 relay.py --user {self.user_id}`\n\n"
@@ -591,6 +652,17 @@ class Entity:
                     )}
 
                 # Generic fallback for other relay-dependent actions
+                if _relay_was_recent:
+                    return {"text": (
+                        "Relay just disconnected — it may reconnect automatically.\n\n"
+                        "Give me a moment — trying to execute the command..."
+                    ), "action": action, "relay_id": "retry"}
+                elif _devices_in_registry:
+                    return {"text": (
+                        "Your computer was previously connected but seems offline now.\n\n"
+                        f"**Restart the relay:** `python3 relay.py --user {self.user_id}`\n\n"
+                        "I'll keep trying to execute the command."
+                    ), "action": action, "relay_id": "retry"}
                 return {"action": "ask_clarify", "text": (
                     f"I can do that, but I need your computer's relay agent running first.\n\n"
                     f"**Start it:** `python3 relay.py --user {self.user_id}`\n\n"
@@ -723,8 +795,17 @@ class Entity:
         reflections = self.memory._data.get("self_reflections", [])
         ref_str = reflections[-1]["text"][:80] if reflections else ""
 
+        # Device/relay context
+        device_line = ""
+        if ctx.get("relay_alive"):
+            device_line = f"\nRelay: ONLINE | Devices: {ctx.get('device_count', 0)} ({', '.join(ctx.get('device_names', [])[:3])})"
+        elif ctx.get("device_recent"):
+            device_line = f"\nRelay: DISCONNECTED but devices were recently online ({ctx.get('device_count', 0)} devices)"
+        elif ctx.get("device_count", 0) > 0:
+            device_line = f"\nRelay: OFFLINE | Known devices: {ctx.get('device_count', 0)} (last seen longer ago)"
+
         return f"""[System State]
-Time: {ctx.get('time_of_day', 'day').title()} ({ctx['time']}), CPU {ctx.get('cpu','?')}% | RAM {ctx.get('ram','?')}% | Battery {ctx.get('battery','N/A')}% | Uptime {ctx.get('uptime_h','?')}h
+Time: {ctx.get('time_of_day', 'day').title()} ({ctx['time']}), CPU {ctx.get('cpu','?')}% | RAM {ctx.get('ram','?')}% | Battery {ctx.get('battery','N/A')}% | Uptime {ctx.get('uptime_h','?')}h{device_line}
 
 [Your State]
 Mood: {self.mood} {MOODS.get(self.mood, {}).get('emoji', '')}
