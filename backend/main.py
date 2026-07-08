@@ -40,13 +40,31 @@ async def startup_event():
     """
     Real device discovery on startup.
     Scans the actual local network via ARP and registers real devices.
+    Skipped on cloud (HF Space) — relay pushes devices instead.
     """
     try:
-        from device_manager import upsert_device, get_all_devices
-        from network_scanner import get_scanner, start_scanner
-        import subprocess, re, socket
+        import socket
+        # Detect if running on cloud (HF Space) — skip network scan
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            # HF Space uses 10.x.x.x or 172.x.x.x subnets
+            is_cloud = local_ip.startswith("10.") or local_ip.startswith("172.") or local_ip.startswith("169.")
+        except Exception:
+            is_cloud = True
+            local_ip = "127.0.0.1"
 
-        # Start the network scanner daemon
+        if is_cloud:
+            print("[SOVEREIGN] Cloud environment detected — skipping local network scan (relay pushes devices)")
+            return
+
+        from device_manager import upsert_device, get_all_devices
+        from network_scanner import start_scanner
+        import subprocess, re
+
+        # Start the network scanner daemon (only on real machines)
         start_scanner(scan_interval=30)
 
         # Only scan if database is empty
