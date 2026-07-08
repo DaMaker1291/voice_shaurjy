@@ -3706,3 +3706,73 @@ async def disk_clean_cache(req: dict):
     path = req.get("path", "")
     confirm = req.get("confirm", False)
     return get_cleaner().clean_cache(path, confirm)
+
+# ── Screen Perception ─────────────────────────────────────────────────
+@app.get("/api/screen/screenshot")
+async def screen_screenshot():
+    """Take a full screenshot."""
+    from screen_perception import get_perception
+    return get_perception().screenshot_full()
+
+@app.post("/api/screen/screenshot_region")
+async def screen_screenshot_region(req: dict):
+    """Take a screenshot of a region."""
+    from screen_perception import get_perception
+    return get_perception().screenshot_region(req.get("x", 0), req.get("y", 0), req.get("w", 100), req.get("h", 100))
+
+@app.get("/api/screen/ocr")
+async def screen_ocr():
+    """OCR the current screen to find all text elements."""
+    from screen_perception import get_perception
+    return get_perception().ocr_screen()
+
+@app.get("/api/screen/understand")
+async def screen_understand():
+    """Understand what's on screen."""
+    from screen_perception import get_perception
+    return get_perception().understand_screen()
+
+@app.get("/api/screen/describe")
+async def screen_describe():
+    """Describe screen in natural language."""
+    from screen_perception import get_perception
+    return {"description": get_perception().describe_screen()}
+
+@app.post("/api/screen/find")
+async def screen_find(req: dict):
+    """Find a UI element by text."""
+    from screen_perception import get_perception
+    elem = get_perception().find_element(req.get("text", ""))
+    if elem:
+        return {"found": True, "element": elem}
+    return {"found": False, "text": req.get("text", "")}
+
+# ── System Task Agent ─────────────────────────────────────────────────
+@app.post("/api/system/execute")
+async def system_execute(req: dict):
+    """Execute a high-level goal on the desktop."""
+    from system_task_agent import get_system_agent
+    goal = req.get("goal", "")
+    max_steps = req.get("max_steps", 50)
+    return get_system_agent().execute_goal(goal, max_steps)
+
+@app.get("/api/system/agent/status")
+async def system_agent_status():
+    """Get system agent status."""
+    from system_task_agent import get_system_agent
+    return get_system_agent().get_status()
+
+@app.post("/api/system/agent/stop")
+async def system_agent_stop():
+    """Stop current task."""
+    from system_task_agent import get_system_agent
+    get_system_agent().stop()
+    return {"status": "stopped"}
+
+@app.post("/api/system/quick")
+async def system_quick(req: dict):
+    """Execute a quick system action."""
+    from system_task_agent import quick_action
+    action = req.get("action", "")
+    params = req.get("params", {})
+    return quick_action(action, params)

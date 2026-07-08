@@ -102,6 +102,29 @@ class UniversalActionEngine:
         "alexa": [r"alexa", r"echo", r"ask\s+alexa"],
         "smart_home": [r"smart\s+home", r"home\s+automation", r"lights?", r"thermostat"],
 
+        # Desktop Control (System)
+        "desktop_open": [r"open\s+(?:the\s+)?(?:app|application|program)", r"launch\s+(?:the\s+)?(?:app|application)", r"start\s+(?:the\s+)?(?:app|application)"],
+        "desktop_type": [r"type\s+(?:this|text|it|out)", r"keystroke", r"type\s+(?:on\s+)?(?:keyboard|screen)"],
+        "desktop_click": [r"click\s+(?:on\s+)?", r"press\s+(?:the\s+)?button", r"tap\s+(?:on\s+)?"],
+        "desktop_scroll": [r"scroll\s+(?:up|down|left|right)", r"scroll\s+(?:the\s+)?page"],
+        "desktop_hotkey": [r"press\s+(?:cmd|ctrl|alt|shift|command|option)", r"keyboard\s+shortcut", r"hotkey"],
+        "desktop_screenshot": [r"screenshot", r"screen\s+(?:capture|shot)", r"capture\s+(?:the\s+)?screen"],
+        "desktop_see": [r"what(?:'s|\s+is)\s+on\s+(?:the\s+)?screen", r"what\s+do\s+you\s+see", r"read\s+(?:the\s+)?screen", r"describe\s+(?:the\s+)?screen"],
+        "desktop_find": [r"find\s+(?:the\s+)?(?:button|field|element|text|label)", r"where\s+is\s+(?:the\s+)?(?:button|field|element)", r"locate\s+(?:the\s+)?"],
+        "desktop_find_click": [r"click\s+(?:on\s+)?(?:the\s+)?(?:button|link|option|tab|menu)", r"find\s+and\s+click"],
+        "desktop_close": [r"close\s+(?:the\s+)?(?:app|window|tab)", r"quit\s+(?:the\s+)?(?:app|application)"],
+        "desktop_minimize": [r"minimize", r"minimise", r"hide\s+(?:the\s+)?(?:app|window)"],
+        "desktop_fullscreen": [r"full\s*screen", r"maximize", r"maximise"],
+        "desktop_new_tab": [r"new\s+tab", r"open\s+(?:a\s+)?(?:new\s+)?tab"],
+        "desktop_new_window": [r"new\s+window", r"open\s+(?:a\s+)?(?:new\s+)?window"],
+        "desktop_search": [r"search\s+(?:for\s+)?(?:in\s+)?(?:this|the|current)", r"find\s+(?:in\s+)?(?:this|the|current)"],
+        "desktop_select_all": [r"select\s+all", r"select\s+everything"],
+        "desktop_copy": [r"copy\s+(?:this|it|selection|selected)", r"copy\s+(?:to\s+)?clipboard"],
+        "desktop_paste": [r"paste\s+(?:this|it|from)", r"paste\s+(?:from\s+)?clipboard"],
+        "desktop_undo": [r"undo", r"undo\s+(?:this|that|the\s+last)"],
+        "desktop_save": [r"save\s+(?:this|the|current)", r"save\s+(?:the\s+)?(?:file|document)"],
+        "desktop_go_to": [r"go\s+to\s+(?:https?://|www\.|google|youtube|github|reddit|twitter|facebook)", r"navigate\s+to", r"open\s+(?:the\s+)?(?:website|site|url|page)"],
+
         # Autonomous
         "autonomous": [r"do\s+(?:this|that|it)\s+(?:for\s+me|autonomously)", r"handle\s+(?:this|that)", r"take\s+care\s+of"],
     }
@@ -296,6 +319,95 @@ class UniversalActionEngine:
             {"action": "system_scan_cache", "description": "Scan for cache files to clean"},
             {"action": "system_scan_logs", "description": "Scan for log files to clean"},
             {"action": "report_findings", "description": "Report cleanup options and ask for confirmation before cleaning"},
+        ],
+        "desktop_open": [
+            {"action": "system_launch_app", "description": "Launch the specified application"},
+            {"action": "system_screenshot", "description": "Verify app launched"},
+            {"action": "report_findings", "description": "Confirm app is open"},
+        ],
+        "desktop_type": [
+            {"action": "system_type", "description": "Type the specified text"},
+            {"action": "report_findings", "description": "Confirm text was typed"},
+        ],
+        "desktop_click": [
+            {"action": "system_find_click", "description": "Find and click the element"},
+            {"action": "report_findings", "description": "Confirm element was clicked"},
+        ],
+        "desktop_hotkey": [
+            {"action": "system_hotkey", "description": "Press the keyboard shortcut"},
+            {"action": "report_findings", "description": "Confirm hotkey was pressed"},
+        ],
+        "desktop_screenshot": [
+            {"action": "system_screenshot", "description": "Take a screenshot"},
+            {"action": "report_findings", "description": "Report screenshot captured"},
+        ],
+        "desktop_see": [
+            {"action": "system_screenshot", "description": "Take screenshot to see screen"},
+            {"action": "system_ocr", "description": "OCR to read screen text"},
+            {"action": "report_findings", "description": "Describe what's on screen"},
+        ],
+        "desktop_find": [
+            {"action": "system_screenshot", "description": "Take screenshot"},
+            {"action": "system_ocr", "description": "OCR to find element"},
+            {"action": "report_findings", "description": "Report element location"},
+        ],
+        "desktop_find_click": [
+            {"action": "system_screenshot", "description": "Take screenshot"},
+            {"action": "system_find_click", "description": "Find and click the element"},
+            {"action": "report_findings", "description": "Confirm element was clicked"},
+        ],
+        "desktop_close": [
+            {"action": "system_quit_app", "description": "Quit the application"},
+            {"action": "report_findings", "description": "Confirm app was closed"},
+        ],
+        "desktop_go_to": [
+            {"action": "system_hotkey", "description": "Focus address bar (Cmd+L)", "params": {"keys": ["cmd", "l"]}},
+            {"action": "system_type", "description": "Type the URL"},
+            {"action": "system_key", "description": "Press Enter", "params": {"key": "return"}},
+            {"action": "wait", "description": "Wait for page to load", "params": {"seconds": 3}},
+            {"action": "report_findings", "description": "Confirm navigation"},
+        ],
+        "desktop_search": [
+            {"action": "system_hotkey", "description": "Focus search (Cmd+F)", "params": {"keys": ["cmd", "f"]}},
+            {"action": "system_type", "description": "Type search query"},
+            {"action": "system_key", "description": "Press Enter", "params": {"key": "return"}},
+            {"action": "report_findings", "description": "Confirm search initiated"},
+        ],
+        "desktop_select_all": [
+            {"action": "system_hotkey", "description": "Select all (Cmd+A)", "params": {"keys": ["cmd", "a"]}},
+            {"action": "report_findings", "description": "Confirm all selected"},
+        ],
+        "desktop_copy": [
+            {"action": "system_hotkey", "description": "Copy (Cmd+C)", "params": {"keys": ["cmd", "c"]}},
+            {"action": "report_findings", "description": "Confirm copied to clipboard"},
+        ],
+        "desktop_paste": [
+            {"action": "system_hotkey", "description": "Paste (Cmd+V)", "params": {"keys": ["cmd", "v"]}},
+            {"action": "report_findings", "description": "Confirm pasted"},
+        ],
+        "desktop_undo": [
+            {"action": "system_hotkey", "description": "Undo (Cmd+Z)", "params": {"keys": ["cmd", "z"]}},
+            {"action": "report_findings", "description": "Confirm undo"},
+        ],
+        "desktop_save": [
+            {"action": "system_hotkey", "description": "Save (Cmd+S)", "params": {"keys": ["cmd", "s"]}},
+            {"action": "report_findings", "description": "Confirm saved"},
+        ],
+        "desktop_minimize": [
+            {"action": "system_hotkey", "description": "Minimize (Cmd+M)", "params": {"keys": ["cmd", "m"]}},
+            {"action": "report_findings", "description": "Confirm minimized"},
+        ],
+        "desktop_fullscreen": [
+            {"action": "system_hotkey", "description": "Toggle fullscreen", "params": {"keys": ["cmd", "ctrl", "f"]}},
+            {"action": "report_findings", "description": "Confirm fullscreen toggled"},
+        ],
+        "desktop_new_tab": [
+            {"action": "system_hotkey", "description": "New tab (Cmd+T)", "params": {"keys": ["cmd", "t"]}},
+            {"action": "report_findings", "description": "Confirm new tab opened"},
+        ],
+        "desktop_new_window": [
+            {"action": "system_hotkey", "description": "New window (Cmd+N)", "params": {"keys": ["cmd", "n"]}},
+            {"action": "report_findings", "description": "Confirm new window opened"},
         ],
     }
 

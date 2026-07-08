@@ -1185,6 +1185,118 @@ def _execute_device_command(action, params):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    # ── Screen Perception ─────────────────────────────────────────────
+    if device_type == "SCREEN":
+        try:
+            if action == "screenshot":
+                path = params.get("path", f"/tmp/jarvis_screen_{int(time.time())}.png")
+                subprocess.run(["screencapture", "-x", path], timeout=10)
+                return {"success": True, "path": path}
+
+            elif action == "ocr":
+                path = params.get("path", f"/tmp/jarvis_screen_{int(time.time())}.png")
+                subprocess.run(["screencapture", "-x", path], timeout=10)
+                try:
+                    result = subprocess.run(
+                        ["tesseract", path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    elements = []
+                    for line in result.stdout.strip().split("\n"):
+                        parts = line.split("\t")
+                        if len(parts) >= 12:
+                            try:
+                                conf = float(parts[10])
+                                if conf < 30:
+                                    continue
+                                text = parts[11].strip()
+                                if text and len(text) >= 2:
+                                    elements.append({
+                                        "text": text,
+                                        "x": int(parts[6]), "y": int(parts[7]),
+                                        "w": int(parts[8]), "h": int(parts[9]),
+                                        "center_x": int(parts[6]) + int(parts[8]) // 2,
+                                        "center_y": int(parts[7]) + int(parts[9]) // 2,
+                                    })
+                            except:
+                                continue
+                    return {"success": True, "elements": elements, "count": len(elements), "screenshot": path}
+                except FileNotFoundError:
+                    return {"success": False, "error": "tesseract not installed. Run: brew install tesseract"}
+
+            elif action == "find":
+                text = params.get("text", "")
+                path = f"/tmp/jarvis_screen_{int(time.time())}.png"
+                subprocess.run(["screencapture", "-x", path], timeout=10)
+                try:
+                    result = subprocess.run(
+                        ["tesseract", path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    for line in result.stdout.strip().split("\n"):
+                        parts = line.split("\t")
+                        if len(parts) >= 12:
+                            elem_text = parts[11].strip().lower()
+                            if text.lower() in elem_text:
+                                return {"success": True, "found": True, "text": parts[11].strip(),
+                                        "center_x": int(parts[6]) + int(parts[8]) // 2,
+                                        "center_y": int(parts[7]) + int(parts[9]) // 2}
+                    return {"success": True, "found": False, "searched": text}
+                except FileNotFoundError:
+                    return {"success": False, "error": "tesseract not installed"}
+
+            elif action == "find_click":
+                text = params.get("text", "")
+                path = f"/tmp/jarvis_screen_{int(time.time())}.png"
+                subprocess.run(["screencapture", "-x", path], timeout=10)
+                try:
+                    result = subprocess.run(
+                        ["tesseract", path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    for line in result.stdout.strip().split("\n"):
+                        parts = line.split("\t")
+                        if len(parts) >= 12:
+                            elem_text = parts[11].strip().lower()
+                            if text.lower() in elem_text:
+                                cx = int(parts[6]) + int(parts[8]) // 2
+                                cy = int(parts[7]) + int(parts[9]) // 2
+                                # Use cliclick or osascript to click
+                                try:
+                                    subprocess.run(["cliclick", f"c:{cx},{cy}"], timeout=5)
+                                except FileNotFoundError:
+                                    script = f'tell application "System Events" to click at {{{cx}, {cy}}}'
+                                    subprocess.run(["osascript", "-e", script], timeout=10)
+                                return {"success": True, "clicked": text, "x": cx, "y": cy}
+                    return {"success": True, "found": False, "searched": text, "error": "Not found on screen"}
+                except FileNotFoundError:
+                    return {"success": False, "error": "tesseract not installed"}
+
+            elif action == "see":
+                path = f"/tmp/jarvis_screen_{int(time.time())}.png"
+                subprocess.run(["screencapture", "-x", path], timeout=10)
+                try:
+                    result = subprocess.run(
+                        ["tesseract", path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    elements = []
+                    for line in result.stdout.strip().split("\n"):
+                        parts = line.split("\t")
+                        if len(parts) >= 12:
+                            try:
+                                conf = float(parts[10])
+                                if conf >= 30 and parts[11].strip():
+                                    elements.append(parts[11].strip())
+                            except:
+                                continue
+                    return {"success": True, "visible_text": elements, "screenshot": path}
+                except FileNotFoundError:
+                    return {"success": True, "screenshot": path, "visible_text": [], "note": "Install tesseract for OCR"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     # ── Disk Cleaner ──────────────────────────────────────────────────
     if device_type == "DISK":
         try:
