@@ -1197,9 +1197,13 @@ def _execute_device_command(action, params):
                 path = params.get("path", f"/tmp/jarvis_screen_{int(time.time())}.png")
                 subprocess.run(["screencapture", "-x", path], timeout=10)
                 try:
+                    # Copy to local for tesseract path handling
+                    local_path = f"/tmp/jarvis_ocr_{os.getpid()}.png"
+                    import shutil
+                    shutil.copy2(path, local_path)
                     result = subprocess.run(
-                        ["tesseract", path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
-                        capture_output=True, text=True, timeout=30
+                        ["tesseract", local_path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
+                        capture_output=True, text=True, timeout=30, cwd="/tmp"
                     )
                     elements = []
                     for line in result.stdout.strip().split("\n"):
@@ -1229,9 +1233,12 @@ def _execute_device_command(action, params):
                 path = f"/tmp/jarvis_screen_{int(time.time())}.png"
                 subprocess.run(["screencapture", "-x", path], timeout=10)
                 try:
+                    local_path = f"/tmp/jarvis_ocr_{os.getpid()}.png"
+                    import shutil
+                    shutil.copy2(path, local_path)
                     result = subprocess.run(
-                        ["tesseract", path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
-                        capture_output=True, text=True, timeout=30
+                        ["tesseract", local_path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
+                        capture_output=True, text=True, timeout=30, cwd="/tmp"
                     )
                     for line in result.stdout.strip().split("\n"):
                         parts = line.split("\t")
@@ -1250,9 +1257,12 @@ def _execute_device_command(action, params):
                 path = f"/tmp/jarvis_screen_{int(time.time())}.png"
                 subprocess.run(["screencapture", "-x", path], timeout=10)
                 try:
+                    local_path = f"/tmp/jarvis_ocr_{os.getpid()}.png"
+                    import shutil
+                    shutil.copy2(path, local_path)
                     result = subprocess.run(
-                        ["tesseract", path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
-                        capture_output=True, text=True, timeout=30
+                        ["tesseract", local_path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
+                        capture_output=True, text=True, timeout=30, cwd="/tmp"
                     )
                     for line in result.stdout.strip().split("\n"):
                         parts = line.split("\t")
@@ -1276,9 +1286,12 @@ def _execute_device_command(action, params):
                 path = f"/tmp/jarvis_screen_{int(time.time())}.png"
                 subprocess.run(["screencapture", "-x", path], timeout=10)
                 try:
+                    local_path = f"/tmp/jarvis_ocr_{os.getpid()}.png"
+                    import shutil
+                    shutil.copy2(path, local_path)
                     result = subprocess.run(
-                        ["tesseract", path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
-                        capture_output=True, text=True, timeout=30
+                        ["tesseract", local_path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
+                        capture_output=True, text=True, timeout=30, cwd="/tmp"
                     )
                     elements = []
                     for line in result.stdout.strip().split("\n"):

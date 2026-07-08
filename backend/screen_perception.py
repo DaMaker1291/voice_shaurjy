@@ -93,10 +93,16 @@ class ScreenPerception:
             return self._ocr_fallback(path)
 
         try:
+            # Copy to local dir for tesseract (handles /tmp path issues)
+            local_path = f"/tmp/jarvis_ocr_{os.getpid()}.png"
+            import shutil
+            shutil.copy2(path, local_path)
+
             # Tesseract with TSV output (gives text + positions)
             result = subprocess.run(
-                ["tesseract", path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
-                capture_output=True, text=True, timeout=30
+                ["tesseract", local_path, "stdout", "--psm", "11", "-c", "tessedit_create_tsv=1"],
+                capture_output=True, text=True, timeout=30,
+                cwd="/tmp"
             )
 
             elements = []
