@@ -280,11 +280,25 @@ export default function LiveAgentPanel({ agents, activeAgent, onSelectAgent, onS
                   {active.steps?.map((step, i) => (
                     <div key={i} style={{
                       padding: "3px 8px", borderRadius: 3, fontSize: 8,
-                      background: step.status === "done" ? "rgba(0,255,102,0.1)" : step.status === "running" ? "rgba(255,179,0,0.1)" : "#1a1d23",
-                      color: step.status === "done" ? "#00FF66" : step.status === "running" ? "#FFB300" : "#667085",
-                      border: `1px solid ${step.status === "running" ? "rgba(255,179,0,0.2)" : "transparent"}`,
+                      background: step.status === "done" ? "rgba(0,255,102,0.1)" :
+                                  step.status === "running" ? "rgba(255,179,0,0.1)" :
+                                  step.status === "retrying" ? "rgba(255,179,0,0.15)" :
+                                  step.status === "recovering" ? "rgba(0,180,216,0.1)" :
+                                  step.status === "failed" ? "rgba(255,51,51,0.1)" : "#1a1d23",
+                      color: step.status === "done" ? "#00FF66" :
+                             step.status === "running" ? "#FFB300" :
+                             step.status === "retrying" ? "#FFB300" :
+                             step.status === "recovering" ? "#00B4D8" :
+                             step.status === "failed" ? "#FF3333" : "#667085",
+                      border: `1px solid ${step.status === "running" ? "rgba(255,179,0,0.2)" :
+                                           step.status === "retrying" ? "rgba(255,179,0,0.3)" :
+                                           step.status === "recovering" ? "rgba(0,180,216,0.3)" : "transparent"}`,
                     }}>
-                      {step.status === "done" ? "✓" : step.status === "running" ? "●" : i + 1}
+                      {step.status === "done" ? "✓" :
+                       step.status === "running" ? "●" :
+                       step.status === "retrying" ? "↻" :
+                       step.status === "recovering" ? "⟳" :
+                       step.status === "failed" ? "✗" : i + 1}
                     </div>
                   ))}
                 </div>
@@ -299,7 +313,16 @@ export default function LiveAgentPanel({ agents, activeAgent, onSelectAgent, onS
                   {active.log?.map((line, i) => (
                     <div key={i} style={{
                       fontSize: 9, lineHeight: 1.5, marginBottom: 2, fontFamily: "var(--font-mono)",
-                      color: line.includes("✓") ? "#00FF66" : line.includes("✗") ? "#FF3333" : line.includes("Step") ? "#FFB300" : "#9ca3af",
+                      color: line.includes("✓") ? "#00FF66" :
+                             line.includes("✗") ? "#FF3333" :
+                             line.includes("Step") ? "#FFB300" :
+                             line.includes("Recovery") || line.includes("recovery") ? "#00B4D8" :
+                             line.includes("Retrying") || line.includes("retrying") ? "#FFB300" :
+                             line.includes("Skipping") ? "#A855F7" :
+                             line.includes("error") || line.includes("Error") ? "#FF3333" :
+                             line.includes("failed") ? "#FF3333" :
+                             line.includes("recovered") || line.includes("Recovered") ? "#00FF66" :
+                             "#9ca3af",
                     }}>
                       {line}
                     </div>

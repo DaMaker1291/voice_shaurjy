@@ -116,13 +116,45 @@ class HeadlessBrowser:
             time.sleep(0.1)
         return {"error": "Timeout"}
 
-    def navigate(self, url):
-        """Navigate to a URL."""
+    def navigate(self, url, retries=2):
+        """Navigate to a URL with retry logic."""
         if not url.startswith("http"):
             url = "https://" + url
-        result = self._send("Page.navigate", {"url": url})
-        time.sleep(3)
-        return result
+
+        for attempt in range(retries + 1):
+            try:
+                # Check if browser is still alive
+                if not self._is_alive():
+                    self._auto_restart()
+                    if not self._is_alive():
+                        return {"error": "Browser crashed and could not restart"}
+
+                result = self._send("Page.navigate", {"url": url})
+                time.sleep(3)
+
+                # Check for navigation errors
+                if "error" in result:
+                    if attempt < retries:
+                        time.sleep(2 ** attempt)
+                        continue
+                    return result
+
+                # Check page load status
+                status = self.evaluate("document.readyState")
+                if status == "complete":
+                    return result
+                elif attempt < retries:
+                    time.sleep(3)
+                    continue
+
+                return result
+            except Exception as e:
+                if attempt < retries:
+                    time.sleep(2 ** attempt)
+                    continue
+                return {"error": f"Navigation failed: {e}"}
+
+        return {"error": "Navigation failed after all retries"}
 
     def get_text(self):
         """Get all visible text from the page."""
@@ -266,8 +298,106 @@ class HeadlessBrowser:
             try: self.ws.close()
             except: pass
         if self.chrome_proc:
-            self.chrome_proc.terminate()
-            self.chrome_proc.wait(timeout=5)
+            try:
+                self.chrome_proc.terminate()
+                self.chrome_proc.wait(timeout=5)
+            except:
+                try: self.chrome_proc.kill()
+                except: pass
+
+    def _is_alive(self) -> bool:
+        """Check if browser process is still alive."""
+        if self.chrome_proc is None:
+            return False
+        if self.chrome_proc.poll() is not None:
+            return False
+        # Check WebSocket
+        if self.ws:
+            try:
+                self.ws.ping()
+                return True
+            except:
+                return False
+        return True
+
+    def _auto_restart(self):
+        """Auto-restart the browser after a crash."""
+        try:
+            self.stop()
+        except:
+            pass
+        time.sleep(2)
+        try:
+            self.start(headless=True)
+        except:
+            pass
+
+    def safe_navigate(self, url: str) -> dict:
+        """Navigate with full error handling and recovery."""
+        try:
+            if not self._is_alive():
+                self._auto_restart()
+            return self.navigate(url)
+        except Exception as e:
+            return {"error": f"Safe navigate failed: {e}"}
+
+    def safe_click(self, selector: str) -> str:
+        """Click with retry and alternative selectors."""
+        # Try original selector
+        result = self.click(selector)
+        if result == "clicked":
+            return "clicked"
+
+        # Try common alternatives
+        alt_selectors = [
+            selector.replace("[", "[aria-label='").replace("]", "']"),
+            selector.replace("input", "textarea"),
+            f"button:has-text('{selector}')",
+            f"[data-testid='{selector}']",
+        ]
+        for alt in alt_selectors:
+            try:
+                result = self.click(alt)
+                if result == "clicked":
+                    return "clicked"
+            except:
+                continue
+
+        return "not found"
+
+    def safe_type(self, selector: str, text: str) -> dict:
+        """Type into an element with retry and fallback."""
+        # Click to focus first
+        click_result = self.safe_click(selector)
+        if click_result == "clicked":
+            self.type_text(text)
+            return {"status": "typed"}
+
+        # Fallback: use JavaScript to set value
+        js = f"""
+        (function() {{
+            var el = document.querySelector('{selector}');
+            if (!el) {{
+                // Try finding by placeholder text
+                var inputs = document.querySelectorAll('input, textarea');
+                for (var i = 0; i < inputs.length; i++) {{
+                    if (inputs[i].placeholder && inputs[i].placeholder.toLowerCase().includes('{selector.toLowerCase()}')) {{
+                        el = inputs[i];
+                        break;
+                    }}
+                }}
+            }}
+            if (el) {{
+                el.focus();
+                el.value = '{text}';
+                el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                return 'typed';
+            }}
+            return 'not found';
+        }})()
+        """
+        result = self.evaluate(js)
+        return {"status": result if result else "failed"}
 
 
 # ── Singleton ────────────────────────────────────────────────────────

@@ -683,10 +683,32 @@ class Entity:
 
     def _groq_with_timeout(self, prompt: str, max_tokens: int = 600, timeout: int = 25) -> str:
         result = []
-        def _r(): result.append(groq_generate(prompt, self.user_id, max_tokens=max_tokens))
+        errors = []
+
+        def _r():
+            try:
+                result.append(groq_generate(prompt, self.user_id, max_tokens=max_tokens))
+            except Exception as e:
+                errors.append(str(e))
+
         t = threading.Thread(target=_r, daemon=True)
         t.start(); t.join(timeout=timeout)
-        return result[0] if result else "Still processing..."
+
+        if result:
+            return result[0]
+
+        # Retry once on error
+        if errors:
+            error_msg = errors[0]
+            if "429" in error_msg or "rate" in error_msg.lower():
+                time.sleep(10)
+                return self._groq_with_timeout(prompt, max_tokens, timeout)
+            elif "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                return self._groq_with_timeout(prompt, max_tokens=max_tokens // 2, timeout=timeout)
+            else:
+                return f"I encountered a temporary issue. Let me try a simpler approach..."
+
+        return "Still processing..."
 
     def _build_context(self, text: str) -> str:
         ctx = _gather_system_context()

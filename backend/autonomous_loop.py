@@ -102,8 +102,38 @@ class AutonomousTaskLoop:
                     step["status"] = "failed"
                     step["result"] = str(e)
                     self._log(task_id, f"  → Step failed: {e}")
-                    # Try to continue with next step
-                    continue
+
+                    # Error Recovery: classify and handle
+                    try:
+                        from error_recovery import get_recovery_engine
+                        recovery = get_recovery_engine()
+                        recovery_result = recovery.handle_error(str(e), step, steps, i)
+
+                        self._log(task_id, f"  → Recovery: {recovery_result['description']}")
+
+                        if recovery_result.get("should_retry"):
+                            # Retry with delay
+                            delay = recovery_result.get("retry_delay", 3)
+                            step["status"] = "retrying"
+                            step["retry_count"] = step.get("retry_count", 0) + 1
+                            self._log(task_id, f"  → Retrying in {delay}s (attempt {step['retry_count']})")
+                            time.sleep(delay)
+                            i -= 1  # Re-execute this step
+                            continue
+                        elif recovery_result.get("action") == "skip_step":
+                            # Skip to next step
+                            self._log(task_id, f"  → Skipping failed step, continuing...")
+                            recovery.mark_recovered()
+                            continue
+                        else:
+                            # Try alternative
+                            self._log(task_id, f"  → Trying alternative: {recovery_result['action']}")
+                            recovery.mark_recovered()
+                            continue
+                    except Exception as recovery_err:
+                        self._log(task_id, f"  → Recovery engine error: {recovery_err}")
+                        # Basic fallback: skip and continue
+                        continue
 
             # Task complete
             self.active_tasks[task_id]["status"] = "completed"
@@ -223,7 +253,9 @@ class AutonomousTaskLoop:
             url = params.get("url", "")
             if not url:
                 return "No URL provided"
-            browser.navigate(url)
+            result = browser.safe_navigate(url)
+            if "error" in result:
+                return f"Navigation error: {result['error']}"
             time.sleep(3)
             return f"Navigated to {url}"
 
@@ -232,16 +264,41 @@ class AutonomousTaskLoop:
             browser, err = ensure_browser()
             if err:
                 return f"Browser error: {err}"
-            text = browser.get_text()
-            return text[:2000] if text else "No text found"
+            try:
+                text = browser.get_text()
+                return text[:2000] if text else "No text found"
+            except Exception as e:
+                return f"Failed to get text: {e}"
 
         if action == "browser_screenshot":
             from headless_browser import ensure_browser
             browser, err = ensure_browser()
             if err:
                 return f"Browser error: {err}"
-            path = browser.screenshot()
-            return f"Screenshot saved to {path}"
+            try:
+                path = browser.screenshot()
+                return f"Screenshot saved to {path}"
+            except Exception as e:
+                return f"Screenshot failed: {e}"
+
+        if action == "browser_click":
+            from headless_browser import ensure_browser
+            browser, err = ensure_browser()
+            if err:
+                return f"Browser error: {err}"
+            selector = params.get("selector", "button")
+            result = browser.safe_click(selector)
+            return f"Click result: {result}"
+
+        if action == "browser_type":
+            from headless_browser import ensure_browser
+            browser, err = ensure_browser()
+            if err:
+                return f"Browser error: {err}"
+            selector = params.get("selector", "input")
+            text = params.get("text", "")
+            result = browser.safe_type(selector, text)
+            return f"Type result: {result}"
 
         if action == "analyze_emails":
             # Analyze the text from previous step
