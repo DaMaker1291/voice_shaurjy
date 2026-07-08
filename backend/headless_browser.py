@@ -80,6 +80,11 @@ class HeadlessBrowser:
                     self._running = True
                     self._listener_thread = threading.Thread(target=self._listen, daemon=True)
                     self._listener_thread.start()
+                    # Register with browser manager
+                    try:
+                        from browser_manager import get_browser_manager
+                        get_browser_manager().register_browser(str(self.chrome_proc.pid), {"port": 9222})
+                    except: pass
                     return {"status": "connected", "pid": self.chrome_proc.pid}
         except Exception as e:
             return {"error": f"Failed to connect: {e}"}
@@ -294,6 +299,12 @@ class HeadlessBrowser:
     def stop(self):
         """Stop the headless browser."""
         self._running = False
+        # Unregister from browser manager
+        try:
+            from browser_manager import get_browser_manager
+            if self.chrome_proc:
+                get_browser_manager().unregister_browser(str(self.chrome_proc.pid))
+        except: pass
         if self.ws:
             try: self.ws.close()
             except: pass

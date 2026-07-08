@@ -31,7 +31,17 @@ class AutonomousTaskLoop:
         self._max_parallel = 5
 
     def start_task(self, task_id: str, intent: str, user_id: str = "local"):
-        """Start an autonomous task in background."""
+        """Start an autonomous task in background with resource checks."""
+        # Check if we can safely start
+        try:
+            from resource_governor import get_governor
+            governor = get_governor()
+            check = governor.can_start_agent()
+            if not check.get("allowed", True):
+                return {"task_id": task_id, "status": "error", "message": check.get("reason", "System busy")}
+        except:
+            pass  # If governor unavailable, allow
+
         # Check parallel limit
         running = sum(1 for t in self.active_tasks.values() if t["status"] == "running")
         if running >= self._max_parallel:
@@ -77,6 +87,13 @@ class AutonomousTaskLoop:
 
             # Phase 2: Execute each step
             for i, step in enumerate(steps):
+                # Check if task is paused (resource governor)
+                while self.active_tasks.get(task_id, {}).get("paused"):
+                    self._log(task_id, "  → Paused (system under load)")
+                    time.sleep(5)
+                    if self.active_tasks.get(task_id, {}).get("status") != "running":
+                        return  # Task was stopped
+
                 self.active_tasks[task_id]["current_step"] = i
                 step["status"] = "running"
                 self._log(task_id, f"Step {i+1}/{len(steps)}: {step['description']}")

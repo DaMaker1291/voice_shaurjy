@@ -3532,3 +3532,52 @@ async def universal_workflow(req: dict):
     params = req.get("params", {})
     workflow = engine.create_workflow(intent, params)
     return {"workflow": workflow, "summary": engine.format_workflow_summary(workflow)}
+
+# ── Resource Governor ─────────────────────────────────────────────────
+@app.get("/api/system/assess")
+async def system_assess():
+    """Assess system capabilities and return tier + limits."""
+    from resource_governor import get_governor
+    governor = get_governor()
+    return governor.assess()
+
+@app.get("/api/system/status")
+async def system_status():
+    """Get current resource status and warnings."""
+    from resource_governor import get_governor
+    governor = get_governor()
+    return governor.get_status()
+
+@app.get("/api/system/can_start_agent")
+async def system_can_start_agent():
+    """Check if we can safely start a new agent."""
+    from resource_governor import get_governor
+    governor = get_governor()
+    return governor.can_start_agent()
+
+@app.get("/api/system/recommended")
+async def system_recommended():
+    """Get recommended settings for this system."""
+    from resource_governor import get_governor
+    governor = get_governor()
+    return governor.get_recommended_settings()
+
+# ── Smart Browser Manager ─────────────────────────────────────────────
+@app.get("/api/system/browsers")
+async def system_browsers():
+    """Get browser manager status."""
+    from browser_manager import get_browser_manager
+    return get_browser_manager().get_status()
+
+@app.get("/api/system/browsers/can_start")
+async def system_browsers_can_start():
+    """Check if we can start a new browser."""
+    from browser_manager import get_browser_manager
+    return get_browser_manager().can_start_browser()
+
+@app.post("/api/system/browsers/kill_all")
+async def system_browsers_kill_all():
+    """Kill all browsers to free resources."""
+    from browser_manager import get_browser_manager
+    get_browser_manager().kill_all()
+    return {"status": "all_killed"}

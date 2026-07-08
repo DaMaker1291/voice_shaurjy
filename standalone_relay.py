@@ -1110,6 +1110,28 @@ def main():
     else:
         print("[Relay] Local SLM disabled (using cloud routing). Use --local-model to enable.")
 
+    # System Resource Assessment
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        cpu_count = psutil.cpu_count(logical=True)
+        ram_gb = mem.total / (1024 ** 3)
+
+        if ram_gb >= 32: tier = "ultra"; max_agents = 5
+        elif ram_gb >= 16: tier = "high"; max_agents = 3
+        elif ram_gb >= 8: tier = "mid"; max_agents = 2
+        elif ram_gb >= 4: tier = "low"; max_agents = 1
+        else: tier = "potato"; max_agents = 0
+
+        print(f"[Relay] System: {ram_gb:.0f}GB RAM, {cpu_count} cores → Tier: {tier.upper()} (max {max_agents} parallel agents)")
+        if tier == "potato":
+            print("[Relay] WARNING: Very low RAM — chat/device control only, no headless browser")
+        elif tier == "low":
+            print("[Relay] Low RAM — single agent only, browser will auto-kill after 2min idle")
+    except ImportError:
+        print("[Relay] psutil not installed — skipping resource assessment")
+        tier = "mid"
+
     device_info = startup_scan(args.user)
     try:
         post(f"{HF_API}/api/relay/register", {"user_id": args.user, "hostname": socket.gethostname(), "platform": platform.platform(), "info": device_info})
