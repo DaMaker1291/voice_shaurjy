@@ -3581,3 +3581,128 @@ async def system_browsers_kill_all():
     from browser_manager import get_browser_manager
     get_browser_manager().kill_all()
     return {"status": "all_killed"}
+
+# ── System Controller (Keyboard/Mouse) ────────────────────────────────
+@app.post("/api/system/type")
+async def system_type(req: dict):
+    """Type text on the system."""
+    from system_controller import get_controller
+    text = req.get("text", "")
+    return get_controller().type_string(text)
+
+@app.post("/api/system/key")
+async def system_key(req: dict):
+    """Press a key or hotkey."""
+    from system_controller import get_controller
+    keys = req.get("keys", [])
+    if len(keys) == 1:
+        return get_controller().press_key(keys[0])
+    return get_controller().hotkey(*keys)
+
+@app.post("/api/system/mouse/move")
+async def system_mouse_move(req: dict):
+    """Move mouse to position."""
+    from system_controller import get_controller
+    return get_controller().mouse_move(req.get("x", 0), req.get("y", 0))
+
+@app.post("/api/system/mouse/click")
+async def system_mouse_click(req: dict):
+    """Click at position."""
+    from system_controller import get_controller
+    return get_controller().mouse_click(req.get("x", 0), req.get("y", 0), req.get("button", "left"))
+
+@app.post("/api/system/mouse/scroll")
+async def system_mouse_scroll(req: dict):
+    """Scroll at position."""
+    from system_controller import get_controller
+    return get_controller().mouse_scroll(req.get("x", 0), req.get("y", 0), req.get("clicks", 3))
+
+@app.post("/api/system/mouse/drag")
+async def system_mouse_drag(req: dict):
+    """Drag from (x1,y1) to (x2,y2)."""
+    from system_controller import get_controller
+    return get_controller().mouse_drag(req.get("x1", 0), req.get("y1", 0), req.get("x2", 0), req.get("y2", 0))
+
+@app.post("/api/system/app/launch")
+async def system_app_launch(req: dict):
+    """Launch an app."""
+    from system_controller import get_controller
+    return get_controller().launch_app(req.get("app", ""))
+
+@app.post("/api/system/app/quit")
+async def system_app_quit(req: dict):
+    """Quit an app."""
+    from system_controller import get_controller
+    return get_controller().quit_app(req.get("app", ""))
+
+@app.get("/api/system/app/front")
+async def system_app_front():
+    """Get frontmost app."""
+    from system_controller import get_controller
+    return get_controller().get_frontmost_app()
+
+@app.get("/api/system/app/running")
+async def system_app_running():
+    """Get running apps."""
+    from system_controller import get_controller
+    return get_controller().get_running_apps()
+
+@app.get("/api/system/screen/size")
+async def system_screen_size():
+    """Get screen dimensions."""
+    from system_controller import get_controller
+    return get_controller().get_screen_size()
+
+@app.get("/api/system/clipboard")
+async def system_clipboard():
+    """Get clipboard."""
+    from system_controller import get_controller
+    return get_controller().get_clipboard()
+
+@app.post("/api/system/clipboard")
+async def system_clipboard_set(req: dict):
+    """Set clipboard."""
+    from system_controller import get_controller
+    return get_controller().set_clipboard(req.get("text", ""))
+
+@app.post("/api/system/paste")
+async def system_paste(req: dict):
+    """Copy text to clipboard then paste it."""
+    from system_controller import get_controller
+    return get_controller().copy_paste(req.get("text", ""))
+
+# ── Disk Cleaner ──────────────────────────────────────────────────────
+@app.get("/api/disk/usage")
+async def disk_usage():
+    """Get disk usage info."""
+    from disk_cleaner import get_cleaner
+    return get_cleaner().get_disk_usage()
+
+@app.get("/api/disk/scan")
+async def disk_scan():
+    """Full system scan for unnecessary files."""
+    from disk_cleaner import get_cleaner
+    return get_cleaner().scan_all()
+
+@app.get("/api/disk/suggest")
+async def disk_suggest():
+    """Get cleaning suggestions."""
+    from disk_cleaner import get_cleaner
+    return {"suggestions": get_cleaner().suggest_cleaning()}
+
+@app.post("/api/disk/clean")
+async def disk_clean(req: dict):
+    """Clean a category (requires confirm=true)."""
+    from disk_cleaner import get_cleaner
+    scan_id = req.get("scan_id", "")
+    category = req.get("category", "")
+    confirm = req.get("confirm", False)
+    return get_cleaner().clean_category(scan_id, category, confirm)
+
+@app.post("/api/disk/clean_cache")
+async def disk_clean_cache(req: dict):
+    """Clean a specific cache dir (requires confirm=true)."""
+    from disk_cleaner import get_cleaner
+    path = req.get("path", "")
+    confirm = req.get("confirm", False)
+    return get_cleaner().clean_cache(path, confirm)

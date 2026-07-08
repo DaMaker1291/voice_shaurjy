@@ -66,6 +66,20 @@ class UniversalActionEngine:
         "device_scan": [r"scan\s+(?:all\s+)?devices?", r"find\s+(?:all\s+)?devices?", r"what\s+devices?"],
         "system_info": [r"cpu", r"memory", r"disk", r"battery", r"system\s+(?:info|status|health)"],
         "screenshot": [r"screenshot", r"screen\s+(?:capture|shot)"],
+        "type_text": [r"type\s+(?:this|text|it)", r"keystroke", r"type\s+out"],
+        "hotkey": [r"press\s+(?:cmd|ctrl|alt|shift)", r"keyboard\s+shortcut", r"hotkey", r"press\s+ctrl"],
+        "launch_app": [r"open\s+(?:the\s+)?(?:app|application)", r"launch\s+(?:the\s+)?(?:app|application)", r"start\s+(?:the\s+)?(?:app|application)"],
+        "quit_app": [r"quit\s+(?:the\s+)?(?:app|application)", r"close\s+(?:the\s+)?(?:app|application)", r"force\s+quit"],
+        "clipboard": [r"clipboard", r"copy\s+(?:this|it|to)", r"paste", r"copy\s+paste"],
+        "frontmost": [r"what(?:'s|\s+is)\s+(?:in\s+)?front", r"frontmost\s+app", r"active\s+window"],
+        "running_apps": [r"(?:what\s+)?(?:apps?|applications?)\s+(?:are\s+)?running", r"list\s+(?:all\s+)?(?:apps|processes)"],
+
+        # Disk & Cleanup
+        "disk_usage": [r"(?:how\s+(?:much|many)\s+)?(?:disk|storage|space)\s+(?:left|used|available)", r"disk\s+(?:space|usage)", r"storage\s+status"],
+        "clean_cache": [r"clean\s+(?:my\s+)?(?:cache|caches)", r"clear\s+(?:my\s+)?(?:cache|caches)", r"free\s+(?:up\s+)?cache"],
+        "clean_logs": [r"clean\s+(?:my\s+)?(?:logs?|log\s+files?)", r"clear\s+(?:my\s+)?(?:logs?|log\s+files?)"],
+        "clean_downloads": [r"clean\s+(?:my\s+)?downloads", r"clear\s+(?:my\s+)?downloads", r"large\s+(?:files?|downloads?)"],
+        "free_space": [r"free\s+(?:up\s+)?(?:disk\s+)?space", r"clean\s+(?:up\s+)?(?:my\s+)?(?:disk|computer|mac|laptop)", r"make\s+space", r"disk\s+cleanup"],
 
         # Web & Navigation
         "web_search": [r"google\s+(?:for\s+)?", r"search\s+(?:for\s+)?", r"look\s+up\s+(?:on\s+)?(?:google|web|internet)"],
@@ -232,6 +246,56 @@ class UniversalActionEngine:
             {"action": "wait", "description": "Wait for page", "params": {"seconds": 3}},
             {"action": "browser_get_text", "description": "Read today's schedule"},
             {"action": "report_findings", "description": "Report calendar events"},
+        ],
+        "type_text": [
+            {"action": "system_type", "description": "Type the specified text on the system"},
+            {"action": "report_findings", "description": "Confirm text was typed"},
+        ],
+        "hotkey": [
+            {"action": "system_hotkey", "description": "Press the specified keyboard shortcut"},
+            {"action": "report_findings", "description": "Confirm hotkey was pressed"},
+        ],
+        "launch_app": [
+            {"action": "system_launch_app", "description": "Launch the specified application"},
+            {"action": "report_findings", "description": "Confirm app was launched"},
+        ],
+        "quit_app": [
+            {"action": "system_quit_app", "description": "Quit the specified application"},
+            {"action": "report_findings", "description": "Confirm app was quit"},
+        ],
+        "frontmost": [
+            {"action": "system_frontmost", "description": "Get the frontmost application"},
+            {"action": "report_findings", "description": "Report which app is in front"},
+        ],
+        "running_apps": [
+            {"action": "system_running_apps", "description": "List all running applications"},
+            {"action": "report_findings", "description": "Report running apps list"},
+        ],
+        "clipboard": [
+            {"action": "system_clipboard", "description": "Get/set clipboard contents"},
+            {"action": "report_findings", "description": "Report clipboard status"},
+        ],
+        "disk_usage": [
+            {"action": "system_disk_usage", "description": "Check disk usage"},
+            {"action": "report_findings", "description": "Report disk space status"},
+        ],
+        "clean_cache": [
+            {"action": "system_scan_cache", "description": "Scan for cache files"},
+            {"action": "report_findings", "description": "Report cache sizes and ask for confirmation"},
+        ],
+        "clean_logs": [
+            {"action": "system_scan_logs", "description": "Scan for log files"},
+            {"action": "report_findings", "description": "Report log sizes and ask for confirmation"},
+        ],
+        "clean_downloads": [
+            {"action": "system_scan_downloads", "description": "Scan for large files in Downloads"},
+            {"action": "report_findings", "description": "Report large files and ask for confirmation"},
+        ],
+        "free_space": [
+            {"action": "system_disk_usage", "description": "Check current disk usage"},
+            {"action": "system_scan_cache", "description": "Scan for cache files to clean"},
+            {"action": "system_scan_logs", "description": "Scan for log files to clean"},
+            {"action": "report_findings", "description": "Report cleanup options and ask for confirmation before cleaning"},
         ],
     }
 

@@ -1085,6 +1085,176 @@ def _execute_device_command(action, params):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    # ── System Control (Keyboard/Mouse/Desktop) ──────────────────────
+    if device_type == "SYSTEM":
+        try:
+            if action == "type_text":
+                text = params.get("text", "")
+                subprocess.run(["osascript", "-e", f'tell application "System Events" to keystroke "{text}"'], timeout=10)
+                return {"success": True, "action": "typed", "length": len(text)}
+
+            elif action == "hotkey":
+                keys = params.get("keys", [])
+                if len(keys) == 2:
+                    # Build AppleScript for modifier+key
+                    mod_map = {"cmd": "command down", "shift": "shift down", "ctrl": "control down", "alt": "option down"}
+                    mod = mod_map.get(keys[0], "")
+                    key = keys[1]
+                    if mod:
+                        script = f'tell application "System Events" to keystroke "{key}" using {mod}'
+                    else:
+                        script = f'tell application "System Events" to keystroke "{key}"'
+                    subprocess.run(["osascript", "-e", script], timeout=10)
+                    return {"success": True, "action": "hotkey", "keys": keys}
+
+            elif action == "press_key":
+                key = params.get("key", "return")
+                key_map = {"return": "return", "enter": "return", "tab": "tab", "escape": "escape",
+                           "delete": "delete", "backspace": "delete", "space": "space",
+                           "up": "up arrow", "down": "down arrow", "left": "left arrow", "right": "right arrow"}
+                mapped = key_map.get(key.lower(), key)
+                script = f'tell application "System Events" to key code {mapped}'
+                subprocess.run(["osascript", "-e", script], timeout=10)
+                return {"success": True, "action": "pressed", "key": key}
+
+            elif action == "launch_app":
+                app = params.get("app", "")
+                subprocess.run(["open", "-a", app], timeout=10)
+                return {"success": True, "action": "launched", "app": app}
+
+            elif action == "quit_app":
+                app = params.get("app", "")
+                subprocess.run(["osascript", "-e", f'tell application "{app}" to quit'], timeout=10)
+                return {"success": True, "action": "quit", "app": app}
+
+            elif action == "frontmost_app":
+                result = subprocess.run(["osascript", "-e", 'tell application "System Events" to get name of first application process whose frontmost is true'],
+                                       capture_output=True, text=True, timeout=10)
+                return {"success": True, "app": result.stdout.strip()}
+
+            elif action == "running_apps":
+                result = subprocess.run(["osascript", "-e", 'tell application "System Events" to get name of every application process'],
+                                       capture_output=True, text=True, timeout=10)
+                apps = [a.strip() for a in result.stdout.split(",") if a.strip()]
+                return {"success": True, "apps": apps}
+
+            elif action == "clipboard_get":
+                result = subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=10)
+                return {"success": True, "content": result.stdout}
+
+            elif action == "clipboard_set":
+                text = params.get("text", "")
+                proc = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+                proc.communicate(text.encode("utf-8"))
+                return {"success": True, "action": "clipboard_set", "length": len(text)}
+
+            elif action == "copy_paste":
+                text = params.get("text", "")
+                proc = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+                proc.communicate(text.encode("utf-8"))
+                time.sleep(0.1)
+                subprocess.run(["osascript", "-e", 'tell application "System Events" to keystroke "v" using command down'], timeout=10)
+                return {"success": True, "action": "paste", "length": len(text)}
+
+            elif action == "screenshot":
+                path = params.get("path", f"/tmp/jarvis_screenshot_{int(time.time())}.png")
+                subprocess.run(["screencapture", path], timeout=10)
+                return {"success": True, "action": "screenshot", "path": path}
+
+            elif action == "mouse_move":
+                x, y = params.get("x", 0), params.get("y", 0)
+                script = f'tell application "System Events" to set position of mouse to {{{x}, {y}}}'
+                subprocess.run(["osascript", "-e", script], timeout=10)
+                return {"success": True, "action": "mouse_moved", "x": x, "y": y}
+
+            elif action == "mouse_click":
+                x, y = params.get("x", 0), params.get("y", 0)
+                # Use cliclick if available, otherwise osascript
+                try:
+                    subprocess.run(["cliclick", f"c:{x},{y}"], timeout=5)
+                except FileNotFoundError:
+                    script = f'tell application "System Events" to click at {{{x}, {y}}}'
+                    subprocess.run(["osascript", "-e", script], timeout=10)
+                return {"success": True, "action": "clicked", "x": x, "y": y}
+
+            elif action == "get_screen_size":
+                result = subprocess.run(["osascript", "-e", 'tell application "Finder" to get bounds of window of desktop'],
+                                       capture_output=True, text=True, timeout=10)
+                return {"success": True, "bounds": result.stdout.strip()}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # ── Disk Cleaner ──────────────────────────────────────────────────
+    if device_type == "DISK":
+        try:
+            if action == "usage":
+                result = subprocess.run(["df", "-h", "/"], capture_output=True, text=True, timeout=10)
+                lines = result.stdout.strip().split("\n")
+                if len(lines) > 1:
+                    parts = lines[1].split()
+                    return {"success": True, "filesystem": parts[0], "size": parts[1], "used": parts[2], "available": parts[3], "percent": parts[4]}
+                return {"success": False, "error": "Could not parse df output"}
+
+            elif action == "scan_cache":
+                cache_dirs = [
+                    os.path.expanduser("~/Library/Caches"),
+                    os.path.expanduser("~/.cache"),
+                    os.path.expanduser("~/.npm/_cacache"),
+                ]
+                results = []
+                for d in cache_dirs:
+                    if os.path.exists(d):
+                        size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fn in os.walk(d) for f in fn)
+                        results.append({"path": d, "size_mb": round(size / (1024 * 1024), 1)})
+                return {"success": True, "caches": results}
+
+            elif action == "scan_logs":
+                log_dirs = [
+                    os.path.expanduser("~/Library/Logs"),
+                    os.path.expanduser("~/.npm/_logs"),
+                ]
+                results = []
+                for d in log_dirs:
+                    if os.path.exists(d):
+                        size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fn in os.walk(d) for f in fn)
+                        results.append({"path": d, "size_mb": round(size / (1024 * 1024), 1)})
+                return {"success": True, "logs": results}
+
+            elif action == "scan_downloads":
+                downloads = os.path.expanduser("~/Downloads")
+                large = []
+                if os.path.exists(downloads):
+                    for f in os.listdir(downloads):
+                        fp = os.path.join(downloads, f)
+                        if os.path.isfile(fp):
+                            size = os.path.getsize(fp)
+                            if size > 100 * 1024 * 1024:  # > 100MB
+                                large.append({"name": f, "size_mb": round(size / (1024 * 1024), 1)})
+                large.sort(key=lambda x: x["size_mb"], reverse=True)
+                return {"success": True, "large_files": large[:20]}
+
+            elif action == "clean":
+                # Requires explicit confirm
+                if not params.get("confirm"):
+                    return {"success": False, "error": "Set confirm=true to proceed with cleaning"}
+                path = params.get("path", "")
+                if not path or not os.path.exists(path):
+                    return {"success": False, "error": "Path not found"}
+                import shutil
+                if os.path.isfile(path):
+                    size = os.path.getsize(path)
+                    os.remove(path)
+                elif os.path.isdir(path):
+                    size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fn in os.walk(path) for f in fn)
+                    shutil.rmtree(path)
+                else:
+                    return {"success": False, "error": "Unknown path type"}
+                return {"success": True, "action": "cleaned", "path": path, "freed_mb": round(size / (1024 * 1024), 1)}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     return {"success": False, "error": f"Unknown device type: {device_type}"}
 
 def main():
