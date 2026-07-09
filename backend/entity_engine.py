@@ -381,8 +381,8 @@ def _gather_system_context() -> dict:
         ctx["device_recent"] = any((time.time() - d.get("last_seen", 0)) < 300 for d in devices)
         # Platform info from relay
         try:
-            from main import _relay_devices
-            relay_info = _relay_devices.get("local", {})
+            from relay import get_relay_device
+            relay_info = get_relay_device("local")
             ctx["relay_platform"] = relay_info.get("platform", "")
             ctx["relay_hostname"] = relay_info.get("hostname", "")
             # Also check relay's own last_seen (updated on heartbeat)
@@ -671,8 +671,8 @@ class Entity:
                     # Also check relay's own last_seen from heartbeat
                     if not _relay_was_recent:
                         try:
-                            from main import _relay_devices
-                            relay_ls = _relay_devices.get("local", {}).get("last_seen", 0)
+                            from relay import get_relay_device
+                            relay_ls = get_relay_device("local").get("last_seen", 0)
                             if relay_ls > 0 and (_time.time() - relay_ls) < 120:
                                 _relay_was_recent = True
                         except Exception:

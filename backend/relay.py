@@ -1,4 +1,4 @@
-"""Relay bridge — queues Windows actions by user_id. Multi-tenant."""
+"""Relay bridge — queues actions by user_id. Multi-tenant."""
 
 import json
 import threading
@@ -14,10 +14,28 @@ _expiry = 120
 _last_heartbeat: dict[str, float] = {}
 _HEARTBEAT_TIMEOUT = 60  # seconds before relay is considered dead
 
+# Relay device registry (updated by main.py on register/heartbeat)
+_relay_devices: dict[str, dict] = {}
+
 
 def record_heartbeat(user_id: str = "local"):
     with _lock:
         _last_heartbeat[user_id] = time.time()
+
+
+def update_relay_device(user_id: str, data: dict):
+    """Update relay device info (called from main.py on register/heartbeat)."""
+    with _lock:
+        if user_id in _relay_devices:
+            _relay_devices[user_id].update(data)
+        else:
+            _relay_devices[user_id] = data
+
+
+def get_relay_device(user_id: str = "local") -> dict:
+    """Get relay device info."""
+    with _lock:
+        return _relay_devices.get(user_id, {})
 
 
 def is_relay_alive(user_id: str = "local") -> bool:
@@ -25,15 +43,11 @@ def is_relay_alive(user_id: str = "local") -> bool:
         last = _last_heartbeat.get(user_id)
         if last is not None and (time.time() - last) < _HEARTBEAT_TIMEOUT:
             return True
-    # Fallback: check _relay_devices last_seen (updated on heartbeat in main.py)
-    try:
-        from main import _relay_devices
-        relay_info = _relay_devices.get(user_id, {})
-        relay_ls = relay_info.get("last_seen", 0)
+        # Fallback: check relay device last_seen
+        dev = _relay_devices.get(user_id, {})
+        relay_ls = dev.get("last_seen", 0)
         if relay_ls > 0 and (time.time() - relay_ls) < 120:
             return True
-    except Exception:
-        pass
     return False
 
 

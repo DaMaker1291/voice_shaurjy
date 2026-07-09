@@ -1038,9 +1038,7 @@ async def jarvis_command_post(data: dict):
 
 
 # ── Relay device registration ───────────────────────────────────
-
-_relay_devices: dict[str, dict] = {}
-
+# Device data is now stored in relay.py to avoid circular imports
 
 # ── Smart Home API ──────────────────────────────────────────────
 
@@ -1127,15 +1125,15 @@ async def smarthome_device_delete(data: dict):
 @app.post("/api/relay/register")
 async def relay_register(data: dict):
     """Called by relay agent on startup to register this device."""
-    from relay import record_heartbeat
+    from relay import record_heartbeat, update_relay_device
     from acc_manager import register_relay_device
     uid = data.get("user_id", "local")
-    _relay_devices[uid] = {
+    update_relay_device(uid, {
         "hostname": data.get("hostname", "?"),
         "platform": data.get("platform", "?"),
         "info": data.get("info", {}),
         "last_seen": __import__("time").time(),
-    }
+    })
     register_relay_device(uid, {"hostname": data.get("hostname", "?"), "platform": data.get("platform", "?"), "info": data.get("info", {})})
     record_heartbeat(uid)
     return {"status": "registered"}
@@ -1143,22 +1141,22 @@ async def relay_register(data: dict):
 @app.post("/api/relay/heartbeat")
 async def relay_heartbeat(data: dict):
     """Called periodically by relay agent to signal it's alive."""
-    from relay import record_heartbeat
+    from relay import record_heartbeat, update_relay_device
     uid = data.get("user_id", "local")
     record_heartbeat(uid)
-    # Also update last_seen on the relay device entry so entity_engine can check it
-    if uid in _relay_devices:
-        _relay_devices[uid]["last_seen"] = __import__("time").time()
+    update_relay_device(uid, {"last_seen": __import__("time").time()})
     return {"status": "ok"}
 
 @app.get("/api/relay/devices")
 async def relay_devices(user_id: str = "local"):
-    return {"devices": [_relay_devices.get(user_id, {})]}
+    from relay import get_relay_device
+    return {"devices": [get_relay_device(user_id)]}
 
 @app.get("/api/device/current")
 async def current_device(user_id: str = "local"):
     """Return the current device the user is connected from — with full platform info."""
-    relay_info = _relay_devices.get(user_id, {})
+    from relay import get_relay_device
+    relay_info = get_relay_device(user_id)
     platform_str = relay_info.get("platform", "")
     hostname = relay_info.get("hostname", "?")
     info = relay_info.get("info", {})
