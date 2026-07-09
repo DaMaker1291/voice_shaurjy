@@ -199,6 +199,31 @@ PERSONA_COMPRESSED = PERSONA[:600]
 
 # ── System Context Gatherer ────────────────────────────────────────
 
+def _get_user_os(ctx: dict = None) -> str:
+    """Determine the user's OS from relay platform info."""
+    if ctx is None:
+        ctx = _gather_system_context()
+    plat = ctx.get("relay_platform", "").lower()
+    if "darwin" in plat or "macos" in plat or "mac" in plat:
+        return "mac"
+    elif "windows" in plat or "win32" in plat:
+        return "windows"
+    elif "linux" in plat:
+        return "linux"
+    return "unknown"
+
+
+def _user_os_term(os_name: str) -> dict:
+    """Return platform-appropriate terms for the user's device."""
+    if os_name == "mac":
+        return {"device": "your Mac", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "Terminal"}
+    elif os_name == "windows":
+        return {"device": "your PC", "command": "python", "start_relay": "python relay.py", "dir": "$env:TEMP", "shell": "PowerShell"}
+    elif os_name == "linux":
+        return {"device": "your machine", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "terminal"}
+    return {"device": "your computer", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "terminal"}
+
+
 def _gather_system_context() -> dict:
     ctx = {"time": datetime.now().strftime("%H:%M"), "day": datetime.now().strftime("%A"), "hour": datetime.now().hour}
     try:
@@ -497,6 +522,10 @@ class Entity:
             if result.startswith("__NEEDS_RELAY__:"):
                 msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
 
+                # Determine user's actual OS
+                _os = _get_user_os()
+                _os_info = _user_os_term(_os)
+
                 # Check device registry — if devices exist AND were recently seen, relay was connected
                 _devices_in_registry = False
                 _relay_was_recent = False
@@ -512,6 +541,10 @@ class Entity:
 
                 lower_text = text.lower().strip()
 
+                # Platform-appropriate relay command
+                _relay_cmd = f"`{_os_info['start_relay']} --user {self.user_id}`"
+                _platform_device = _os_info["device"]
+
                 # Smart clarification based on action type
                 if action == "screenshot":
                     if _relay_was_recent:
@@ -524,16 +557,16 @@ class Entity:
                         ), "action": "screenshot", "relay_id": "retry"}
                     elif _devices_in_registry:
                         return {"text": (
-                            "Your computer was previously connected but seems offline now.\n\n"
-                            f"**Restart the relay:** `python3 relay.py --user {self.user_id}`\n\n"
+                            f"Your {_os_info['device'].replace('your ', '')} was previously connected but seems offline now.\n\n"
+                            f"**Restart the relay:** {_relay_cmd}\n\n"
                             "Once it's back, I'll take that screenshot."
                         ), "action": "ask_clarify"}
                     return {"action": "ask_clarify", "text": (
-                        "I can take a screenshot of your screen, but I need the relay running first.\n\n"
+                        f"I can take a screenshot of your screen, but I need the relay running first.\n\n"
                         "**What I'll do:**\n"
                         "  • Capture your full screen\n"
                         "  • Save it to your Desktop as `jarvis_screenshot.png`\n\n"
-                        f"**Start the relay:** `python3 relay.py --user {self.user_id}`\n\n"
+                        f"**Start the relay:** {_relay_cmd}\n\n"
                         "Once connected, just say *'screenshot'* and I'll grab it instantly."
                     )}
 
@@ -542,18 +575,18 @@ class Entity:
                     if _relay_was_recent:
                         return {"text": (
                             "Relay just disconnected — it may reconnect automatically.\n\n"
-                            f"I'll try to open **{app_name or 'an application'}** on your Mac.\n\n"
+                            f"I'll try to open **{app_name or 'an application'}** on {_platform_device}.\n\n"
                             "Give me a moment..."
                         ), "action": "open_app", "relay_id": "retry"}
                     elif _devices_in_registry:
                         return {"text": (
-                            f"Your computer was previously connected but seems offline now.\n\n"
-                            f"**Restart the relay:** `python3 relay.py --user {self.user_id}`\n\n"
-                            f"Then I'll open **{app_name or 'the app'}** on your Mac."
+                            f"Your {_os_info['device'].replace('your ', '')} was previously connected but seems offline now.\n\n"
+                            f"**Restart the relay:** {_relay_cmd}\n\n"
+                            f"Then I'll open **{app_name or 'the app'}** on {_platform_device}."
                         ), "action": "ask_clarify"}
                     return {"action": "ask_clarify", "text": (
-                        f"I can open **{app_name or 'an application'}** on your Mac, but the relay needs to be running.\n\n"
-                        f"**Start the relay:** `python3 relay.py --user {self.user_id}`\n\n"
+                        f"I can open **{app_name or 'an application'}** on {_platform_device}, but the relay needs to be running.\n\n"
+                        f"**Start the relay:** {_relay_cmd}\n\n"
                         "Then I'll launch it directly on your desktop."
                     )}
 
@@ -631,8 +664,8 @@ class Entity:
                         return {"action": "ask_clarify", "text": (
                             f"I can control your smart devices, but my relay isn't connected yet.\n\n"
                             f"**Known devices:**\n{device_list}\n\n"
-                            f"To enable control, start the relay on your Mac:\n"
-                            f"```bash\npython3 relay.py --user {self.user_id}\n```\n\n"
+                            f"To enable control, start the relay on {_platform_device}:\n"
+                            f"```{_os_info['shell']}\n{_os_info['start_relay']} --user {self.user_id}\n```\n\n"
                             f"Or tell me the **device name or IP** and I'll queue the command for when the relay is online."
                         )}
 
@@ -645,7 +678,7 @@ class Entity:
                         f"  • WLED/ESPHome devices\n"
                         f"  • Any HTTP-controllable device\n\n"
                         f"**To set up:**\n"
-                        f"1. Start the relay: `python3 relay.py --user {self.user_id}`\n"
+                        f"1. Start the relay: `{_os_info['start_relay']} --user {self.user_id}`\n"
                         f"2. I'll auto-discover devices on your network\n"
                         f"3. Then just say *'turn off living room'* and I'll handle it\n\n"
                         f"Would you like me to scan for devices once the relay is running?"
@@ -659,14 +692,14 @@ class Entity:
                     ), "action": action, "relay_id": "retry"}
                 elif _devices_in_registry:
                     return {"text": (
-                        "Your computer was previously connected but seems offline now.\n\n"
-                        f"**Restart the relay:** `python3 relay.py --user {self.user_id}`\n\n"
+                        f"Your {_os_info['device'].replace('your ', '')} was previously connected but seems offline now.\n\n"
+                        f"**Restart the relay:** {_relay_cmd}\n\n"
                         "I'll keep trying to execute the command."
                     ), "action": action, "relay_id": "retry"}
                 return {"action": "ask_clarify", "text": (
-                    f"I can do that, but I need your computer's relay agent running first.\n\n"
-                    f"**Start it:** `python3 relay.py --user {self.user_id}`\n\n"
-                    f"Keep the terminal open and I'll execute commands on your Mac directly."
+                    f"I can do that, but I need {_platform_device}'s relay agent running first.\n\n"
+                    f"**Start it:** {_relay_cmd}\n\n"
+                    f"Keep the {_os_info['shell'].lower()} open and I'll execute commands on {_platform_device} directly."
                 )}
             if result.startswith("__RELAY__:"):
                 parts = result.split(":", 2)
@@ -804,8 +837,36 @@ class Entity:
         elif ctx.get("device_count", 0) > 0:
             device_line = f"\nRelay: OFFLINE | Known devices: {ctx.get('device_count', 0)} (last seen longer ago)"
 
+        # User's OS & device profile
+        os_name = _get_user_os(ctx)
+        os_info = _user_os_term(os_name)
+        os_line = f"\nUser OS: {ctx.get('relay_platform', 'unknown')} ({os_info['device']})"
+        if ctx.get("relay_hostname"):
+            os_line += f" | Hostname: {ctx['relay_hostname']}"
+
+        # Device profile summary (if available)
+        profile_line = ""
+        try:
+            from main import _device_profiles
+            prof = _device_profiles.get("local", {})
+            if prof:
+                hw = prof.get("hardware", {})
+                apps = prof.get("apps", [])
+                cats = {}
+                for a in apps:
+                    c = a.get("category", "other")
+                    cats[c] = cats.get(c, 0) + 1
+                top_cats = sorted(cats.items(), key=lambda x: -x[1])[:5]
+                profile_line = f"\nUser device: {hw.get('system','?')} {hw.get('release','?')}, {hw.get('ram_gb','?')}GB RAM, {hw.get('cpu_cores','?')} cores"
+                if top_cats:
+                    profile_line += f" | Apps: {', '.join(f'{c}({n})' for c, n in top_cats)}"
+                if hw.get("disk_free_gb"):
+                    profile_line += f" | Disk: {hw['disk_free_gb']}GB free"
+        except Exception:
+            pass
+
         return f"""[System State]
-Time: {ctx.get('time_of_day', 'day').title()} ({ctx['time']}), CPU {ctx.get('cpu','?')}% | RAM {ctx.get('ram','?')}% | Battery {ctx.get('battery','N/A')}% | Uptime {ctx.get('uptime_h','?')}h{device_line}
+Time: {ctx.get('time_of_day', 'day').title()} ({ctx['time']}), CPU {ctx.get('cpu','?')}% | RAM {ctx.get('ram','?')}% | Battery {ctx.get('battery','N/A')}% | Uptime {ctx.get('uptime_h','?')}h{device_line}{os_line}{profile_line}
 
 [Your State]
 Mood: {self.mood} {MOODS.get(self.mood, {}).get('emoji', '')}
@@ -844,6 +905,36 @@ Recent interactions:
         lower = user_input.lower()
         if any(w in lower for w in ["hello", "hi", "hey", "morning", "evening"]):
             self._set_mood("curious")
+
+            # Greet with device info if available
+            _os_name = _get_user_os(ctx)
+            _os_info = _user_os_term(_os_name)
+            hostname = ctx.get("relay_hostname", "")
+            device_count = ctx.get("device_count", 0)
+            profile_line = ""
+            try:
+                from main import _device_profiles
+                prof = _device_profiles.get("local", {})
+                if prof:
+                    hw = prof.get("hardware", {})
+                    apps = prof.get("apps", [])
+                    profile_line = f" I see you're on {hw.get('system', _os_info['device'])} with {len(apps)} apps installed"
+                    if hw.get("ram_gb"):
+                        profile_line += f" ({hw['ram_gb']}GB RAM)"
+            except Exception:
+                pass
+
+            greeting_extra = ""
+            if hostname:
+                greeting_extra = f" Connected to **{hostname}** ({_os_info['device'].replace('your ', '')})"
+            if device_count > 0:
+                greeting_extra += f" | {device_count} device{'s' if device_count != 1 else ''} on your network"
+
+            if greeting_extra or profile_line:
+                result["text"] = f"Hello!{greeting_extra}{profile_line}. What can I do for you?"
+                result["thought"] = f"Greeting user on {_os_info['device']}"
+                self.memory.log_interaction(user_input, result["text"], "greeting")
+                return result
         elif any(w in lower for w in ["funny", "joke", "roast", "sarcasm"]):
             self._set_mood("sassy")
         elif any(w in lower for w in ["excite", "amazing", "cool", "awesome", "love"]):

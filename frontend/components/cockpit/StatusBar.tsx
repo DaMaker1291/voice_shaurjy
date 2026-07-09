@@ -11,12 +11,25 @@ interface SystemStatus {
   warnings: { level: string; message: string }[];
 }
 
+interface CurrentDevice {
+  hostname: string;
+  platform: string;
+  os: string;
+  os_icon: string;
+  version: string;
+  username: string;
+  ram_gb: number | null;
+  cpu_cores: number | null;
+  app_count: number;
+  last_seen: number;
+}
+
 export default function StatusBar() {
   const [relay, setRelay] = useState(false);
   const [agents, setAgents] = useState(0);
   const [devices, setDevices] = useState(0);
   const [sys, setSys] = useState<SystemStatus | null>(null);
-  const [deviceInfo, setDeviceInfo] = useState<{ platform?: string; hostname?: string }>({});
+  const [device, setDevice] = useState<CurrentDevice | null>(null);
 
   useEffect(() => {
     const poll = async () => {
@@ -33,11 +46,12 @@ export default function StatusBar() {
       try {
         const res = await window.fetch("/api/relay/devices?user_id=local");
         const data = await res.json();
-        const devs = data.devices || [];
-        setDevices(devs.length);
-        if (devs.length > 0 && devs[0].platform) {
-          setDeviceInfo({ platform: devs[0].platform, hostname: devs[0].hostname });
-        }
+        setDevices((data.devices || []).length);
+      } catch {}
+      try {
+        const res = await window.fetch("/api/device/current?user_id=local");
+        const data = await res.json();
+        if (data.hostname) setDevice(data);
       } catch {}
       try {
         const res = await window.fetch("/api/system/status");
@@ -56,6 +70,10 @@ export default function StatusBar() {
 
   const hasDanger = sys?.warnings?.some(w => w.level === "danger");
 
+  // Device was seen in last 2 minutes = probably still connected even if heartbeat failed
+  const deviceRecentlyActive = device && device.last_seen > 0 && (Date.now() / 1000 - device.last_seen) < 120;
+  const showRelayOnline = relay || deviceRecentlyActive;
+
   return (
     <div style={{
       height: 22, background: "#08090c", borderTop: "1px solid #1a1d23",
@@ -64,14 +82,25 @@ export default function StatusBar() {
       color: "var(--text-muted)", flexShrink: 0, letterSpacing: "0.04em",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        {/* Relay Status */}
+        {/* Relay + Device Status */}
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <div style={{ width: 4, height: 4, borderRadius: "50%", background: relay ? "#00FF66" : "#FF3333", boxShadow: `0 0 4px ${relay ? "rgba(0,255,102,0.4)" : "rgba(255,51,51,0.4)"}` }} />
-          <span style={{ color: relay ? "#00FF66" : "#FF3333" }}>RELAY {relay ? "ONLINE" : "OFFLINE"}</span>
-          {relay && deviceInfo.platform && (
-            <span style={{ color: "#667085" }}>{deviceInfo.platform}</span>
-          )}
+          <div style={{ width: 4, height: 4, borderRadius: "50%", background: showRelayOnline ? "#00FF66" : "#FF3333", boxShadow: `0 0 4px ${showRelayOnline ? "rgba(0,255,102,0.4)" : "rgba(255,51,51,0.4)"}` }} />
+          <span style={{ color: showRelayOnline ? "#00FF66" : "#FF3333" }}>
+            {showRelayOnline ? "RELAY ONLINE" : "RELAY OFFLINE"}
+          </span>
         </div>
+
+        {/* Current Device */}
+        {device && device.hostname && (
+          <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "0 6px", border: "1px solid #1a1d23", borderRadius: 3 }}>
+            <span>{device.os_icon}</span>
+            <span style={{ color: "#00B4D8" }}>{device.hostname}</span>
+            <span style={{ color: "#667085" }}>{device.os}</span>
+            {device.app_count > 0 && (
+              <span style={{ color: "#667085" }}>{device.app_count} apps</span>
+            )}
+          </div>
+        )}
 
         {/* Agent Count */}
         {agents > 0 && (

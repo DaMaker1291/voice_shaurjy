@@ -26,6 +26,11 @@ _KEYWORD_MAP: dict[str, str] = {
     "run code": "run_python",
     "open app": "open_app", "launch app": "open_app", "start app": "open_app",
     "go to": "open_app", "navigate to": "open_app", "browse to": "open_app",
+    "explore your device": "system_explore", "scan your device": "system_explore",
+    "explore your system": "system_explore", "explore my device": "system_explore",
+    "what apps do you have": "system_explore", "what apps do i have": "system_explore",
+    "what can your device do": "system_explore", "what can this device do": "system_explore",
+    "tell me about your device": "system_explore", "tell me about this device": "system_explore",
     "research": "fetch_search", "investigate": "fetch_search",
     "scrape": "fetch_search", "read the web": "fetch_search",
     "fetch": "fetch_search",
@@ -1261,6 +1266,25 @@ def _logoff(_): _ps('(rundll32.exe user32.dll,LockWorkStation)'); return "Signin
 def _whoami(_):
     u = _ps('$e=[Environment]::UserName; $d=[Environment]::UserDomainName; "$d\\$e"')
     return f"Current user: {u}"
+
+@register("system_explore")
+def _system_explore(_):
+    """Explore the device — returns profile summary. On relay, sends full profile to HF Space."""
+    try:
+        from device_profiler import build_full_profile, get_profile_summary
+        profile = build_full_profile()
+        # Send to HF Space
+        try:
+            import urllib.request, json
+            hf_url = os.environ.get("HF_API", "https://dgfhgjhj-jarvis-ai-brain.hf.space")
+            data = json.dumps({"user_id": "local", "profile": profile}).encode()
+            req = urllib.request.Request(f"{hf_url}/api/device/profile", data=data, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=10)
+        except Exception:
+            pass
+        return get_profile_summary(profile)
+    except Exception as e:
+        return f"Device exploration failed: {e}"
 
 @register("switch_user")
 def _switch_user(_):

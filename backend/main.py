@@ -1152,6 +1152,82 @@ async def relay_heartbeat(data: dict):
 async def relay_devices(user_id: str = "local"):
     return {"devices": [_relay_devices.get(user_id, {})]}
 
+@app.get("/api/device/current")
+async def current_device(user_id: str = "local"):
+    """Return the current device the user is connected from — with full platform info."""
+    relay_info = _relay_devices.get(user_id, {})
+    platform_str = relay_info.get("platform", "")
+    hostname = relay_info.get("hostname", "?")
+    info = relay_info.get("info", {})
+
+    # Determine OS from platform string
+    plat_lower = platform_str.lower()
+    if "darwin" in plat_lower or "macos" in plat_lower:
+        os_name = "macOS"
+        os_icon = "🍎"
+    elif "windows" in plat_lower:
+        os_name = "Windows"
+        os_icon = "🪟"
+    elif "linux" in plat_lower:
+        os_name = "Linux"
+        os_icon = "🐧"
+    else:
+        os_name = "Unknown"
+        os_icon = "💻"
+
+    # Extract version from platform string
+    import re as _re
+    version = ""
+    v_match = _re.search(r'(\d+\.\d+(?:\.\d+)?)', platform_str)
+    if v_match:
+        version = v_match.group(1)
+
+    # Get device profile if available
+    profile = _device_profiles.get(user_id, {})
+    hw = profile.get("hardware", {})
+    apps = profile.get("apps", [])
+
+    return {
+        "hostname": hostname,
+        "platform": platform_str,
+        "os": os_name,
+        "os_icon": os_icon,
+        "version": version,
+        "username": info.get("whoami", ""),
+        "ram_gb": hw.get("ram_gb"),
+        "cpu_cores": hw.get("cpu_cores"),
+        "app_count": len(apps),
+        "last_seen": relay_info.get("last_seen", 0),
+    }
+
+
+# ── Device Profile ────────────────────────────────────────────
+_device_profiles: dict = {}
+
+@app.get("/api/device/profile")
+async def get_device_profile(user_id: str = "local"):
+    """Get the device profile for a user (set by relay on registration)."""
+    return {"profile": _device_profiles.get(user_id, {})}
+
+@app.post("/api/device/profile")
+async def set_device_profile(data: dict):
+    """Relay sends device profile after running system_explore."""
+    uid = data.get("user_id", "local")
+    profile = data.get("profile", {})
+    _device_profiles[uid] = profile
+    return {"status": "ok", "apps": len(profile.get("apps", []))}
+
+@app.post("/api/device/explore")
+async def device_explore(user_id: str = "local"):
+    """Trigger a full device exploration via relay."""
+    try:
+        from relay import is_relay_alive, queue_action
+        if not is_relay_alive(user_id):
+            return {"status": "offline", "error": "Relay not connected"}
+        rid = queue_action("system_explore", "", user_id=user_id)
+        return {"status": "queued", "relay_id": rid}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 # ── Autonomous Agent ────────────────────────────────────────────
 

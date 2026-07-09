@@ -1434,6 +1434,18 @@ def main():
     except Exception as e:
         print(f"[Relay] Registration failed: {e} (continuing...)")
 
+    # Run device profiler on startup — send full profile to HF Space
+    try:
+        sys.path.insert(0, os.path.join(_script_dir, "backend"))
+        from device_profiler import build_full_profile, get_profile_summary
+        profile = build_full_profile()
+        post(f"{HF_API}/api/device/profile", {"user_id": args.user, "profile": profile})
+        summary = get_profile_summary(profile)
+        print(f"[Relay] Device profile sent: {len(profile.get('apps', []))} apps, {profile.get('hardware', {}).get('ram_gb', '?')}GB RAM")
+        print(f"[Relay] Profile: {summary[:200]}")
+    except Exception as e:
+        print(f"[Relay] Device profiling failed: {e}")
+
     poll_ids = list(dict.fromkeys([args.user, "local"]))
     fb_idx = 0
     hb = 0
@@ -1509,6 +1521,19 @@ def main():
                     real_devices = _discover_real_devices()
                     _push_devices_to_hf(real_devices)
                     result = {"success": True, "devices_found": len(real_devices), "devices": real_devices}
+                elif act == "system_explore":
+                    # Full device exploration — run profiler and send profile to HF
+                    try:
+                        sys.path.insert(0, os.path.join(_script_dir, "backend"))
+                        from device_profiler import build_full_profile, get_profile_summary
+                        profile = build_full_profile()
+                        # Send profile to HF Space
+                        post(f"{HF_API}/api/device/profile", {"user_id": args.user, "profile": profile})
+                        summary = get_profile_summary(profile)
+                        result = {"success": True, "profile": profile, "summary": summary}
+                        print(f"[Relay] Device profile: {len(profile.get('apps', []))} apps, {profile.get('hardware', {}).get('ram_gb', '?')}GB RAM")
+                    except Exception as e:
+                        result = {"success": False, "error": str(e)}
                 elif act.startswith("device_") or (isinstance(params, dict) and params.get("device_type")):
                     result = _execute_device_command(act.replace("device_", ""), params)
                 elif target == "OS_AGENT" or target == "HAL_AGENT":

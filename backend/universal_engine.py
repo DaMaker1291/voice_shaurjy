@@ -123,6 +123,7 @@ class UniversalActionEngine:
         "desktop_paste": [r"paste\s+(?:this|it|from)", r"paste\s+(?:from\s+)?clipboard"],
         "desktop_undo": [r"undo", r"undo\s+(?:this|that|the\s+last)"],
         "desktop_save": [r"save\s+(?:this|the|current)", r"save\s+(?:the\s+)?(?:file|document)"],
+        "system_explore": [r"explore\s+(?:your\s+)?(?:device|computer|system|pc|machine)", r"scan\s+(?:your\s+)?(?:device|computer|system)", r"what(?:'s|\s+is)\s+(?:on\s+)?(?:your|this)\s+(?:device|computer|system|pc)", r"tell\s+me\s+about\s+(?:your|this)\s+(?:device|computer|system|pc)", r"what\s+apps?\s+(?:do\s+)?(?:you|i)\s+(?:have|can)", r"what\s+(?:can|does)\s+(?:your|this)\s+(?:device|computer|system)\s+(?:do|have)"],
         "desktop_go_to": [r"go\s+to\s+(?:https?://|www\.|google|youtube|github|reddit|twitter|facebook)", r"navigate\s+to", r"open\s+(?:the\s+)?(?:website|site|url|page)"],
 
         # Autonomous
