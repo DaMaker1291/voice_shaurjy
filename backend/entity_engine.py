@@ -3,6 +3,131 @@
 import json, os, re, time, threading, random
 from datetime import datetime, timedelta
 from collections import defaultdict
+from difflib import get_close_matches
+
+
+# ── Typo Correction ──────────────────────────────────────────────
+# Common app names and commands — corrected against these
+_KNOWN_APPS = [
+    "outlook", "chrome", "firefox", "safari", "edge", "slack", "discord", "teams",
+    "zoom", "spotify", "notion", "obsidian", "figma", "blender", "photoshop",
+    "illustrator", "vscode", "visual studio code", "xcode", "android studio",
+    "terminal", "iterm", "finder", "mail", "messages", "facetime", "maps",
+    "siri", "calendar", "notes", "reminders", "photos", "preview", "textedit",
+    "word", "excel", "powerpoint", "onenote", "onedrive", "dropbox",
+    "steam", "epic games", "battle.net", "docker", "postman", "insomnia",
+    "vlc", "iina", "quicktime", "itunes", "music", "podcasts", "tv",
+    "system settings", "activity monitor", "disk utility", "time machine",
+    "whatsapp", "telegram", "signal", "skype", "facetime",
+    "sublime text", "atom", "vim", "neovim", "emacs",
+    "pycharm", "intellij", "webstorm", "datagrip",
+    "word", "pages", "numbers", "keynote", "libreoffice",
+    "outlook", "thunderbird", "spark", "airmail",
+    "1password", "bitwarden", "lastpass",
+    "alfred", "raycast", "spotlight", "bettertouchtool",
+    "the browser", "browser", "app", "file", "folder", "desktop",
+    "youtube", "netflix", "amazon prime", "disney", "hulu",
+    "github", "gitlab", "bitbucket",
+    "cursor", "windsurf", "copilot",
+]
+
+# Common command phrases — corrected against these
+_COMMAND_PHRASES = [
+    "screenshot", "screen capture", "screen shot",
+    "volume up", "volume down", "mute", "unmute",
+    "brightness up", "brightness down",
+    "dark mode", "light mode", "night mode",
+    "wifi", "bluetooth", "airdrop",
+    "lock screen", "sleep", "shutdown", "restart", "log off",
+    "what time", "what's the time", "current time",
+    "battery", "cpu usage", "memory", "disk space",
+    "copy", "paste", "cut", "undo", "redo",
+    "select all", "save", "close", "quit",
+    "new tab", "new window", "close tab",
+    "play", "pause", "stop", "next", "previous",
+    "open camera", "take photo", "record screen",
+    "check email", "new email", "compose email",
+    "check weather", "weather forecast",
+    "set timer", "set alarm", "remind me",
+    "scan network", "scan devices", "find devices",
+    "turn on lights", "turn off lights", "toggle lights",
+    "turn on plug", "turn off plug", "toggle plug",
+]
+
+
+def _fix_typos(text: str) -> str:
+    """Correct common typos in user input using fuzzy matching."""
+    words = text.lower().strip().split()
+    if len(words) == 0:
+        return text
+
+    corrected = []
+    changed = False
+
+    for word in words:
+        # Strip punctuation for matching
+        clean = re.sub(r'[^a-z0-9]', '', word)
+        if not clean:
+            corrected.append(word)
+            continue
+
+        # Try exact match in known apps first
+        if clean in _KNOWN_APPS:
+            corrected.append(word)
+            continue
+
+        # Try fuzzy match against known apps (must be close enough)
+        matches = get_close_matches(clean, _KNOWN_APPS, n=1, cutoff=0.7)
+        if matches and matches[0] != clean:
+            corrected.append(matches[0])
+            changed = True
+        else:
+            corrected.append(word)
+
+    result = " ".join(corrected)
+
+    # Fix common command typos with regex
+    typo_fixes = [
+        (r'\bgo\s+tou\b', 'go to'),
+        (r'\bgo\s+too\b', 'go to'),
+        (r'\bopen\s+tou\b', 'open'),
+        (r'\bopne\b', 'open'),
+        (r'\bclsoe\b', 'close'),
+        (r'\bclsos\b', 'close'),
+        (r'\bscrenshot\b', 'screenshot'),
+        (r'\bscreesnhot\b', 'screenshot'),
+        (r'\bscrenshot\b', 'screenshot'),
+        (r'\bvolumr\b', 'volume'),
+        (r'\bvoluem\b', 'volume'),
+        (r'\bbrightnes\b', 'brightness'),
+        (r'\bbritghness\b', 'brightness'),
+        (r'\bweahter\b', 'weather'),
+        (r'\bwhetehr\b', 'weather'),
+        (r'\btimr\b', 'timer'),
+        (r'\balaarm\b', 'alarm'),
+        (r'\bremnd\b', 'remind'),
+        (r'\brecieve\b', 'receive'),
+        (r'\bschedlue\b', 'schedule'),
+        (r'\bcalender\b', 'calendar'),
+        (r'\bmail\b', 'mail'),
+        (r'\bemial\b', 'email'),
+        (r'\bcheck\s+emial\b', 'check email'),
+        (r'\bnew\s+emial\b', 'new email'),
+        (r'\bcomopse\b', 'compose'),
+        (r'\bnetwrok\b', 'network'),
+        (r'\bdevcies\b', 'devices'),
+        (r'\bthermostat\b', 'thermostat'),
+        (r'\bligths\b', 'lights'),
+        (r'\blights\b', 'lights'),
+        (r'\bplug\b', 'plug'),
+        (r'\btpggle\b', 'toggle'),
+        (r'\btoglle\b', 'toggle'),
+    ]
+
+    for pattern, replacement in typo_fixes:
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+
+    return result
 from groq_agent import generate as groq_generate
 
 _ENTITY_DIR = os.path.join(os.path.dirname(__file__), ".entity_data")
@@ -206,7 +331,7 @@ def _get_user_os(ctx: dict = None) -> str:
     plat = ctx.get("relay_platform", "").lower()
     if "darwin" in plat or "macos" in plat or "mac" in plat:
         return "mac"
-    elif "windows" in plat or "win32" in plat:
+    elif "windows" in plat or "win32" in plat or "win" in plat:
         return "windows"
     elif "linux" in plat:
         return "linux"
@@ -260,6 +385,11 @@ def _gather_system_context() -> dict:
             relay_info = _relay_devices.get("local", {})
             ctx["relay_platform"] = relay_info.get("platform", "")
             ctx["relay_hostname"] = relay_info.get("hostname", "")
+            # Also check relay's own last_seen (updated on heartbeat)
+            relay_last_seen = relay_info.get("last_seen", 0)
+            if relay_last_seen > 0 and (time.time() - relay_last_seen) < 120:
+                ctx["relay_alive"] = True  # Heartbeat was recent, consider alive
+                ctx["device_recent"] = True
         except Exception:
             pass
     except Exception:
@@ -513,8 +643,10 @@ class Entity:
             exec_params = text
             if action == "open_app":
                 import re as _re
-                m = _re.match(r'^(?:open|launch|start|go\s+to)\s+(?:the\s+|app\s+)?(.+?)$', text.lower().strip())
+                m = _re.match(r'^(?:open|launch|start|go\s+to)\s+(?:the\s+|app\s+|up\s+)?(.+?)$', text.lower().strip())
                 exec_params = m.group(1) if m else text
+                # Also strip common suffixes
+                exec_params = _re.sub(r'\s+(?:please|now|for me|on\s+(?:my\s+)?(?:computer|pc|mac|machine))$', '', exec_params).strip()
 
             result = cloud_safe_execute(action, exec_params, user_id=self.user_id)
             label = _ACTION_LABELS.get(action, "")
@@ -526,7 +658,7 @@ class Entity:
                 _os = _get_user_os()
                 _os_info = _user_os_term(_os)
 
-                # Check device registry — if devices exist AND were recently seen, relay was connected
+                # Check device registry — if devices exist OR relay was recently seen, relay was connected
                 _devices_in_registry = False
                 _relay_was_recent = False
                 try:
@@ -534,8 +666,17 @@ class Entity:
                     import time as _time
                     _all_devs = DeviceManager().get_all_devices()
                     _devices_in_registry = len(_all_devs) > 0
-                    # Check if any device was seen in last 5 minutes = relay was recently connected
+                    # Check if any device was seen in last 5 minutes
                     _relay_was_recent = any((_time.time() - d.get("last_seen", 0)) < 300 for d in _all_devs)
+                    # Also check relay's own last_seen from heartbeat
+                    if not _relay_was_recent:
+                        try:
+                            from main import _relay_devices
+                            relay_ls = _relay_devices.get("local", {}).get("last_seen", 0)
+                            if relay_ls > 0 and (_time.time() - relay_ls) < 120:
+                                _relay_was_recent = True
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
@@ -887,6 +1028,10 @@ Recent interactions:
 
     def process(self, user_input: str, history: list = None) -> dict:
         now = time.time()
+
+        # Fix typos before processing
+        user_input = _fix_typos(user_input)
+
         self.memory.log_interaction(user_input, "")
         self._extract_knowledge(user_input)
         related_goals = self._find_related_goals(user_input)

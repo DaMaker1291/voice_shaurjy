@@ -23,9 +23,18 @@ def record_heartbeat(user_id: str = "local"):
 def is_relay_alive(user_id: str = "local") -> bool:
     with _lock:
         last = _last_heartbeat.get(user_id)
-        if last is None:
-            return False
-        return (time.time() - last) < _HEARTBEAT_TIMEOUT
+        if last is not None and (time.time() - last) < _HEARTBEAT_TIMEOUT:
+            return True
+    # Fallback: check _relay_devices last_seen (updated on heartbeat in main.py)
+    try:
+        from main import _relay_devices
+        relay_info = _relay_devices.get(user_id, {})
+        relay_ls = relay_info.get("last_seen", 0)
+        if relay_ls > 0 and (time.time() - relay_ls) < 120:
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def queue_action(action: str, params: str = "", user_id: str = "local") -> str:

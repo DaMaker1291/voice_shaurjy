@@ -1146,6 +1146,9 @@ async def relay_heartbeat(data: dict):
     from relay import record_heartbeat
     uid = data.get("user_id", "local")
     record_heartbeat(uid)
+    # Also update last_seen on the relay device entry so entity_engine can check it
+    if uid in _relay_devices:
+        _relay_devices[uid]["last_seen"] = __import__("time").time()
     return {"status": "ok"}
 
 @app.get("/api/relay/devices")

@@ -842,6 +842,48 @@ def macos_exec(action, params=""):
     return None
 
 def _win_exec(action, params=""):
+    # Windows app name resolver — maps common names to actual executables
+    WIN_APP_MAP = {
+        "vs code": "code", "vscode": "code", "visual studio code": "code",
+        "chrome": "chrome", "google chrome": "chrome",
+        "firefox": "firefox", "edge": "msedge", "microsoft edge": "msedge",
+        "outlook": "outlook", "microsoft outlook": "outlook",
+        "teams": "ms-teams", "microsoft teams": "ms-teams",
+        "word": "winword", "microsoft word": "winword",
+        "excel": "excel", "microsoft excel": "excel",
+        "powerpoint": "powerpnt", "microsoft powerpoint": "powerpnt",
+        "notepad": "notepad", "notepad++": "notepad++",
+        "terminal": "wt", "windows terminal": "wt",
+        "powershell": "pwsh", "cmd": "cmd",
+        "file explorer": "explorer", "explorer": "explorer",
+        "spotify": "spotify", "discord": "discord",
+        "slack": "slack", "zoom": "zoom",
+        "1password": "1password", "bitwarden": "bitwarden",
+        "photoshop": "photoshop", "illustrator": "illustrator",
+        "blender": "blender", "figma": "figma",
+        "obsidian": "obsidian", "notion": "notion",
+        "calculator": "calc", "paint": "mspaint",
+        "snipping tool": "snippingtool",
+        "task manager": "taskmgr",
+        "control panel": "control",
+        "settings": "ms-settings:",
+    }
+
+    def _open_app_win(name):
+        name_lower = name.lower().strip()
+        resolved = WIN_APP_MAP.get(name_lower, name)
+        # Try Start-Process first (works for most apps)
+        r = run(f'powershell -Command "Start-Process \'{resolved}\' -ErrorAction SilentlyContinue"')
+        if "error" not in r.lower() and r.strip():
+            return f"Opened {name}"
+        # Fallback: use start command
+        r2 = run(f'start "" "{resolved}"')
+        if r2.strip():
+            return f"Opened {name}"
+        # Last resort: try the original name
+        r3 = run(f'start "" "{name}"')
+        return f"Attempted to open {name}"
+
     actions = {
         "screenshot": lambda: run("powershell -Command \"Add-Type -AssemblyName System.Windows.Forms; $s=[Windows.Forms.Screen]::PrimaryScreen.Bounds; $b=New-Object Drawing.Bitmap $s.Width,$s.Height; $g=[Drawing.Graphics]::FromImage($b); $g.CopyFromScreen(0,0,0,0,$s.Size); $b.Save('$env:USERPROFILE\\Desktop\\jarvis_screenshot.png')\""),
         "whoami": lambda: run("whoami"),
@@ -849,7 +891,7 @@ def _win_exec(action, params=""):
         "system_info": lambda: run("systeminfo | findstr /B /C:\"OS Name\" /C:\"OS Version\" /C:\"System Type\""),
         "public_ip": lambda: get_text("https://api.ipify.org"),
         "time": lambda: datetime.datetime.now().strftime("%A, %B %d, %Y — %I:%M %p"),
-        "open_app": lambda: run(f"start \"\" \"{params}\""),
+        "open_app": lambda: _open_app_win(params),
         "network_scan_quick": lambda: run("arp -a"),
         "volume_set": lambda: run(f"powershell -Command \"(New-Object -ComObject WScript.Shell).SendKeys([char]175)\""),
         "volume_mute": lambda: run("powershell -Command \"(New-Object -ComObject WScript.Shell).SendKeys([char]173)\""),
