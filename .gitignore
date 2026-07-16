@@ -60,3 +60,4 @@ backend/.entity_data/memory_test.json
 *.db
 *.db-shm
 *.db-wal
+desktop/package-lock.json
