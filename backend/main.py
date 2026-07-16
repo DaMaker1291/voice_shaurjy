@@ -800,6 +800,125 @@ class WorkflowAdvanceRequest(BaseModel):
     user_id: str = "local"
 
 
+# ── Context Relay Endpoints ───────────────────────────────────────
+
+@app.get("/api/context/relay")
+async def context_relay_status():
+    from context_relay import get_context_relay
+    relay = get_context_relay()
+    return relay.get_state()
+
+
+@app.get("/api/context/relay/full")
+async def context_relay_full(user_id: str = "local"):
+    from context_relay import get_context_relay
+    relay = get_context_relay()
+    return relay.get_full_context(user_id)
+
+
+@app.get("/api/context/calendar")
+async def context_calendar(lookahead_days: int = 2):
+    from context_relay import get_context_relay
+    relay = get_context_relay()
+    return {"events": relay.ingest_calendar(lookahead_days)}
+
+
+@app.get("/api/context/emails")
+async def context_emails(limit: int = 10):
+    from context_relay import get_context_relay
+    relay = get_context_relay()
+    return {"emails": relay.ingest_emails(limit)}
+
+
+@app.get("/api/context/contacts")
+async def context_contacts(limit: int = 20):
+    from context_relay import get_context_relay
+    relay = get_context_relay()
+    return {"contacts": relay.ingest_contacts(limit)}
+
+
+@app.post("/api/context/relay/inject")
+async def context_relay_inject(data: dict):
+    """Receive context pushed from relay agent on user's machine."""
+    from context_relay import get_context_relay
+    relay = get_context_relay()
+    relay.inject_relay_context(data)
+    return {"status": "ok"}
+
+
+# ── Multi-Agent Router Endpoint ────────────────────────────────────
+
+@app.post("/api/router/dispatch")
+async def router_dispatch(req: StrategyRequest):
+    from multi_agent_router import route_and_execute
+    result = route_and_execute(req.user_input, user_id=req.user_id)
+    return result
+
+
+# ── Proactive Engine Endpoints ─────────────────────────────────────
+
+@app.get("/api/proactive/status")
+async def proactive_status():
+    from proactive_engine import get_proactive_engine
+    engine = get_proactive_engine()
+    return engine.get_status()
+
+
+@app.get("/api/proactive/messages")
+async def proactive_messages():
+    from proactive_engine import get_proactive_engine
+    engine = get_proactive_engine()
+    msgs = engine.get_pending_messages()
+    return {"messages": msgs}
+
+
+@app.post("/api/proactive/reminder")
+async def proactive_reminder(data: dict):
+    from proactive_engine import get_proactive_engine
+    engine = get_proactive_engine()
+    title = data.get("title", "")
+    when = data.get("when", "")
+    engine.add_reminder(title, when)
+    return {"status": "ok"}
+
+
+@app.post("/api/proactive/monitor")
+async def proactive_monitor(data: dict):
+    from proactive_engine import get_proactive_engine
+    engine = get_proactive_engine()
+    monitor_type = data.get("type", "")
+    engine.add_monitor(monitor_type, data)
+    return {"status": "ok"}
+
+
+# ── System Task Agent Endpoints ────────────────────────────────────
+
+@app.post("/api/system/execute")
+async def system_execute(data: dict):
+    from system_task_agent import quick_action
+    action = data.get("action", "")
+    params = data.get("params", {})
+    if isinstance(params, str):
+        params = {"text": params}
+    result = quick_action(action, params)
+    return {"result": result}
+
+
+@app.get("/api/system/task/status")
+async def system_task_status():
+    from system_task_agent import get_system_agent
+    agent = get_system_agent()
+    return agent.get_status()
+
+
+@app.post("/api/system/task/stop")
+async def system_task_stop():
+    from system_task_agent import get_system_agent
+    agent = get_system_agent()
+    agent.stop()
+    return {"status": "stopped"}
+
+
 # ── Entity Engine Endpoints ────────────────────────────────────────
 
 @app.post("/api/entity/process")
@@ -4177,3 +4296,21 @@ async def init_multi_tenant():
         print(f"[OrgManager] Initialized — {len(mgr._orgs)} organizations loaded")
     except Exception as e:
         print(f"[OrgManager] Init skipped: {e}")
+
+# ── Initialize Context Relay & Proactive Engine at Startup ─────────────────
+@app.on_event("startup")
+async def init_context_relay():
+    try:
+        from context_relay import get_context_relay
+        relay = get_context_relay()
+        relay.start_background_sync(interval=300)
+        print(f"[ContextRelay] Initialized — platform={relay._platform}, calendar={relay._calendar_source}, email={relay._email_source}")
+    except Exception as e:
+        print(f"[ContextRelay] Init skipped: {e}")
+    try:
+        from proactive_engine import get_proactive_engine
+        engine = get_proactive_engine()
+        engine.start()
+        print(f"[ProactiveEngine] Initialized — monitoring active")
+    except Exception as e:
+        print(f"[ProactiveEngine] Init skipped: {e}")

@@ -18,6 +18,7 @@ const LiveAgentPanel = dynamic(() => import("@/components/LiveAgentPanel"), { ss
 const CommandPalette = dynamic(() => import("@/components/CommandPalette").then(m => m.CommandPalette), { ssr: false });
 const ShortcutsModal = dynamic(() => import("@/components/ShortcutsModal"), { ssr: false });
 const HeadlessWorkstationMonitor = dynamic(() => import("@/components/cockpit/HeadlessWorkstationMonitor"), { ssr: false });
+const ContextRelayPanel = dynamic(() => import("@/components/cockpit/ContextRelayPanel"), { ssr: false });
 
 interface Message { role: string; content: string; ts: number; agent?: string }
 
@@ -57,6 +58,7 @@ export default function Home() {
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [showLivePanel, setShowLivePanel] = useState(false);
   const [showHeadlessPanel, setShowHeadlessPanel] = useState(false);
+  const [showContextPanel, setShowContextPanel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -378,8 +380,10 @@ export default function Home() {
 
         {/* Right Panel (desktop only) */}
         {!isMobile && (
-          <div style={{ width: showLivePanel || showHeadlessPanel ? 480 : 320, borderLeft: "1px solid var(--border)", flexShrink: 0, overflow: "hidden", transition: "width 0.3s", display: "flex", flexDirection: "column" }}>
-            {showHeadlessPanel ? (
+          <div style={{ width: showLivePanel || showHeadlessPanel || showContextPanel ? 480 : 320, borderLeft: "1px solid var(--border)", flexShrink: 0, overflow: "hidden", transition: "width 0.3s", display: "flex", flexDirection: "column" }}>
+            {showContextPanel ? (
+              <ContextRelayPanel />
+            ) : showHeadlessPanel ? (
               <HeadlessWorkstationMonitor />
             ) : showLivePanel ? (
               <LiveAgentPanel
@@ -393,17 +397,21 @@ export default function Home() {
             )}
             {/* Panel toggle buttons */}
             <div style={{ display: "flex", borderTop: "1px solid var(--border)" }}>
-              <button onClick={() => { setShowHeadlessPanel(false); setShowLivePanel(false); }}
-                style={{ flex: 1, padding: "4px 0", background: !showHeadlessPanel && !showLivePanel ? "var(--neon-green-dim)" : "transparent", border: "none", color: !showHeadlessPanel && !showLivePanel ? "var(--neon-green)" : "var(--text-muted)", fontSize: 7, fontFamily: "var(--font-mono)", cursor: "pointer", letterSpacing: "0.06em" }}>
+              <button onClick={() => { setShowHeadlessPanel(false); setShowLivePanel(false); setShowContextPanel(false); }}
+                style={{ flex: 1, padding: "4px 0", background: !showHeadlessPanel && !showLivePanel && !showContextPanel ? "var(--neon-green-dim)" : "transparent", border: "none", color: !showHeadlessPanel && !showLivePanel && !showContextPanel ? "var(--neon-green)" : "var(--text-muted)", fontSize: 7, fontFamily: "var(--font-mono)", cursor: "pointer", letterSpacing: "0.06em" }}>
                 TELEMETRY
               </button>
-              <button onClick={() => { setShowHeadlessPanel(false); setShowLivePanel(true); }}
+              <button onClick={() => { setShowHeadlessPanel(false); setShowLivePanel(true); setShowContextPanel(false); }}
                 style={{ flex: 1, padding: "4px 0", background: showLivePanel ? "var(--neon-green-dim)" : "transparent", border: "none", color: showLivePanel ? "var(--neon-green)" : "var(--text-muted)", fontSize: 7, fontFamily: "var(--font-mono)", cursor: "pointer", letterSpacing: "0.06em" }}>
                 LIVE AGENTS
               </button>
-              <button onClick={() => { setShowHeadlessPanel(true); setShowLivePanel(false); }}
+              <button onClick={() => { setShowHeadlessPanel(true); setShowLivePanel(false); setShowContextPanel(false); }}
                 style={{ flex: 1, padding: "4px 0", background: showHeadlessPanel ? "var(--neon-green-dim)" : "transparent", border: "none", color: showHeadlessPanel ? "var(--neon-green)" : "var(--text-muted)", fontSize: 7, fontFamily: "var(--font-mono)", cursor: "pointer", letterSpacing: "0.06em" }}>
                 VIRTUAL DESKTOP
+              </button>
+              <button onClick={() => { setShowHeadlessPanel(false); setShowLivePanel(false); setShowContextPanel(true); }}
+                style={{ flex: 1, padding: "4px 0", background: showContextPanel ? "var(--neon-green-dim)" : "transparent", border: "none", color: showContextPanel ? "var(--neon-green)" : "var(--text-muted)", fontSize: 7, fontFamily: "var(--font-mono)", cursor: "pointer", letterSpacing: "0.06em" }}>
+                CONTEXT
               </button>
             </div>
           </div>

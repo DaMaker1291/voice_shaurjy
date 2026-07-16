@@ -1206,8 +1206,42 @@ class Entity:
         except Exception:
             pass
 
+        # Deep context from relay (Calendar, Email, Contacts)
+        deep_context_line = ""
+        try:
+            from context_relay import get_context_relay
+            relay = get_context_relay()
+            deep = relay.get_full_context(self.user_id)
+            cal = deep.get("calendar", {})
+            emails = deep.get("emails", {})
+            urgency = deep.get("urgency", {})
+            patterns = deep.get("patterns", {})
+            summary = deep.get("summary", "")
+
+            if cal.get("events"):
+                next_evt = cal.get("next_event")
+                if next_evt:
+                    deep_context_line += f"\nNext event: {next_evt.get('subject', '?')} at {next_evt.get('start', '?')}"
+                deep_context_line += f" | {cal.get('count', 0)} upcoming events"
+                if patterns.get("meeting_heavy_day"):
+                    deep_context_line += " (HEAVY meeting day)"
+            if emails.get("unread_count", 0) > 0:
+                deep_context_line += f" | {emails['unread_count']} unread emails"
+            if patterns.get("upcoming_deadlines"):
+                deadlines = patterns["upcoming_deadlines"]
+                deep_context_line += f" | {len(deadlines)} deadline(s): {deadlines[0].get('subject', '?')[:40]}"
+            if urgency.get("level") != "low":
+                deep_context_line += f" | Urgency: {urgency['level'].upper()}: {'; '.join(urgency.get('signals', [])[:2])}"
+            if patterns.get("frequent_communicators"):
+                top = patterns["frequent_communicators"][0]
+                deep_context_line += f" | Frequent contact: {top.get('name', '?')} ({top.get('count', 0)} msgs)"
+            if summary and summary != "No context data available":
+                deep_context_line += f"\nContext summary: {summary}"
+        except Exception:
+            pass
+
         return f"""[System State]
-Time: {ctx.get('time_of_day', 'day').title()} ({ctx['time']}), CPU {ctx.get('cpu','?')}% | RAM {ctx.get('ram','?')}% | Battery {ctx.get('battery','N/A')}% | Uptime {ctx.get('uptime_h','?')}h{device_line}{os_line}{profile_line}
+Time: {ctx.get('time_of_day', 'day').title()} ({ctx['time']}), CPU {ctx.get('cpu','?')}% | RAM {ctx.get('ram','?')}% | Battery {ctx.get('battery','N/A')}% | Uptime {ctx.get('uptime_h','?')}h{device_line}{os_line}{profile_line}{deep_context_line}
 
 [Your State]
 Mood: {self.mood} {MOODS.get(self.mood, {}).get('emoji', '')}
