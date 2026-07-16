@@ -11,13 +11,7 @@
     "dev": "NODE_ENV=development electron .",
     "build": "electron-builder --win",
     "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux",
-    "build:all": "electron-builder --win --mac --linux",
-    "postinstall": "electron-builder install-app-deps"
-  },
-  "dependencies": {
-    "electron-store": "^8.1.0",
-    "electron-updater": "^6.1.7"
+    "build:linux": "electron-builder --linux"
   },
   "devDependencies": {
     "electron": "28.3.3",
