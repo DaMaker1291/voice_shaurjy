@@ -43,19 +43,9 @@ jobs:
         working-directory: desktop
         run: python generate_icons.py
 
-      - name: Debug info
-        working-directory: desktop
-        run: |
-          echo "=== node_modules/.bin ==="
-          ls node_modules/.bin/electron* 2>/dev/null || echo "no electron binaries"
-          echo "=== frontend/out ==="
-          ls ../frontend/out/ 2>/dev/null | head -5 || echo "MISSING"
-          echo "=== backend ==="
-          ls ../backend/*.py 2>/dev/null | head -5 || echo "MISSING"
-
       - name: Build Electron (Windows)
         working-directory: desktop
-        run: npx electron-builder --win --x64 --log verbose
+        run: npx electron-builder --win --x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -102,7 +92,7 @@ jobs:
 
       - name: Build Electron (macOS)
         working-directory: desktop
-        run: npx electron-builder --mac --log verbose
+        run: npx electron-builder --mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -150,7 +140,7 @@ jobs:
 
       - name: Build Electron (Linux)
         working-directory: desktop
-        run: npx electron-builder --linux --log verbose
+        run: npx electron-builder --linux
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
