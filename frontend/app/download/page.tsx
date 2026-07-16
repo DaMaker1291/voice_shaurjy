@@ -25,7 +25,7 @@ const REPO = 'https://github.com/DaMaker1291/voice_shaurjy';
 
 function dlUrl(os: OS): string {
   const f = OS_DATA[os].file;
-  return f ? `${REPO}/releases/download/untagged-63e085fb8307db27bf8d/${f}` : '#';
+  return f ? `${REPO}/releases/latest/download/${f}` : '#';
 }
 
 const installCmds: Record<OS, { label: string; cmd: string }[]> = {
