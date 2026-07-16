@@ -20,8 +20,8 @@
     "electron-updater": "^6.1.7"
   },
   "devDependencies": {
-    "electron": "^28.1.0",
-    "electron-builder": "^24.9.1"
+    "electron": "28.3.3",
+    "electron-builder": "25.1.8"
   },
   "build": {
     "appId": "com.jarvis.sovereign",
