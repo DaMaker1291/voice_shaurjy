@@ -4174,6 +4174,6 @@ async def init_multi_tenant():
     try:
         from org_manager import get_org_manager
         mgr = get_org_manager()
-        _log.info(f"[OrgManager] Initialized — {len(mgr._orgs)} organizations loaded")
+        print(f"[OrgManager] Initialized — {len(mgr._orgs)} organizations loaded")
     except Exception as e:
-        _log.warning(f"[OrgManager] Init skipped: {e}")
+        print(f"[OrgManager] Init skipped: {e}")
