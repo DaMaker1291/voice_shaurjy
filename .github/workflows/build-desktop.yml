@@ -45,7 +45,7 @@ jobs:
 
       - name: Build Electron (Windows)
         working-directory: desktop
-        run: npx --yes electron-builder --win --x64 2>&1 | tee build.log
+        run: npm exec -- electron-builder --win --x64 2>&1 | tee build.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -100,7 +100,7 @@ jobs:
 
       - name: Build Electron (macOS)
         working-directory: desktop
-        run: npx --yes electron-builder --mac 2>&1 | tee build.log
+        run: npm exec -- electron-builder --mac 2>&1 | tee build.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -156,7 +156,7 @@ jobs:
 
       - name: Build Electron (Linux)
         working-directory: desktop
-        run: npx --yes electron-builder --linux 2>&1 | tee build.log
+        run: npm exec -- electron-builder --linux 2>&1 | tee build.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -187,15 +187,18 @@ jobs:
         with:
           path: artifacts
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/windows-build/*.exe
-            artifacts/mac-build/*.dmg
-            artifacts/mac-build/*.zip
-            artifacts/linux-build/*.AppImage
-            artifacts/linux-build/*.deb
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+      - name: Upload to existing release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_ID=$(gh api repos/DaMaker1291/voice_shaurjy/releases/tags/v3.0.0 --jq '.id' 2>/dev/null || echo "")
+          if [ -z "$RELEASE_ID" ]; then
+            echo "No release found, skipping upload"
+            exit 0
+          fi
+          for f in artifacts/windows-build/*.exe artifacts/mac-build/*.dmg artifacts/mac-build/*.zip artifacts/linux-build/*.AppImage artifacts/linux-build/*.deb; do
+            if [ -f "$f" ]; then
+              echo "Uploading $f..."
+              gh release upload v3.0.0 "$f" --clobber
+            fi
+          done
