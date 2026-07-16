@@ -4,6 +4,10 @@
   "description": "JARVIS — Sovereign Network Orchestrator",
   "author": "JARVIS AI",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DaMaker1291/voice_shaurjy.git"
+  },
   "main": "main.js",
   "homepage": "./",
   "scripts": {
@@ -21,6 +25,7 @@
     "appId": "com.jarvis.sovereign",
     "productName": "JARVIS",
     "copyright": "Copyright © 2024 JARVIS AI",
+    "publish": null,
     "directories": {
       "output": "dist"
     },
