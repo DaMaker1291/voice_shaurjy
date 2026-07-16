@@ -1,12 +1,16 @@
 @echo off
-REM JARVIS Windows Build Script
-REM Builds the .exe installer using PyInstaller + NSIS
+REM ╔══════════════════════════════════════════════════════════╗
+REM ║  JARVIS Standalone Installer Builder                     ║
+REM ║  Builds relay-only .exe installer (no Electron)          ║
+REM ╚══════════════════════════════════════════════════════════╝
 
 echo.
 echo  ╔══════════════════════════════════════════════════════════╗
-echo  ║   JARVIS Windows Installer Builder                     ║
+echo  ║   JARVIS Standalone Installer Builder                   ║
 echo  ╚══════════════════════════════════════════════════════════╝
 echo.
+
+cd /d "%~dp0"
 
 REM Check Python
 python --version >nul 2>&1
@@ -17,65 +21,57 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Check PyInstaller
-pip show pyinstaller >nul 2>&1
-if errorlevel 1 (
-    echo [INFO] Installing PyInstaller...
-    pip install pyinstaller
-)
-
-REM Check NSIS (optional — for .exe installer)
+REM Check NSIS
 where makensis >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] NSIS not found. Download from: https://nsis.sourceforge.io
-    echo [INFO] Falling back to PyInstaller portable build...
+    echo [INFO] NSIS not found. Install from: https://nsis.sourceforge.io
+    echo [INFO] Download: https://nsis.sourceforge.io/Download
+    echo.
+    echo Falling back to creating portable distribution...
     set BUILD_PORTABLE=1
 )
 
-echo.
-echo [1/4] Building backend...
-cd /d "%~dp0"
-python -m py_compile backend\main.py
-if errorlevel 1 (
-    echo [ERROR] Backend compilation failed
-    pause
-    exit /b 1
-)
-
-echo [2/4] Building PyInstaller bundle...
-python -m PyInstaller --onefile --name JARVIS --icon icon.ico --add-data "backend;backend" --add-data "relay.py;." installer\installer.py
-if errorlevel 1 (
-    echo [ERROR] PyInstaller build failed
-    pause
-    exit /b 1
-)
-
 if defined BUILD_PORTABLE (
-    echo.
-    echo [3/4] Creating portable distribution...
+    echo [1/3] Creating portable distribution...
     mkdir dist\JARVIS_Portable 2>nul
-    copy dist\JARVIS.exe dist\JARVIS_Portable\
-    copy relay.py dist\JARVIS_Portable\
-    xcopy /E /I /Y backend dist\JARVIS_Portable\backend
     
-    echo [4/4] Creating launcher batch...
-    echo @echo off > dist\JARVIS_Portable\Start_JARVIS.bat
-    echo title JARVIS >> dist\JARVIS_Portable\Start_JARVIS.bat
-    echo cd /d "%%~dp0" >> dist\JARVIS_Portable\Start_JARVIS.bat
-    echo python relay.py --user local >> dist\JARVIS_Portable\Start_JARVIS.bat
-    echo pause >> dist\JARVIS_Portable\Start_JARVIS.bat
+    echo [2/3] Copying files...
+    xcopy /E /I /Y /Q "..\backend" dist\JARVIS_Portable\backend
+    xcopy /E /I /Y /Q "..\frontend\out" dist\JARVIS_Portable\frontend
+    copy /Y "..\standalone_relay.py" dist\JARVIS_Portable\
+    copy /Y "LICENSE.txt" dist\JARVIS_Portable\
+    
+    echo [3/3] Creating launcher scripts...
+    (
+        echo @echo off
+        echo title JARVIS — Sovereign Network Orchestrator
+        echo color 0A
+        echo echo.
+        echo echo  JARVIS — Sovereign Network Orchestrator
+        echo echo  Starting relay agent...
+        echo echo.
+        echo cd /d "%%~dp0"
+        echo python standalone_relay.py --user local
+        echo pause
+    ) > dist\JARVIS_Portable\Start_JARVIS.bat
+    
+    (
+        echo @echo off
+        echo start https://dgfhgjhj-jarvis-ai-brain.hf.space/voice_shaurjy
+    ) > dist\JARVIS_Portable\Open_WebUI.bat
     
     echo.
-    echo ╔══════════════════════════════════════════════════════════╗
-    echo ║   BUILD COMPLETE — Portable version ready              ║
-    echo ║   Location: dist\JARVIS_Portable\                      ║
-    echo ║                                                          ║
-    echo ║   To install: Copy JARVIS_Portable folder anywhere      ║
-    echo ║   To run: Start_JARVIS.bat                              ║
-    echo ╚══════════════════════════════════════════════════════════╝
+    echo  ╔══════════════════════════════════════════════════════════╗
+    echo  ║   BUILD COMPLETE — Portable version ready              ║
+    echo  ║   Location: dist\JARVIS_Portable\                      ║
+    echo  ║                                                          ║
+    echo  ║   To use: Copy JARVIS_Portable folder to any PC         ║
+    echo  ║   To run: Double-click Start_JARVIS.bat                 ║
+    echo  ║   Web UI: Double-click Open_WebUI.bat                   ║
+    echo  ╚══════════════════════════════════════════════════════════╝
 ) else (
-    echo [3/4] Building NSIS installer...
-    makensis installer\jarvis.nsis
+    echo [1/3] Building NSIS installer...
+    makensis jarvis.nsis
     if errorlevel 1 (
         echo [ERROR] NSIS build failed
         pause
@@ -83,11 +79,14 @@ if defined BUILD_PORTABLE (
     )
     
     echo.
-    echo ╔══════════════════════════════════════════════════════════╗
-    echo ║   BUILD COMPLETE — Installer ready                     ║
-    echo ║   Location: JARVIS_Setup_v3.0.exe                      ║
-    echo ╚══════════════════════════════════════════════════════════╝
+    echo  ╔══════════════════════════════════════════════════════════╗
+    echo  ║   BUILD COMPLETE — Installer ready                     ║
+    echo  ║   Location: JARVIS_Setup_v3.0.exe                      ║
+    echo  ║                                                          ║
+    echo  ║   Share the .exe to install on any Windows PC.          ║
+    echo  ╚══════════════════════════════════════════════════════════╝
 )
 
 echo.
+explorer dist 2>nul
 pause

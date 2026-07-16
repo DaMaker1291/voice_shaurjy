@@ -185,16 +185,28 @@ function createWindow() {
     mainWindow.loadURL("http://localhost:3000");
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
-    // In production, load the bundled renderer
-    const rendererDir = app.isPackaged
-      ? path.join(process.resourcesPath, "renderer")
-      : path.join(__dirname, "renderer");
+    // In production, try multiple frontend locations
+    const candidates = [
+      // 1. Bundled renderer (in app directory — part of "files")
+      path.join(__dirname, "renderer", "index.html"),
+      // 2. HF Space frontend (in extraResources)
+      path.join(process.resourcesPath, "frontend", "index.html"),
+      // 3. Bundled renderer via resourcesPath (some build configs)
+      path.join(process.resourcesPath, "renderer", "index.html"),
+    ];
 
-    const rendererHTML = path.join(rendererDir, "index.html");
-    if (fs.existsSync(rendererHTML)) {
-      mainWindow.loadFile(rendererHTML);
-    } else {
-      // Fallback to HF Space
+    let loaded = false;
+    for (const htmlPath of candidates) {
+      if (fs.existsSync(htmlPath)) {
+        log(`Loading frontend: ${htmlPath}`);
+        mainWindow.loadFile(htmlPath);
+        loaded = true;
+        break;
+      }
+    }
+
+    if (!loaded) {
+      log("No local frontend found — loading HF Space");
       mainWindow.loadURL(HF_URL);
     }
   }

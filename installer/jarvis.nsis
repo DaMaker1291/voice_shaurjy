@@ -1,15 +1,17 @@
 ; JARVIS Windows Installer — NSIS Script
+; Standalone installer for relay/backend mode (no Electron)
 ; Build with: makensis jarvis.nsis
-; Or use the Python installer: python installer.py
+; Or use: python installer.py
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
+!include "LogicLib.nsh"
 
 ; ── Configuration ────────────────────────────────────────────────────────
 Name "JARVIS — Sovereign Network Orchestrator"
 OutFile "JARVIS_Setup_v3.0.exe"
-InstallDir "$PROGRAMFILES\JARVIS"
-InstallDirRegKey HKLM "Software\JARVIS" "InstallDir"
+InstallDir "$LOCALAPPDATA\JARVIS"
+InstallDirRegKey HKCU "Software\JARVIS" "InstallDir"
 RequestExecutionLevel admin
 Unicode True
 
@@ -22,15 +24,24 @@ VIAddVersionKey "FileVersion" "3.0.0"
 VIAddVersionKey "ProductVersion" "3.0.0"
 
 ; ── Interface ────────────────────────────────────────────────────────────
-!define MUI_ICON "icon.ico"
-!define MUI_UNICON "icon.ico"
 !define MUI_ABORTWARNING
-!define MUI_WELCOMEPAGE_TITLE "JARVIS Setup"
-!define MUI_WELCOMEPAGE_TEXT "Welcome to the JARVIS Sovereign Network Orchestrator.$\r$\n$\r$\nThis will install JARVIS on your system.$\r$\n$\r$\nClick Next to continue."
+!define MUI_ICON "..\desktop\assets\icon.ico"
+!define MUI_UNICON "..\desktop\assets\icon.ico"
+
+; Welcome page
+!define MUI_WELCOMEPAGE_TITLE "Welcome to JARVIS"
+!define MUI_WELCOMEPAGE_TEXT "JARVIS is a Sovereign Network Orchestrator — an autonomous AI brain that controls your devices, automates tasks, and runs on your own hardware.$\r$\n$\r$\nThis installer will:$\r$\n  1. Install Python 3.11 (if needed)$\r$\n  2. Install all dependencies$\r$\n  3. Set up the JARVIS relay agent$\r$\n  4. Create desktop and Start Menu shortcuts$\r$\n$\r$\nClick Next to continue."
+
+; Finish page
+!define MUI_FINISHPAGE_RUN "$INSTDIR\Start_JARVIS.bat"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch JARVIS now"
+!define MUI_FINISHPAGE_LINK "Visit JARVIS documentation"
+!define MUI_FINISHPAGE_LINK_LOCATION "https://dgfhgjhj-jarvis-ai-brain.hf.space"
 
 ; ── Pages ────────────────────────────────────────────────────────────────
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "LICENSE.txt"
+!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -40,83 +51,161 @@ VIAddVersionKey "ProductVersion" "3.0.0"
 
 !insertmacro MUI_LANGUAGE "English"
 
-; ── Installation ─────────────────────────────────────────────────────────
-Section "Install"
+; ── Installer Sections ──────────────────────────────────────────────────
+
+Section "JARVIS Core (Required)" SecCore
+    SectionIn RO
+    
     SetOutPath "$INSTDIR"
     
-    ; Create directories
+    ; Create directory structure
     CreateDirectory "$INSTDIR\backend"
     CreateDirectory "$INSTDIR\frontend"
-    CreateDirectory "$INSTDIR\installer"
     CreateDirectory "$APPDATA\JARVIS"
     CreateDirectory "$APPDATA\JARVIS\data"
     CreateDirectory "$APPDATA\JARVIS\models"
+    CreateDirectory "$APPDATA\JARVIS\logs"
     
-    ; Install Python if not present
-    nsExec::ExecToLog 'python --version'
+    DetailPrint "Checking Python installation..."
+    nsExec::ExecToStack 'python --version'
     Pop $0
+    Pop $1
     ${If} $0 != 0
-        DetailPrint "Installing Python 3.11..."
-        nsExec::ExecToLog 'winget install Python.Python.3.11 --silent --accept-source-agreements'
+        DetailPrint "Python not found. Installing Python 3.11..."
+        nsExec::ExecToStack 'winget install Python.Python.3.11 --silent --accept-source-agreements --accept-package-agreements'
+        Pop $0
+        ${If} $0 != 0
+            MessageBox MB_ICONEXCLAMATION|MB_OK "Python install failed. Please install Python 3.11 manually from python.org"
+        ${EndIf}
+    ${Else}
+        DetailPrint "Python found: $1"
     ${EndIf}
     
-    ; Install pip packages
     DetailPrint "Installing Python dependencies..."
-    nsExec::ExecToLog 'python -m pip install fastapi "uvicorn[standard]" python-dotenv pydantic psutil websocket-client certifi Pillow pywin32'
+    nsExec::ExecToStack 'python -m pip install --upgrade pip'
+    Pop $0
+    nsExec::ExecToStack 'python -m pip install fastapi "uvicorn[standard]" python-dotenv pydantic psutil websocket-client certifi Pillow'
+    Pop $0
     
-    ; Copy files
-    File /r "backend\*.*" "backend\"
-    File /r "frontend\out\*.*" "frontend\out\"
-    File "relay.py"
-    File "installer\installer.py"
+    DetailPrint "Copying JARVIS files..."
+    File /r /x "__pycache__" /x "*.pyc" /x "node_modules" /x "dist" /x ".git" "..\backend\*.*"
     
-    ; Create Start Menu shortcuts
-    CreateDirectory "$SMPROGRAMS\JARVIS"
-    CreateShortCut "$SMPROGRAMS\JARVIS\JARVIS.lnk" "$INSTDIR\relay.bat" "" "" "" SW_SHOWMINIMIZED
-    CreateShortCut "$SMPROGRAMS\JARVIS\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+    SetOutPath "$INSTDIR\frontend"
+    File /r /x "_next" "..\frontend\out\*.*"
     
-    ; Create desktop shortcut
-    CreateShortCut "$DESKTOP\JARVIS.lnk" "$INSTDIR\relay.bat" "" "" "" SW_SHOWMINIMIZED
+    SetOutPath "$INSTDIR"
+    File "..\standalone_relay.py"
+    File "LICENSE.txt"
     
-    ; Create relay batch file
-    FileOpen $0 "$INSTDIR\relay.bat" w
+    ; Create launcher batch
+    FileOpen $0 "$INSTDIR\Start_JARVIS.bat" w
     FileWrite $0 '@echo off$\r$\n'
     FileWrite $0 'title JARVIS — Sovereign Network Orchestrator$\r$\n'
+    FileWrite $0 'color 0A$\r$\n'
+    FileWrite $0 'echo.$\r$\n'
+    FileWrite $0 'echo  JARVIS — Sovereign Network Orchestrator$\r$\n'
+    FileWrite $0 'echo  Starting relay agent...$\r$\n'
+    FileWrite $0 'echo.$\r$\n'
     FileWrite $0 'cd /d "$INSTDIR"$\r$\n'
-    FileWrite $0 'python relay.py --user local$\r$\n'
+    FileWrite $0 'python standalone_relay.py --user local$\r$\n'
     FileWrite $0 'pause$\r$\n'
     FileClose $0
     
+    ; Create HF Space launcher
+    FileOpen $0 "$INSTDIR\Open_WebUI.bat" w
+    FileWrite $0 '@echo off$\r$\n'
+    FileWrite $0 'start https://dgfhgjhj-jarvis-ai-brain.hf.space/voice_shaurjy$\r$\n'
+    FileClose $0
+    
+    ; Create Start Menu shortcuts
+    CreateDirectory "$SMPROGRAMS\JARVIS"
+    CreateShortCut "$SMPROGRAMS\JARVIS\JARVIS.lnk" "$INSTDIR\Start_JARVIS.bat" "" "" "" SW_SHOWMINIMIZED
+    CreateShortCut "$SMPROGRAMS\JARVIS\JARVIS Web UI.lnk" "$INSTDIR\Open_WebUI.bat"
+    CreateShortCut "$SMPROGRAMS\JARVIS\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+    
+    ; Create desktop shortcuts
+    CreateShortCut "$DESKTOP\JARVIS.lnk" "$INSTDIR\Start_JARVIS.bat" "" "" "" SW_SHOWMINIMIZED
+    CreateShortCut "$DESKTOP\JARVIS Web UI.lnk" "$INSTDIR\Open_WebUI.bat"
+    
     ; Write registry
-    WriteRegStr HKLM "Software\JARVIS" "InstallDir" "$INSTDIR"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "DisplayName" "JARVIS"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "UninstallString" '"$INSTDIR\Uninstall.exe"'
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "InstallLocation" "$INSTDIR"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "Publisher" "JARVIS AI"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "DisplayVersion" "3.0.0"
+    WriteRegStr HKCU "Software\JARVIS" "InstallDir" "$INSTDIR"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "DisplayName" "JARVIS — Sovereign Network Orchestrator"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "InstallLocation" "$INSTDIR"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "Publisher" "JARVIS AI"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "DisplayVersion" "3.0.0"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "URLInfoAbout" "https://dgfhgjhj-jarvis-ai-brain.hf.space"
+    WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "NoModify" 1
+    WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "NoRepair" 1
+    
+    ; Calculate install size
+    ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
+    IntFmt $0 "0x%08X" $0
+    WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "EstimatedSize" "$0"
     
     ; Create uninstaller
     WriteUninstaller "$INSTDIR\Uninstall.exe"
     
-    ; Add Windows Defender exclusion
     DetailPrint "Adding Windows Defender exclusion..."
-    nsExec::ExecToLog 'powershell -Command "Add-MpExclusion -ExclusionPath \'$INSTDIR\'"'
-    nsExec::ExecToLog 'powershell -Command "Add-MpExclusion -ExclusionPath \'$APPDATA\JARVIS\'"'
+    nsExec::ExecToStack 'powershell -Command "Add-MpExclusion -ExclusionPath \'$INSTDIR\' -ErrorAction SilentlyContinue"'
+    Pop $0
+    nsExec::ExecToStack 'powershell -Command "Add-MpExclusion -ExclusionPath \'$APPDATA\JARVIS\' -ErrorAction SilentlyContinue"'
+    Pop $0
+    
+    DetailPrint "JARVIS installed successfully!"
+
+SectionEnd
+
+Section "Desktop App (Electron)" SecDesktop
+    SetOutPath "$INSTDIR\desktop"
+    
+    DetailPrint "Note: For the full desktop app, use the Electron installer"
+    DetailPrint "from: desktop/dist/JARVIS_Setup_v3.0.0.exe"
+    
+    ; Create a note file
+    FileOpen $0 "$INSTDIR\desktop\README.txt" w
+    FileWrite $0 'JARVIS Desktop App$\r$\n'
+    FileWrite $0 '===================$\r$\n'
+    FileWrite $0 '$\r$\n'
+    FileWrite $0 'For the full native desktop experience,$\r$\n'
+    FileWrite $0 'run: desktop/build-windows.bat$\r$\n'
+    FileWrite $0 '$\r$\n'
+    FileWrite $0 'This will build:$\r$\n'
+    FileWrite $0 '  - JARVIS_Setup_v3.0.0.exe (NSIS installer)$\r$\n'
+    FileWrite $0 '  - JARVIS-3.0.0.exe (portable)$\r$\n'
+    FileWrite $0 '$\r$\n'
+    FileWrite $0 'Requirements: Node.js 18+$\r$\n'
+    FileWrite $0 'Install: winget install OpenJS.NodeJS.LTS$\r$\n'
+    FileClose $0
     
 SectionEnd
 
-; ── Uninstaller ──────────────────────────────────────────────────────────
 Section "Uninstall"
+    ; Stop JARVIS if running
+    nsExec::ExecToStack 'taskkill /f /im python.exe /fi "WINDOWTITLE eq JARVIS*"'
+    Pop $0
+    
+    ; Remove files
     RMDir /r "$INSTDIR"
     RMDir /r "$SMPROGRAMS\JARVIS"
     Delete "$DESKTOP\JARVIS.lnk"
+    Delete "$DESKTOP\JARVIS Web UI.lnk"
     
-    DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS"
-    DeleteRegKey HKLM "Software\JARVIS"
+    ; Remove registry
+    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS"
+    DeleteRegKey HKCU "Software\JARVIS"
     
     ; Remove Defender exclusions
-    nsExec::ExecToLog 'powershell -Command "Remove-MpExclusion -ExclusionPath \'$INSTDIR\'" 2>nul'
-    nsExec::ExecToLog 'powershell -Command "Remove-MpExclusion -ExclusionPath \'$APPDATA\JARVIS\'" 2>nul'
+    nsExec::ExecToStack 'powershell -Command "Remove-MpExclusion -ExclusionPath \'$INSTDIR\' -ErrorAction SilentlyContinue"'
+    Pop $0
+    nsExec::ExecToStack 'powershell -Command "Remove-MpExclusion -ExclusionPath \'$APPDATA\JARVIS\' -ErrorAction SilentlyContinue"'
+    Pop $0
     
     MessageBox MB_OK "JARVIS has been uninstalled."
 SectionEnd
+
+; ── Component Descriptions ──────────────────────────────────────────────
+!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecCore} "Install the JARVIS relay agent, backend, and web UI."
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "Information about the native Electron desktop app."
+!insertmacro MUI_FUNCTION_DESCRIPTION_END
