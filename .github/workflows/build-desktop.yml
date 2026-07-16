@@ -45,11 +45,19 @@ jobs:
 
       - name: Build Electron (Windows)
         working-directory: desktop
-        run: npx electron-builder --win --x64
+        run: npx --yes electron-builder --win --x64 2>&1 | tee build.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-log
+          path: desktop/build.log
+
       - name: Upload Windows artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
@@ -92,11 +100,19 @@ jobs:
 
       - name: Build Electron (macOS)
         working-directory: desktop
-        run: npx electron-builder --mac
+        run: npx --yes electron-builder --mac 2>&1 | tee build.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-log
+          path: desktop/build.log
+
       - name: Upload macOS artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: mac-build
@@ -140,11 +156,19 @@ jobs:
 
       - name: Build Electron (Linux)
         working-directory: desktop
-        run: npx electron-builder --linux
+        run: npx --yes electron-builder --linux 2>&1 | tee build.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-log
+          path: desktop/build.log
+
       - name: Upload Linux artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
