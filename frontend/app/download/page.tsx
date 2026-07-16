@@ -16,7 +16,7 @@ function detectOS(): OS {
 
 const OS_DATA: Record<OS, { icon: string; label: string; ext: string; file: string }> = {
   windows: { icon: '⊞', label: 'Windows', ext: '.exe', file: 'JARVIS_Setup_v3.0.0.exe' },
-  mac:     { icon: '⌘', label: 'macOS',   ext: '.dmg', file: 'JARVIS-3.0.0.dmg' },
+  mac:     { icon: '⌘', label: 'macOS',   ext: '.dmg', file: 'JARVIS-3.0.0-arm64.dmg' },
   linux:   { icon: '⏣', label: 'Linux',   ext: '.AppImage', file: 'JARVIS-3.0.0.AppImage' },
   unknown: { icon: '⬡', label: 'Your OS', ext: '', file: '' },
 };
@@ -25,7 +25,7 @@ const REPO = 'https://github.com/DaMaker1291/voice_shaurjy';
 
 function dlUrl(os: OS): string {
   const f = OS_DATA[os].file;
-  return f ? `${REPO}/releases/latest/download/${f}` : '#';
+  return f ? `${REPO}/releases/download/v3.0.0/${f}` : '#';
 }
 
 const installCmds: Record<OS, { label: string; cmd: string }[]> = {
