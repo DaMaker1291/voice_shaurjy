@@ -75,9 +75,7 @@
       "installerHeaderIcon": "assets/icon.ico",
       "installerSidebar": "assets/sidebar.bmp",
       "uninstallerSidebar": "assets/sidebar.bmp",
-      "license": "LICENSE.txt",
-      "installerLanguages": ["English"],
-      "language": "1033"
+      "license": "LICENSE.txt"
     },
     "mac": {
       "category": "public.app-category.utilities",
