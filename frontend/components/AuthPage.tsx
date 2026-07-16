@@ -77,7 +77,7 @@ export default function AuthPage({ onAuth }: { onAuth: (user: { name: string; em
         .auth-card { animation: auth-in 0.5s cubic-bezier(0.16,1,0.3,1) both; }
       `}</style>
 
-      <div className="auth-card" style={{
+      <div className="auth-card modal-container" style={{
         width: 400, background: "#0d0f12", border: "1px solid #1a1d23",
         borderRadius: 12, padding: 32, position: "relative", zIndex: 1,
         boxShadow: "0 0 60px rgba(0,255,102,0.05), 0 20px 60px rgba(0,0,0,0.5)",

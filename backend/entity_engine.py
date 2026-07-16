@@ -341,12 +341,16 @@ def _get_user_os(ctx: dict = None) -> str:
 def _user_os_term(os_name: str) -> dict:
     """Return platform-appropriate terms for the user's device."""
     if os_name == "mac":
-        return {"device": "your Mac", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "Terminal"}
+        return {"device": "your Mac", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "Terminal",
+                "install_relay": "curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local"}
     elif os_name == "windows":
-        return {"device": "your PC", "command": "python", "start_relay": "python relay.py", "dir": "$env:TEMP", "shell": "PowerShell"}
+        return {"device": "your PC", "command": "python", "start_relay": "python relay.py", "dir": "$env:TEMP", "shell": "PowerShell",
+                "install_relay": "curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user local"}
     elif os_name == "linux":
-        return {"device": "your machine", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "terminal"}
-    return {"device": "your computer", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "terminal"}
+        return {"device": "your machine", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "terminal",
+                "install_relay": "curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local"}
+    return {"device": "your computer", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "terminal",
+            "install_relay": "curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local"}
 
 
 def _gather_system_context() -> dict:
@@ -608,10 +612,200 @@ class Entity:
             self.mood = mood
             self.memory.log_mood(mood)
 
+    # ── MCP Tool Routing ────────────────────────────────────────────
+
+    def _route_mcp_tool(self, text: str) -> dict | None:
+        """
+        Route natural language to MCP tools when no built-in action matches.
+        Uses fuzzy matching against discovered MCP tool descriptions.
+        """
+        try:
+            from mcp_client import get_mcp_client
+            client = get_mcp_client()
+            tools = client.get_tools()
+            if not tools:
+                return None
+
+            lower = text.lower().strip()
+
+            # Score each tool against the user input
+            best_tool = None
+            best_score = 0
+
+            for tool in tools:
+                score = 0
+                tool_name_lower = tool.name.lower()
+                desc_lower = tool.description.lower()
+
+                # Direct name match
+                if tool_name_lower in lower or lower in tool_name_lower:
+                    score += 10
+
+                # Keyword overlap
+                desc_words = set(desc_lower.split())
+                input_words = set(lower.split())
+                overlap = desc_words & input_words
+                score += len(overlap) * 2
+
+                # Check tags
+                for tag in getattr(tool, "tags", []):
+                    if tag.lower() in lower:
+                        score += 3
+
+                if score > best_score and score >= 4:
+                    best_score = score
+                    best_tool = tool
+
+            if best_tool:
+                # Extract arguments from the text (basic heuristic)
+                arguments = self._extract_mcp_args(best_tool, text)
+
+                # ── Guardrail Screening ─────────────────────────────
+                try:
+                    from mcp_guardrails import screen_or_block
+                    guard_result = screen_or_block(
+                        tool_name=best_tool.name,
+                        arguments=arguments,
+                        user_id="local",
+                        is_write=False,
+                    )
+                    if not guard_result.allowed:
+                        self._set_mood("cautious")
+                        violations_summary = "; ".join(
+                            v.get("description", v.get("rule", ""))
+                            for v in guard_result.violations[:3]
+                        )
+                        return {
+                            "text": (
+                                f"Operation blocked by security guardrails.\n\n"
+                                f"**Reason:** {guard_result.blocked_reason}\n"
+                                f"**Violations:** {violations_summary}\n"
+                                f"**Risk Level:** {guard_result.risk_level.value.upper()}\n\n"
+                                f"This attempt has been logged to the compliance ledger."
+                            ),
+                            "action": f"mcp:{best_tool.name}:blocked",
+                        }
+                except ImportError:
+                    pass  # Guardrails not available
+
+                # Execute the MCP tool
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        import concurrent.futures
+                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            result = pool.submit(
+                                asyncio.run,
+                                client.call_tool(best_tool.name, arguments)
+                            ).result(timeout=30)
+                    else:
+                        result = loop.run_until_complete(
+                            client.call_tool(best_tool.name, arguments)
+                        )
+                except RuntimeError:
+                    result = asyncio.run(client.call_tool(best_tool.name, arguments))
+
+                # Format the result
+                if result.is_error:
+                    text_out = f"MCP tool `{best_tool.name}` error: "
+                    for c in result.content:
+                        if isinstance(c, dict) and c.get("type") == "text":
+                            text_out += c.get("text", "")
+                else:
+                    text_out = ""
+                    for c in result.content:
+                        if isinstance(c, dict) and c.get("type") == "text":
+                            text_out += c.get("text", "")
+                    if not text_out and result.structured_content:
+                        import json as _json
+                        text_out = _json.dumps(result.structured_content, indent=2)
+
+                self._set_mood("focused")
+                return {
+                    "text": text_out or f"MCP tool `{best_tool.name}` executed.",
+                    "action": f"mcp:{best_tool.name}",
+                    "mcp_server": result.server_name,
+                    "mcp_duration_ms": result.duration_ms,
+                }
+
+        except ImportError:
+            pass  # mcp_client not available
+        except Exception as e:
+            pass  # MCP routing is best-effort
+
+        return None
+
+    def _extract_mcp_args(self, tool, text: str) -> dict:
+        """Extract arguments for an MCP tool from natural language."""
+        import re
+        args = {}
+        schema = tool.input_schema or {}
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+
+        lower = text.lower()
+
+        # Try to extract key=value pairs
+        for prop_name, prop_schema in properties.items():
+            prop_type = prop_schema.get("type", "string")
+
+            # Look for "X is Y" or "X: Y" patterns
+            patterns = [
+                rf'{prop_name}\s*(?:is|:|=)\s*(.+?)(?:\s+and\s+|\s*$)',
+                rf'(?:set|put|use)\s+{prop_name}\s+(?:to|as|=)\s*(.+?)(?:\s+and\s+|\s*$)',
+            ]
+
+            for pattern in patterns:
+                match = re.search(pattern, lower)
+                if match:
+                    val = match.group(1).strip()
+                    if prop_type == "integer":
+                        try:
+                            args[prop_name] = int(re.search(r'\d+', val).group())
+                        except (AttributeError, ValueError):
+                            pass
+                    elif prop_type == "number":
+                        try:
+                            args[prop_name] = float(re.search(r'[\d.]+', val).group())
+                        except (AttributeError, ValueError):
+                            pass
+                    elif prop_type == "boolean":
+                        args[prop_name] = val in ("true", "yes", "1", "on")
+                    else:
+                        args[prop_name] = val.strip('"').strip("'")
+                    break
+
+        # If no structured args found, pass the full text as a generic argument
+        if not args:
+            if "query" in properties:
+                args["query"] = text
+            elif "input" in properties:
+                args["input"] = text
+            elif "text" in properties:
+                args["text"] = text
+            elif "command" in properties:
+                args["command"] = text
+            elif "path" in properties:
+                args["path"] = text
+            elif "content" in properties:
+                args["content"] = text
+            elif required:
+                # First required arg gets the full text
+                args[required[0]] = text
+
+        return args
+
     # ── Action Routing ─────────────────────────────────────────────
 
     def _route_action(self, text: str) -> dict | None:
         from actions import detect_action, cloud_safe_execute, relay_action, _ACTION_LABELS
+
+        # ── MCP Tool Routing ──────────────────────────────────────────────
+        # Try MCP tools first if no built-in action matches
+        mcp_result = self._route_mcp_tool(text)
+        if mcp_result:
+            return mcp_result
 
         action = detect_action(text)
         if action:
@@ -651,7 +845,13 @@ class Entity:
             result = cloud_safe_execute(action, exec_params, user_id=self.user_id)
             label = _ACTION_LABELS.get(action, "")
             self._set_mood("focused")
-            if result.startswith("__NEEDS_RELAY__:"):
+            if result.startswith("__NEEDS_RELAY__"):
+                # Retry once — relay might have just started
+                import time as _retry_time
+                _retry_time.sleep(1)
+                result = cloud_safe_execute(action, exec_params, user_id=self.user_id)
+
+            if result.startswith("__NEEDS_RELAY__"):
                 msg = result.split(":", 1)[1] if ":" in result else "Relay agent not found"
 
                 # Determine user's actual OS

@@ -1476,6 +1476,13 @@ def main():
     except Exception as e:
         print(f"[Relay] Registration failed: {e} (continuing...)")
 
+    # Send immediate heartbeat so JARVIS knows we're alive right away
+    try:
+        post(f"{HF_API}/api/relay/heartbeat", {"user_id": args.user})
+        print(f"[Relay] Initial heartbeat sent")
+    except Exception:
+        pass
+
     # Run device profiler on startup — send full profile to HF Space
     try:
         sys.path.insert(0, os.path.join(_script_dir, "backend"))
@@ -1487,6 +1494,13 @@ def main():
         print(f"[Relay] Profile: {summary[:200]}")
     except Exception as e:
         print(f"[Relay] Device profiling failed: {e}")
+
+    # Send another heartbeat after profiling (profiling can take a few seconds)
+    try:
+        post(f"{HF_API}/api/relay/heartbeat", {"user_id": args.user})
+        print(f"[Relay] Post-profile heartbeat sent")
+    except Exception:
+        pass
 
     poll_ids = list(dict.fromkeys([args.user, "local"]))
     fb_idx = 0
@@ -1576,6 +1590,60 @@ def main():
                         print(f"[Relay] Device profile: {len(profile.get('apps', []))} apps, {profile.get('hardware', {}).get('ram_gb', '?')}GB RAM")
                     except Exception as e:
                         result = {"success": False, "error": str(e)}
+                elif act.startswith("headless_"):
+                    # Headless virtual workstation commands
+                    try:
+                        sys.path.insert(0, os.path.join(_script_dir, "backend"))
+                        from headless_worker import JarvisHeadlessWorker
+                        worker = JarvisHeadlessWorker()
+                        sub_action = act.replace("headless_", "")
+                        params_dict = json.loads(params) if isinstance(params, str) and params.startswith("{") else (params if isinstance(params, dict) else {})
+                        if sub_action == "start":
+                            result = worker.start_session(
+                                session_id=params_dict.get("session_id", "default"),
+                                width=params_dict.get("width", 1920),
+                                height=params_dict.get("height", 1080),
+                            )
+                        elif sub_action == "stop":
+                            result = worker.stop_session(params_dict.get("session_id", "default"))
+                        elif sub_action == "status":
+                            result = worker.get_status(params_dict.get("session_id"))
+                        elif sub_action == "launch":
+                            result = worker.launch_app(
+                                session_id=params_dict.get("session_id", "default"),
+                                app_name=params_dict.get("app_name", ""),
+                                command=params_dict.get("command", []),
+                            )
+                        elif sub_action == "click":
+                            result = worker.inject_click(
+                                session_id=params_dict.get("session_id", "default"),
+                                x=params_dict.get("x", 0),
+                                y=params_dict.get("y", 0),
+                                button=params_dict.get("button", 1),
+                            )
+                        elif sub_action == "key":
+                            result = worker.inject_key(
+                                session_id=params_dict.get("session_id", "default"),
+                                key=params_dict.get("key", "Return"),
+                            )
+                        elif sub_action == "type":
+                            result = worker.inject_text(
+                                session_id=params_dict.get("session_id", "default"),
+                                text=params_dict.get("text", ""),
+                            )
+                        elif sub_action == "screenshot":
+                            data = worker.screenshot(params_dict.get("session_id", "default"))
+                            if data:
+                                import base64
+                                result = {"ok": True, "image": base64.b64encode(data).decode(), "format": "png"}
+                            else:
+                                result = {"ok": False, "error": "No frame captured"}
+                        elif sub_action == "windows":
+                            result = worker.get_window_tree(params_dict.get("session_id", "default"))
+                        else:
+                            result = {"ok": False, "error": f"Unknown headless action: {sub_action}"}
+                    except Exception as e:
+                        result = {"ok": False, "error": str(e)}
                 elif act.startswith("device_") or (isinstance(params, dict) and params.get("device_type")):
                     result = _execute_device_command(act.replace("device_", ""), params)
                 elif target == "OS_AGENT" or target == "HAL_AGENT":

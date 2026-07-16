@@ -122,6 +122,7 @@ export function CommandPalette({ open, onClose, onCommand }: Props) {
     >
       <div
         onClick={e => e.stopPropagation()}
+        className="modal-container"
         style={{
           width: 560, maxHeight: 420, borderRadius: 12, overflow: "hidden",
           background: "#0d0f12", border: "1px solid #1a1d23",

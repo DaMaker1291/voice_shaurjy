@@ -208,6 +208,58 @@ async def startup_event():
     except Exception as e:
         print(f"[SOVEREIGN] Startup scan failed: {e}")
 
+    # ── Initialize MCP Client ────────────────────────────────────────
+    try:
+        from mcp_client import get_mcp_client
+        from mcp_registry import get_registry
+        from compliance_ledger import get_ledger
+
+        registry = get_registry()
+        client = get_mcp_client()
+        ledger = get_ledger()
+        client.set_ledger(ledger)
+
+        # Load discovered server configs
+        for name, cfg in registry.get_all().items():
+            from mcp_client import MCPServerConfig, TransportType
+            transport = TransportType(cfg.get("transport", "stdio"))
+            client.register_server(MCPServerConfig(
+                name=name,
+                transport=transport,
+                command=cfg.get("command"),
+                args=cfg.get("args", []),
+                env=cfg.get("env"),
+                url=cfg.get("url"),
+                description=cfg.get("description", ""),
+                tags=cfg.get("tags", []),
+            ))
+
+        # Connect to all servers (best-effort, async)
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                def _connect_mcp():
+                    asyncio.run(client.connect_all())
+                pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                pool.submit(_connect_mcp)
+            else:
+                loop.run_until_complete(client.connect_all())
+        except Exception:
+            import concurrent.futures
+            def _connect_mcp():
+                asyncio.run(client.connect_all())
+            pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            pool.submit(_connect_mcp)
+
+        status = client.get_status()
+        print(f"[MCP] Initialized: {status['connected_servers']}/{status['total_servers']} servers, {status['total_tools']} tools")
+    except ImportError:
+        print("[MCP] mcp_client module not available — MCP routing disabled")
+    except Exception as e:
+        print(f"[MCP] Initialization failed: {e}")
+
 
 class RouterDispatchRequest(BaseModel):
     user_text: str
@@ -253,6 +305,226 @@ async def relay_download():
         from fastapi.responses import FileResponse
         return FileResponse(fp2, media_type="text/plain", filename="relay_agent.py")
     return {"error": "Relay agent not found"}
+
+@app.get("/install")
+@app.get("/install.ps1")
+async def install_download():
+    fp = os.path.join(os.path.dirname(__file__), "install.ps1")
+    if os.path.isfile(fp):
+        from fastapi.responses import FileResponse
+        return FileResponse(fp, media_type="text/plain", filename="install.ps1")
+    return {"error": "Installer not found"}
+
+# ── MCP Endpoints ────────────────────────────────────────────────────────
+
+@app.get("/api/mcp/status")
+async def mcp_status():
+    """Get status of all MCP server connections."""
+    try:
+        from mcp_client import get_mcp_client
+        client = get_mcp_client()
+        return client.get_status()
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/mcp/tools")
+async def mcp_tools():
+    """List all discovered MCP tools."""
+    try:
+        from mcp_client import get_mcp_client
+        from dataclasses import asdict
+        client = get_mcp_client()
+        tools = client.get_tools()
+        return {"tools": [asdict(t) for t in tools], "count": len(tools)}
+    except Exception as e:
+        return {"error": str(e), "tools": []}
+
+@app.post("/api/mcp/call")
+async def mcp_call_tool(body: dict, request: None = None):
+    """
+    Secure MCP tool invocation with enterprise identity propagation
+    and deterministic guardrail enforcement.
+    
+    Security pipeline:
+    1. Extract enterprise identity (OAuth2/OIDC JWT or local fallback)
+    2. Enforce scope-based access control
+    3. Run deterministic guardrails (SQL injection, destructive ops, etc.)
+    4. Down-scope token for target MCP server
+    5. Execute tool with isolated identity context
+    6. Log to hash-chained compliance ledger
+    """
+    tool_name = body.get("tool")
+    arguments = body.get("arguments", {})
+    if not tool_name:
+        return {"error": "Missing 'tool' parameter"}
+
+    try:
+        from mcp_client import get_mcp_client
+        from mcp_auth import (
+            extract_identity_from_request,
+            get_local_identity,
+            launder_token_for_server,
+        )
+        from mcp_guardrails import screen_or_block, RiskLevel
+        from compliance_ledger import get_ledger
+        from dataclasses import asdict
+
+        # ── Step 1: Extract Identity ─────────────────────────────────
+        # In production, pass the real request object. For now, use local identity.
+        # To enable enterprise SSO, set JARVIS_OIDC_ISSUER env var.
+        try:
+            if request is not None:
+                identity = extract_identity_from_request(request)
+            else:
+                identity = get_local_identity()
+        except Exception:
+            identity = get_local_identity()
+
+        # ── Step 2: Scope Check ──────────────────────────────────────
+        is_write = body.get("is_write", False)
+        if not identity.can_access_tool(tool_name, is_write):
+            # Log the denied attempt
+            ledger = get_ledger()
+            await ledger.log_invocation(
+                tool_name=tool_name,
+                server_name="access_denied",
+                arguments=arguments,
+                result={"denied": True, "reason": "insufficient_scope"},
+                duration_ms=0,
+                is_error=True,
+                identity_jwt_hash=identity.identity_hash,
+                security_scope="access_denied",
+            )
+            return {
+                "error": "Access denied: insufficient identity scopes",
+                "required_scopes": ["db:read"] if not is_write else ["db:write"],
+                "user_scopes": identity.scopes,
+                "identity_hash": identity.identity_hash[:16] + "...",
+            }
+
+        # ── Step 3: Guardrail Screening ──────────────────────────────
+        guardrail_result = screen_or_block(
+            tool_name=tool_name,
+            arguments=arguments,
+            user_id=identity.user_id,
+            is_write=is_write,
+        )
+
+        if not guardrail_result.allowed:
+            # Log the blocked violation
+            ledger = get_ledger()
+            await ledger.log_invocation(
+                tool_name=tool_name,
+                server_name="guardrail_blocked",
+                arguments=arguments,
+                result={
+                    "blocked": True,
+                    "reason": guardrail_result.blocked_reason,
+                    "violations": guardrail_result.violations,
+                },
+                duration_ms=0,
+                is_error=True,
+                identity_jwt_hash=identity.identity_hash,
+                security_scope="guardrail_violation",
+            )
+            return {
+                "error": guardrail_result.blocked_reason,
+                "violations": guardrail_result.violations,
+                "risk_level": guardrail_result.risk_level.value,
+                "identity_hash": identity.identity_hash[:16] + "...",
+                "logged_to_compliance_ledger": True,
+            }
+
+        # ── Step 4: Down-scope Token for Target Server ───────────────
+        scoped_headers = launder_token_for_server(
+            identity=identity,
+            server_name=tool_name.split("__")[0] if "__" in tool_name else tool_name,
+            tool_name=tool_name,
+            is_write=is_write,
+        )
+
+        # Inject scoped identity into arguments (for downstream MCP servers)
+        arguments["_identity"] = {
+            "user_id": identity.user_id,
+            "identity_hash": identity.identity_hash,
+            "tenant_id": identity.tenant_id,
+            "scopes": identity.scopes,
+            "auth_method": identity.auth_method,
+        }
+
+        # ── Step 5: Execute Tool ─────────────────────────────────────
+        client = get_mcp_client()
+        result = await client.call_tool(tool_name, arguments)
+
+        # ── Step 6: Compliance Ledger ────────────────────────────────
+        # The mcp_client already logs to the ledger. Add identity context.
+        ledger = get_ledger()
+        await ledger.log_invocation(
+            tool_name=tool_name,
+            server_name=result.server_name or "unknown",
+            arguments=arguments,
+            result=asdict(result),
+            duration_ms=result.duration_ms,
+            is_error=result.is_error,
+            identity_jwt_hash=identity.identity_hash,
+            security_scope=f"{identity.user_id}:{identity.tenant_id}",
+        )
+
+        response = asdict(result)
+        response["identity"] = {
+            "user_id": identity.user_id,
+            "identity_hash": identity.identity_hash[:16] + "...",
+            "auth_method": identity.auth_method,
+            "scopes_applied": scoped_headers.get("X-JARVIS-Effective-Scopes", ""),
+        }
+        response["guardrails"] = {
+            "passed": True,
+            "risk_level": guardrail_result.risk_level.value,
+            "warnings": guardrail_result.warnings,
+        }
+
+        return response
+
+    except ImportError as e:
+        return {"error": f"Security module not available: {e}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/mcp/guardrails")
+async def mcp_guardrails_status():
+    """Get guardrail engine status and statistics."""
+    try:
+        from mcp_guardrails import get_guardrail
+        guardrail = get_guardrail()
+        return guardrail.get_stats()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/mcp/registry")
+async def mcp_registry():
+    """List all discovered MCP server configurations."""
+    try:
+        from mcp_registry import get_registry
+        registry = get_registry()
+        return {"servers": registry.get_all(), "count": len(registry.get_all())}
+    except Exception as e:
+        return {"error": str(e), "servers": {}}
+
+@app.get("/api/mcp/compliance")
+async def mcp_compliance_report():
+    """Generate a compliance report."""
+    try:
+        from compliance_ledger import get_ledger
+        ledger = get_ledger()
+        return {
+            "stats": ledger.get_stats(),
+            "report": ledger.generate_report(),
+            "recent_records": ledger.get_records(limit=20),
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/health")
 @app.get("/api/health")
@@ -3563,8 +3835,8 @@ async def autonomous_stats():
         "max_parallel": loop._max_parallel,
     }
 
-@app.get("/api/headless/status")
-async def headless_status():
+@app.get("/api/headless-browser/status")
+async def headless_browser_status():
     """Check if headless browser is running."""
     try:
         from headless_browser import get_browser
@@ -3887,3 +4159,21 @@ async def system_quick(req: dict):
     action = req.get("action", "")
     params = req.get("params", {})
     return quick_action(action, params)
+
+# ── Headless Workstation Orchestrator ─────────────────────────────────────
+from headless_api import router as headless_router
+app.include_router(headless_router)
+
+# ── Multi-Tenant Organization API ─────────────────────────────────────────
+from org_api import router as org_router
+app.include_router(org_router)
+
+# ── Initialize Multi-Tenant Engine at Startup ──────────────────────────────
+@app.on_event("startup")
+async def init_multi_tenant():
+    try:
+        from org_manager import get_org_manager
+        mgr = get_org_manager()
+        _log.info(f"[OrgManager] Initialized — {len(mgr._orgs)} organizations loaded")
+    except Exception as e:
+        _log.warning(f"[OrgManager] Init skipped: {e}")

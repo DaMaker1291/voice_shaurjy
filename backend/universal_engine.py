@@ -126,6 +126,12 @@ class UniversalActionEngine:
         "system_explore": [r"explore\s+(?:your\s+)?(?:device|computer|system|pc|machine)", r"scan\s+(?:your\s+)?(?:device|computer|system)", r"what(?:'s|\s+is)\s+(?:on\s+)?(?:your|this)\s+(?:device|computer|system|pc)", r"tell\s+me\s+about\s+(?:your|this)\s+(?:device|computer|system|pc)", r"what\s+apps?\s+(?:do\s+)?(?:you|i)\s+(?:have|can)", r"what\s+(?:can|does)\s+(?:your|this)\s+(?:device|computer|system)\s+(?:do|have)"],
         "desktop_go_to": [r"go\s+to\s+(?:https?://|www\.|google|youtube|github|reddit|twitter|facebook)", r"navigate\s+to", r"open\s+(?:the\s+)?(?:website|site|url|page)"],
 
+        # Headless Virtual Workstation
+        "headless_start": [r"start\s+(?:a\s+)?virtual\s+(?:desktop|display|workstation|workspace)", r"provision\s+(?:a\s+)?virtual\s+(?:desktop|display)", r"spin\s+up\s+(?:a\s+)?virtual\s+(?:desktop|display)", r"create\s+(?:a\s+)?background\s+(?:desktop|display|workspace)"],
+        "headless_stop": [r"stop\s+(?:the\s+)?virtual\s+(?:desktop|display|workstation)", r"shut\s+down\s+(?:the\s+)?virtual\s+(?:desktop|display)", r"kill\s+(?:the\s+)?virtual\s+(?:desktop|display)"],
+        "headless_launch": [r"launch\s+(.+?)\s+in\s+(?:the\s+)?(?:virtual|background|headless)", r"open\s+(.+?)\s+in\s+(?:the\s+)?(?:virtual|background|headless)", r"run\s+(.+?)\s+in\s+(?:the\s+)?(?:virtual|background|headless)", r"(?:background|headless)\s+launch\s+(.+)"],
+        "headless_status": [r"virtual\s+(?:desktop|display|workstation)\s+status", r"is\s+(?:the\s+)?virtual\s+(?:desktop|display)\s+(?:running|active|up)", r"headless\s+status"],
+
         # Autonomous
         "autonomous": [r"do\s+(?:this|that|it)\s+(?:for\s+me|autonomously)", r"handle\s+(?:this|that)", r"take\s+care\s+of"],
     }
@@ -360,6 +366,25 @@ class UniversalActionEngine:
         "desktop_close": [
             {"action": "system_quit_app", "description": "Quit the application"},
             {"action": "report_findings", "description": "Confirm app was closed"},
+        ],
+
+        # Headless Virtual Workstation
+        "headless_start": [
+            {"action": "headless_start_session", "description": "Provision virtual display (:1)"},
+            {"action": "report_findings", "description": "Virtual desktop is ready"},
+        ],
+        "headless_stop": [
+            {"action": "headless_stop_session", "description": "Shut down virtual display"},
+            {"action": "report_findings", "description": "Virtual desktop stopped"},
+        ],
+        "headless_launch": [
+            {"action": "headless_launch_app", "description": "Launch app in virtual display"},
+            {"action": "headless_screenshot", "description": "Verify app launched"},
+            {"action": "report_findings", "description": "App running in background"},
+        ],
+        "headless_status": [
+            {"action": "headless_check_status", "description": "Check virtual workstation status"},
+            {"action": "report_findings", "description": "Report status"},
         ],
         "desktop_go_to": [
             {"action": "system_hotkey", "description": "Focus address bar (Cmd+L)", "params": {"keys": ["cmd", "l"]}},

@@ -31,6 +31,14 @@ _KEYWORD_MAP: dict[str, str] = {
     "what apps do you have": "system_explore", "what apps do i have": "system_explore",
     "what can your device do": "system_explore", "what can this device do": "system_explore",
     "tell me about your device": "system_explore", "tell me about this device": "system_explore",
+
+    # Headless Virtual Workstation
+    "start virtual desktop": "headless_start_session", "start virtual display": "headless_start_session",
+    "provision virtual desktop": "headless_start_session", "spin up virtual desktop": "headless_start_session",
+    "stop virtual desktop": "headless_stop_session", "stop virtual display": "headless_stop_session",
+    "kill virtual desktop": "headless_stop_session", "shut down virtual desktop": "headless_stop_session",
+    "virtual desktop status": "headless_check_status", "virtual display status": "headless_check_status",
+    "headless status": "headless_check_status",
     "research": "fetch_search", "investigate": "fetch_search",
     "scrape": "fetch_search", "read the web": "fetch_search",
     "fetch": "fetch_search",
@@ -4799,3 +4807,131 @@ elif sys.platform == "linux":
         lines.append(f"Disk: {_linux_run('df -h / 2>/dev/null | tail -1')}")
         lines.append(f"Network: {_linux_run('ip route 2>/dev/null | head -3')}")
         return "\n".join(lines)
+
+
+# ── Headless Virtual Workstation Actions ─────────────────────────────────
+
+@register("headless_start_session")
+def _headless_start(_):
+    """Start a headless virtual display session."""
+    try:
+        from relay import is_relay_alive, queue_action, get_result
+        import json, time
+        if is_relay_alive():
+            rid = queue_action("headless_start", json.dumps({"session_id": "default"}))
+            for _ in range(30):
+                time.sleep(0.5)
+                r = get_result(rid)
+                if r.get("status") in ("done", "failed"):
+                    try: return json.loads(r["result"])
+                    except: return r["result"]
+            return "Relay timeout"
+        from headless_worker import JarvisHeadlessWorker
+        w = JarvisHeadlessWorker()
+        return w.start_session()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@register("headless_stop_session")
+def _headless_stop(_):
+    """Stop the headless virtual display session."""
+    try:
+        from relay import is_relay_alive, queue_action, get_result
+        import json, time
+        if is_relay_alive():
+            rid = queue_action("headless_stop", json.dumps({"session_id": "default"}))
+            for _ in range(30):
+                time.sleep(0.5)
+                r = get_result(rid)
+                if r.get("status") in ("done", "failed"):
+                    try: return json.loads(r["result"])
+                    except: return r["result"]
+            return "Relay timeout"
+        from headless_worker import JarvisHeadlessWorker
+        w = JarvisHeadlessWorker()
+        return w.stop_session("default")
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@register("headless_launch_app")
+def _headless_launch(text):
+    """Launch an app in the headless virtual display."""
+    import re as _re
+    app_match = _re.search(r"launch\s+(.+?)(?:\s+in\s+(?:the\s+)?(?:virtual|background|headless)|$)", text, _re.I)
+    app_name = app_match.group(1).strip() if app_match else text.strip()
+    try:
+        from relay import is_relay_alive, queue_action, get_result
+        import json, time
+        cmd = [app_name]
+        params = {"session_id": "default", "app_name": app_name, "command": cmd}
+        if is_relay_alive():
+            rid = queue_action("headless_launch", json.dumps(params))
+            for _ in range(30):
+                time.sleep(0.5)
+                r = get_result(rid)
+                if r.get("status") in ("done", "failed"):
+                    try: return json.loads(r["result"])
+                    except: return r["result"]
+            return "Relay timeout"
+        from headless_worker import JarvisHeadlessWorker
+        w = JarvisHeadlessWorker()
+        return w.launch_app("default", app_name, cmd)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@register("headless_check_status")
+def _headless_status(_):
+    """Check headless virtual workstation status."""
+    try:
+        from relay import is_relay_alive, queue_action, get_result
+        import json, time
+        if is_relay_alive():
+            rid = queue_action("headless_status", json.dumps({}))
+            for _ in range(30):
+                time.sleep(0.5)
+                r = get_result(rid)
+                if r.get("status") in ("done", "failed"):
+                    try: return json.loads(r["result"])
+                    except: return r["result"]
+            return "Relay timeout"
+        from headless_worker import JarvisHeadlessWorker
+        w = JarvisHeadlessWorker()
+        return w.get_status()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@register("headless_screenshot")
+def _headless_screenshot(_):
+    """Capture a screenshot from the headless virtual display."""
+    try:
+        from relay import is_relay_alive, queue_action, get_result
+        import json, time, base64
+        if is_relay_alive():
+            rid = queue_action("headless_screenshot", json.dumps({"session_id": "default"}))
+            for _ in range(30):
+                time.sleep(0.5)
+                r = get_result(rid)
+                if r.get("status") in ("done", "failed"):
+                    try: data = json.loads(r["result"])
+                    except: data = {"result": r["result"]}
+                    if data.get("image"):
+                        img_bytes = base64.b64decode(data["image"])
+                        path = f"/tmp/jarvis_headless_{int(time.time())}.png"
+                        with open(path, "wb") as f: f.write(img_bytes)
+                        return {"ok": True, "path": path}
+                    return data
+            return "Relay timeout"
+        from headless_worker import JarvisHeadlessWorker
+        w = JarvisHeadlessWorker()
+        data = w.screenshot("default")
+        if data:
+            path = f"/tmp/jarvis_headless_{int(time.time())}.png"
+            with open(path, "wb") as f: f.write(data)
+            return {"ok": True, "path": path}
+        return {"ok": False, "error": "No frame"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

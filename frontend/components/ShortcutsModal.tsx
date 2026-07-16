@@ -55,6 +55,7 @@ export default function ShortcutsModal({ onClose }: Props) {
     >
       <div
         onClick={e => e.stopPropagation()}
+        className="modal-container"
         style={{
           width: 520, maxHeight: "80vh", overflow: "auto",
           background: "#0d0f12", border: "1px solid rgba(0,255,102,0.15)",

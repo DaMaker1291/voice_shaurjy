@@ -1,43 +1,52 @@
 {
-  "name": "second-brain",
-  "version": "1.0.0",
-  "description": "Second Brain — AI Desktop Assistant",
+  "name": "jarvis-ai",
+  "version": "3.0.0",
+  "description": "JARVIS — Sovereign Network Orchestrator",
+  "author": "JARVIS AI",
+  "license": "MIT",
   "main": "main.js",
+  "homepage": "./",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder",
-    "dist": "electron-builder --win --x64"
+    "dev": "NODE_ENV=development electron .",
+    "build": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder --win --mac --linux",
+    "postinstall": "electron-builder install-app-deps"
   },
-  "author": "Second Brain",
-  "license": "MIT",
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.7"
+  },
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^25.0.0"
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1"
   },
   "build": {
-    "appId": "com.secondbrain.app",
-    "productName": "Second Brain",
+    "appId": "com.jarvis.sovereign",
+    "productName": "JARVIS",
+    "copyright": "Copyright © 2024 JARVIS AI",
     "directories": {
       "output": "dist"
     },
     "files": [
       "main.js",
       "preload.js",
-      "icon.png",
-      "../frontend/out/**/*",
-      "../backend/**/*",
-      "../.venv/**/*"
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json"
     ],
     "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": ["**/*.py", "!__pycache__/**", "!*.pyc"]
+      },
       {
         "from": "../frontend/out",
         "to": "frontend",
         "filter": ["**/*"]
-      },
-      {
-        "from": "../backend",
-        "to": "backend",
-        "filter": ["**/*", "!.entity_data"]
       }
     ],
     "win": {
@@ -45,25 +54,43 @@
         {
           "target": "nsis",
           "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
         }
       ],
-      "icon": "icon.png",
-      "artifactName": "SecondBrain-Setup-${version}.${ext}"
+      "icon": "assets/icon.ico",
+      "artifactName": "JARVIS_Setup_v${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "runAfterFinish": true,
-      "shortcutName": "Second Brain",
-      "installerIcon": "icon.png",
-      "uninstallerIcon": "icon.png",
-      "license": null
+      "createStartMenuShortcut": true,
+      "shortcutName": "JARVIS",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "installerSidebar": "assets/sidebar.bmp",
+      "uninstallerSidebar": "assets/sidebar.bmp",
+      "license": "LICENSE.txt",
+      "installerLanguages": ["English"],
+      "language": "1033"
     },
-    "autoLaunch": {
-      "enabled": true,
-      "args": ["--autostart"]
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "assets/icon.icns",
+      "target": ["dmg", "zip"],
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.mac.plist"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "assets/icon.png",
+      "category": "Utility"
     }
   }
 }

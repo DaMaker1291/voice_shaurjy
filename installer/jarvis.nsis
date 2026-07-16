@@ -1,0 +1,122 @@
+; JARVIS Windows Installer — NSIS Script
+; Build with: makensis jarvis.nsis
+; Or use the Python installer: python installer.py
+
+!include "MUI2.nsh"
+!include "FileFunc.nsh"
+
+; ── Configuration ────────────────────────────────────────────────────────
+Name "JARVIS — Sovereign Network Orchestrator"
+OutFile "JARVIS_Setup_v3.0.exe"
+InstallDir "$PROGRAMFILES\JARVIS"
+InstallDirRegKey HKLM "Software\JARVIS" "InstallDir"
+RequestExecutionLevel admin
+Unicode True
+
+; ── Version Info ─────────────────────────────────────────────────────────
+VIProductVersion "3.0.0.0"
+VIAddVersionKey "ProductName" "JARVIS"
+VIAddVersionKey "CompanyName" "JARVIS AI"
+VIAddVersionKey "FileDescription" "JARVIS Sovereign Network Orchestrator Installer"
+VIAddVersionKey "FileVersion" "3.0.0"
+VIAddVersionKey "ProductVersion" "3.0.0"
+
+; ── Interface ────────────────────────────────────────────────────────────
+!define MUI_ICON "icon.ico"
+!define MUI_UNICON "icon.ico"
+!define MUI_ABORTWARNING
+!define MUI_WELCOMEPAGE_TITLE "JARVIS Setup"
+!define MUI_WELCOMEPAGE_TEXT "Welcome to the JARVIS Sovereign Network Orchestrator.$\r$\n$\r$\nThis will install JARVIS on your system.$\r$\n$\r$\nClick Next to continue."
+
+; ── Pages ────────────────────────────────────────────────────────────────
+!insertmacro MUI_PAGE_WELCOME
+!insertmacro MUI_PAGE_LICENSE "LICENSE.txt"
+!insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_PAGE_FINISH
+
+!insertmacro MUI_UNPAGE_CONFIRM
+!insertmacro MUI_UNPAGE_INSTFILES
+
+!insertmacro MUI_LANGUAGE "English"
+
+; ── Installation ─────────────────────────────────────────────────────────
+Section "Install"
+    SetOutPath "$INSTDIR"
+    
+    ; Create directories
+    CreateDirectory "$INSTDIR\backend"
+    CreateDirectory "$INSTDIR\frontend"
+    CreateDirectory "$INSTDIR\installer"
+    CreateDirectory "$APPDATA\JARVIS"
+    CreateDirectory "$APPDATA\JARVIS\data"
+    CreateDirectory "$APPDATA\JARVIS\models"
+    
+    ; Install Python if not present
+    nsExec::ExecToLog 'python --version'
+    Pop $0
+    ${If} $0 != 0
+        DetailPrint "Installing Python 3.11..."
+        nsExec::ExecToLog 'winget install Python.Python.3.11 --silent --accept-source-agreements'
+    ${EndIf}
+    
+    ; Install pip packages
+    DetailPrint "Installing Python dependencies..."
+    nsExec::ExecToLog 'python -m pip install fastapi "uvicorn[standard]" python-dotenv pydantic psutil websocket-client certifi Pillow pywin32'
+    
+    ; Copy files
+    File /r "backend\*.*" "backend\"
+    File /r "frontend\out\*.*" "frontend\out\"
+    File "relay.py"
+    File "installer\installer.py"
+    
+    ; Create Start Menu shortcuts
+    CreateDirectory "$SMPROGRAMS\JARVIS"
+    CreateShortCut "$SMPROGRAMS\JARVIS\JARVIS.lnk" "$INSTDIR\relay.bat" "" "" "" SW_SHOWMINIMIZED
+    CreateShortCut "$SMPROGRAMS\JARVIS\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+    
+    ; Create desktop shortcut
+    CreateShortCut "$DESKTOP\JARVIS.lnk" "$INSTDIR\relay.bat" "" "" "" SW_SHOWMINIMIZED
+    
+    ; Create relay batch file
+    FileOpen $0 "$INSTDIR\relay.bat" w
+    FileWrite $0 '@echo off$\r$\n'
+    FileWrite $0 'title JARVIS — Sovereign Network Orchestrator$\r$\n'
+    FileWrite $0 'cd /d "$INSTDIR"$\r$\n'
+    FileWrite $0 'python relay.py --user local$\r$\n'
+    FileWrite $0 'pause$\r$\n'
+    FileClose $0
+    
+    ; Write registry
+    WriteRegStr HKLM "Software\JARVIS" "InstallDir" "$INSTDIR"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "DisplayName" "JARVIS"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "InstallLocation" "$INSTDIR"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "Publisher" "JARVIS AI"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS" "DisplayVersion" "3.0.0"
+    
+    ; Create uninstaller
+    WriteUninstaller "$INSTDIR\Uninstall.exe"
+    
+    ; Add Windows Defender exclusion
+    DetailPrint "Adding Windows Defender exclusion..."
+    nsExec::ExecToLog 'powershell -Command "Add-MpExclusion -ExclusionPath \'$INSTDIR\'"'
+    nsExec::ExecToLog 'powershell -Command "Add-MpExclusion -ExclusionPath \'$APPDATA\JARVIS\'"'
+    
+SectionEnd
+
+; ── Uninstaller ──────────────────────────────────────────────────────────
+Section "Uninstall"
+    RMDir /r "$INSTDIR"
+    RMDir /r "$SMPROGRAMS\JARVIS"
+    Delete "$DESKTOP\JARVIS.lnk"
+    
+    DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\JARVIS"
+    DeleteRegKey HKLM "Software\JARVIS"
+    
+    ; Remove Defender exclusions
+    nsExec::ExecToLog 'powershell -Command "Remove-MpExclusion -ExclusionPath \'$INSTDIR\'" 2>nul'
+    nsExec::ExecToLog 'powershell -Command "Remove-MpExclusion -ExclusionPath \'$APPDATA\JARVIS\'" 2>nul'
+    
+    MessageBox MB_OK "JARVIS has been uninstalled."
+SectionEnd

@@ -9,22 +9,26 @@ import shutil
 import subprocess
 import json
 import time
+import logging
 from pathlib import Path
 from typing import Dict, Any, List
+
+log = logging.getLogger("jarvis-disk-cleaner")
+
 
 class DiskCleaner:
     """
     Scans system for:
-    - Cache files (browser, system, app caches)
+    - Browser cache files (Chrome, Firefox, Safari, Edge)
+    - System and app caches
     - Log files
-    - Old downloads
+    - Old downloads (age-based filtering)
     - Empty folders
     - Large temp files
     - npm/pip/yarn caches
     Shows sizes, asks before cleaning.
     """
 
-    # Directories to scan
     CACHE_DIRS = {
         "~/Library/Caches": "macOS System Caches",
         "~/.cache": "User Cache",
@@ -59,14 +63,16 @@ class DiskCleaner:
         """Full system scan. Returns categories with sizes."""
         results = {
             "caches": self._scan_dirs(self.CACHE_DIRS),
+            "browser_caches": self._scan_browser_caches(),
             "logs": self._scan_dirs(self.LOG_DIRS),
             "temp": self._scan_dirs(self.TEMP_DIRS),
             "large_downloads": self._scan_large_downloads(),
+            "old_downloads": self._scan_old_downloads(days=30),
             "old_docker": self._scan_docker(),
             "empty_folders": self._scan_empty_folders(),
         }
 
-        total_bytes = sum(cat.get("total_bytes", 0) for cat in results.values())
+        total_bytes = sum(cat.get("total_bytes", 0) for cat in results.values() if isinstance(cat, dict))
         results["total_bytes"] = total_bytes
         results["total_human"] = self._human_size(total_bytes)
         results["scan_id"] = str(int(time.time()))
@@ -75,6 +81,61 @@ class DiskCleaner:
         self._pending_clean[results["scan_id"]] = results
 
         return results
+
+    def _scan_browser_caches(self) -> Dict[str, Any]:
+        """Scan browser-specific cache directories."""
+        import sys
+        items = []
+        total_bytes = 0
+        home = os.path.expanduser("~")
+
+        if sys.platform == "darwin":
+            browser_paths = {
+                f"{home}/Library/Caches/Google/Chrome": "Chrome Cache",
+                f"{home}/Library/Caches/Firefox": "Firefox Cache",
+                f"{home}/Library/Caches/com.apple.Safari": "Safari Cache",
+                f"{home}/Library/Caches/com.microsoft.edgemac": "Edge Cache",
+                f"{home}/Library/Caches/BraveSoftware": "Brave Cache",
+            }
+        elif sys.platform == "win32":
+            local = os.environ.get("LOCALAPPDATA", "")
+            browser_paths = {
+                f"{local}/Google/Chrome/User Data/Default/Cache": "Chrome Cache",
+                f"{local}/Google/Chrome/User Data/Default/Code Cache": "Chrome Code Cache",
+                f"{local}/Mozilla/Firefox": "Firefox Cache",
+                f"{local}/Microsoft/Edge/User Data/Default/Cache": "Edge Cache",
+                f"{local}/BraveSoftware/Brave-Browser/User Data/Default/Cache": "Brave Cache",
+            }
+        else:
+            browser_paths = {
+                f"{home}/.cache/google-chrome": "Chrome Cache",
+                f"{home}/.cache/mozilla/firefox": "Firefox Cache",
+                f"{home}/.cache/microsoft-edge": "Edge Cache",
+                f"{home}/.cache/BraveSoftware": "Brave Cache",
+            }
+
+        for path, label in browser_paths.items():
+            if not os.path.exists(path):
+                continue
+            try:
+                size = self._get_dir_size(path)
+                file_count = self._count_files_recursive(path)
+                items.append({
+                    "path": path,
+                    "label": label,
+                    "bytes": size,
+                    "human": self._human_size(size),
+                    "files": file_count,
+                })
+                total_bytes += size
+            except (OSError, PermissionError):
+                continue
+
+        return {
+            "items": sorted(items, key=lambda x: x["bytes"], reverse=True),
+            "total_bytes": total_bytes,
+            "total_human": self._human_size(total_bytes),
+        }
 
     def _scan_dirs(self, dir_map: Dict[str, str]) -> Dict[str, Any]:
         """Scan a map of directories and return sizes."""
@@ -88,7 +149,7 @@ class DiskCleaner:
 
             try:
                 size = self._get_dir_size(path)
-                file_count = self._count_files(path)
+                file_count = self._count_files_recursive(path)
                 items.append({
                     "path": path,
                     "label": label,
@@ -97,12 +158,12 @@ class DiskCleaner:
                     "files": file_count,
                 })
                 total_bytes += size
-            except:
+            except (OSError, PermissionError):
                 continue
 
         return {"items": sorted(items, key=lambda x: x["bytes"], reverse=True), "total_bytes": total_bytes, "total_human": self._human_size(total_bytes)}
 
-    def _scan_large_downloads(self) -> Dict[str, Any]:
+    def _scan_large_downloads(self, min_size_mb: int = 100) -> Dict[str, Any]:
         """Scan for large files in ~/Downloads."""
         downloads = os.path.expanduser("~/Downloads")
         items = []
@@ -112,7 +173,7 @@ class DiskCleaner:
                 if entry.is_file():
                     try:
                         size = entry.stat().st_size
-                        if size > 100 * 1024 * 1024:  # > 100MB
+                        if size > min_size_mb * 1024 * 1024:
                             items.append({
                                 "path": entry.path,
                                 "name": entry.name,
@@ -120,12 +181,43 @@ class DiskCleaner:
                                 "human": self._human_size(size),
                                 "modified": entry.stat().st_mtime,
                             })
-                    except:
+                    except (OSError, PermissionError):
                         continue
 
         items.sort(key=lambda x: x["bytes"], reverse=True)
         total = sum(i["bytes"] for i in items)
         return {"items": items[:20], "total_bytes": total, "total_human": self._human_size(total)}
+
+    def _scan_old_downloads(self, days: int = 30) -> Dict[str, Any]:
+        """Scan for downloads older than N days."""
+        import time as _time
+        downloads = os.path.expanduser("~/Downloads")
+        items = []
+        now = _time.time()
+        cutoff = now - (days * 86400)
+
+        if os.path.exists(downloads):
+            for entry in os.scandir(downloads):
+                if entry.is_file():
+                    try:
+                        mtime = entry.stat().st_mtime
+                        if mtime < cutoff:
+                            size = entry.stat().st_size
+                            age_days = int((now - mtime) / 86400)
+                            items.append({
+                                "path": entry.path,
+                                "name": entry.name,
+                                "bytes": size,
+                                "human": self._human_size(size),
+                                "age_days": age_days,
+                                "modified": mtime,
+                            })
+                    except (OSError, PermissionError):
+                        continue
+
+        items.sort(key=lambda x: x["bytes"], reverse=True)
+        total = sum(i["bytes"] for i in items)
+        return {"items": items[:30], "total_bytes": total, "total_human": self._human_size(total), "days_threshold": days}
 
     def _scan_docker(self) -> Dict[str, Any]:
         """Scan Docker images/containers."""
@@ -136,7 +228,7 @@ class DiskCleaner:
             )
             if result.returncode == 0:
                 return {"status": "available", "output": result.stdout.strip()}
-        except:
+        except (subprocess.SubprocessError, FileNotFoundError):
             pass
         return {"status": "unavailable"}
 
@@ -158,7 +250,7 @@ class DiskCleaner:
                         empty.append(root)
                     if len(empty) > 50:
                         break
-            except:
+            except (OSError, PermissionError):
                 continue
 
         return {"items": empty[:50], "count": len(empty)}
@@ -244,9 +336,9 @@ class DiskCleaner:
         suggestions = []
         scan = self.scan_all()
 
-        for category in ["caches", "logs", "temp"]:
+        for category in ["caches", "browser_caches", "logs", "temp"]:
             data = scan.get(category, {})
-            if data.get("total_bytes", 0) > 50 * 1024 * 1024:  # > 50MB
+            if isinstance(data, dict) and data.get("total_bytes", 0) > 50 * 1024 * 1024:  # > 50MB
                 suggestions.append({
                     "category": category,
                     "size": data["total_human"],
@@ -262,6 +354,15 @@ class DiskCleaner:
                 "recommendation": f"Review large downloads — {scan['large_downloads']['total_human']}",
             })
 
+        old_downloads = scan.get("old_downloads", {})
+        if old_downloads.get("total_bytes", 0) > 100 * 1024 * 1024:
+            suggestions.append({
+                "category": "old_downloads",
+                "size": old_downloads["total_human"],
+                "items": len(old_downloads.get("items", [])),
+                "recommendation": f"Review old downloads (>{old_downloads.get('days_threshold', 30)} days) — {old_downloads['total_human']}",
+            })
+
         return suggestions
 
     # ── Helpers ────────────────────────────────────────────────────────
@@ -275,17 +376,20 @@ class DiskCleaner:
                     total += entry.stat().st_size
                 elif entry.is_dir(follow_symlinks=False):
                     total += self._get_dir_size(entry.path)
-        except:
+        except (OSError, PermissionError):
             pass
         return total
 
-    def _count_files(self, path: str) -> int:
-        """Count files in a directory."""
+    def _count_files_recursive(self, path: str) -> int:
+        """Count files recursively in a directory."""
         count = 0
         try:
-            for _ in os.scandir(path):
-                count += 1
-        except:
+            for entry in os.scandir(path):
+                if entry.is_file(follow_symlinks=False):
+                    count += 1
+                elif entry.is_dir(follow_symlinks=False):
+                    count += self._count_files_recursive(entry.path)
+        except (OSError, PermissionError):
             pass
         return count
 
