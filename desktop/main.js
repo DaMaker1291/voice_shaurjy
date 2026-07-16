@@ -168,7 +168,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
-      webSecurity: !isDev,
+      webSecurity: false,
     },
     titleBarStyle: "hidden",
     titleBarOverlay: {
@@ -176,39 +176,19 @@ function createWindow() {
       symbolColor: "#667085",
       height: 36,
     },
-    frame: false,
+    frame: true,
     transparent: false,
   });
 
-  // Load the frontend
+  // Load the frontend — always use the full HF Space UI
   if (isDev) {
-    mainWindow.loadURL("http://localhost:3000");
+    mainWindow.loadURL(HF_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
-    // In production, try multiple frontend locations
-    const candidates = [
-      // 1. Bundled renderer (in app directory — part of "files")
-      path.join(__dirname, "renderer", "index.html"),
-      // 2. HF Space frontend (in extraResources)
-      path.join(process.resourcesPath, "frontend", "index.html"),
-      // 3. Bundled renderer via resourcesPath (some build configs)
-      path.join(process.resourcesPath, "renderer", "index.html"),
-    ];
-
-    let loaded = false;
-    for (const htmlPath of candidates) {
-      if (fs.existsSync(htmlPath)) {
-        log(`Loading frontend: ${htmlPath}`);
-        mainWindow.loadFile(htmlPath);
-        loaded = true;
-        break;
-      }
-    }
-
-    if (!loaded) {
-      log("No local frontend found — loading HF Space");
-      mainWindow.loadURL(HF_URL);
-    }
+    // In production, load the full HF Space — it has ALL features
+    // The HF Space serves the complete JARVIS UI with AI, agents, devices, etc.
+    log("Loading HF Space frontend...");
+    mainWindow.loadURL(HF_URL);
   }
 
   // Show when ready
