@@ -12,6 +12,8 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,6 +30,10 @@ jobs:
 
       - name: Install Python deps
         run: pip install Pillow
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm install && npm run build
 
       - name: Install Electron deps
         working-directory: desktop
@@ -53,6 +59,8 @@ jobs:
 
   build-mac:
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,6 +77,10 @@ jobs:
 
       - name: Install Python deps
         run: pip install Pillow
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm install && npm run build
 
       - name: Install Electron deps
         working-directory: desktop
@@ -95,6 +107,8 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -111,6 +125,10 @@ jobs:
 
       - name: Install Python deps
         run: pip install Pillow
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm install && npm run build
 
       - name: Install Electron deps
         working-directory: desktop
