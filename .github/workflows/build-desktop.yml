@@ -191,14 +191,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RELEASE_ID=$(gh api repos/DaMaker1291/voice_shaurjy/releases/tags/v3.0.0 --jq '.id' 2>/dev/null || echo "")
-          if [ -z "$RELEASE_ID" ]; then
-            echo "No release found, skipping upload"
-            exit 0
-          fi
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Uploading artifacts for tag: $TAG"
           for f in artifacts/windows-build/*.exe artifacts/mac-build/*.dmg artifacts/mac-build/*.zip artifacts/linux-build/*.AppImage artifacts/linux-build/*.deb; do
             if [ -f "$f" ]; then
               echo "Uploading $f..."
-              gh release upload v3.0.0 "$f" --clobber
+              gh release upload "$TAG" "$f" --clobber || echo "Upload failed for $f (release may not exist yet)"
             fi
           done
