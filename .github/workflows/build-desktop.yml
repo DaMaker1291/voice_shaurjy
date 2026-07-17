@@ -58,15 +58,17 @@ jobs:
 
       - name: Zip Windows build
         if: success()
-        shell: bash
-        run: cd desktop/dist && 7z a -tzip "../../JARVIS-Windows-x64.zip" "win-unpacked/"
+        shell: pwsh
+        run: Compress-Archive -Path "desktop/dist/win-unpacked/*" -DestinationPath "JARVIS-Windows-x64.zip"
 
       - name: Upload Windows artifacts
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: JARVIS-Windows-x64.zip
+          path: |
+            JARVIS-Windows-x64.zip
+            desktop/dist/*.exe
           retention-days: 30
 
   build-mac:
