@@ -80,3 +80,87 @@ def get_result(rid: str) -> dict:
         if rid in _pending:
             return {"status": "pending"}
         return {"status": "not_found"}
+
+
+# ── Context Push (Outlook/Calendar/Email from user's machine) ─────────────
+
+def push_context_to_backend(backend_url: str, user_id: str = "local"):
+    """Read local Outlook/Calendar and push to backend for hyper-personalization."""
+    import os
+    if os.name != "nt":
+        return  # Only Windows for now
+
+    try:
+        import win32com.client
+        outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
+
+        # Calendar
+        calendar = outlook.GetDefaultFolder(9)
+        items = calendar.Items
+        items.IncludeRecurrences = True
+        items.Sort("[Start]")
+        from datetime import datetime, timedelta
+        start = datetime.now().strftime("%Y-%m-%d %H:%M %p")
+        end = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d %H:%M %p")
+        items = items.Restrict(f"[Start] >= '{start}' AND [End] <= '{end}'")
+        events = []
+        for item in items:
+            events.append({
+                "subject": item.Subject,
+                "start": str(item.Start),
+                "duration_min": item.Duration,
+                "location": item.Location or "",
+                "importance": item.Importance,
+            })
+
+        # Emails
+        inbox = outlook.GetDefaultFolder(6)
+        msgs = inbox.Items
+        msgs.Sort("[ReceivedTime]", True)
+        emails = []
+        for i in range(1, min(11, msgs.Count + 1)):
+            try:
+                m = msgs[i]
+                emails.append({
+                    "sender": m.SenderName,
+                    "subject": m.Subject,
+                    "received_at": str(m.ReceivedTime),
+                    "is_read": m.IsRead,
+                })
+            except:
+                continue
+
+        # Contacts
+        contacts_folder = outlook.GetDefaultFolder(10)
+        citems = contacts_folder.Items
+        contacts = []
+        for i in range(1, min(21, citems.Count + 1)):
+            try:
+                c = citems[i]
+                contacts.append({
+                    "name": getattr(c, "FullName", ""),
+                    "email": getattr(c, "Email1Address", ""),
+                    "company": getattr(c, "CompanyName", ""),
+                })
+            except:
+                continue
+
+        # Push to backend
+        import urllib.request
+        import json
+        data = json.dumps({
+            "calendar": events,
+            "emails": emails,
+            "contacts": contacts,
+        }).encode()
+        req = urllib.request.Request(
+            f"{backend_url}/api/context/relay/inject",
+            data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=5)
+        print(f"[Relay] Pushed context: {len(events)} events, {len(emails)} emails, {len(contacts)} contacts")
+    except ImportError:
+        print("[Relay] win32com not available — context push skipped")
+    except Exception as e:
+        print(f"[Relay] Context push error: {e}")

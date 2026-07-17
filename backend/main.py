@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 from models import TextQuery, DocumentUpload, LicenseActivate, LiveKitTokenRequest, ReminderCreate, ReminderUpdate, TaskRespond
@@ -4314,3 +4315,16 @@ async def init_context_relay():
         print(f"[ProactiveEngine] Initialized — monitoring active")
     except Exception as e:
         print(f"[ProactiveEngine] Init skipped: {e}")
+
+# ── Serve Frontend Static Files (for Electron local mode) ──────────────────
+_frontend_out = os.path.join(os.path.dirname(__file__), "..", "frontend", "out")
+if os.path.isdir(_frontend_out):
+    app.mount("/voice_shaurjy", StaticFiles(directory=_frontend_out, html=True), name="frontend")
+    print(f"[Frontend] Serving static files from {_frontend_out}")
+
+# ── Local Run (Electron mode) ─────────────────────────────────────────────
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("JARVIS_PORT", "8000"))
+    print(f"[JARVIS] Starting on port {port}")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")

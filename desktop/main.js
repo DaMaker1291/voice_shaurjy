@@ -30,8 +30,9 @@ const os = require("os");
 // ── Config ──────────────────────────────────────────────────────────────
 const isDev = process.env.NODE_ENV === "development";
 const JARVIS_DIR = path.join(app.getPath("home"), ".jarvis");
-const BACKEND_PORT = 8765;
+const BACKEND_PORT = 8000;
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
+const LOCAL_FRONTEND = `${BACKEND_URL}/voice_shaurjy/`;
 const HF_URL = "https://dgfhgjhj-jarvis-ai-brain.hf.space";
 
 // ── State ───────────────────────────────────────────────────────────────
@@ -71,8 +72,6 @@ function startBackend() {
     return;
   }
 
-  // Check if relay.py exists in ~/.jarvis
-  const relayPath = path.join(JARVIS_DIR, "relay.py");
   const backendMain = path.join(
     app.isPackaged
       ? path.join(process.resourcesPath, "backend")
@@ -80,28 +79,53 @@ function startBackend() {
     "main.py"
   );
 
-  let scriptPath;
-  let args;
-
-  if (fs.existsSync(relayPath)) {
-    // Use the relay agent (standalone mode — no HF Space needed)
-    scriptPath = relayPath;
-    args = ["--user", "local"];
-    log(`Starting relay agent: ${relayPath}`);
-  } else if (fs.existsSync(backendMain)) {
-    // Use the full backend
-    scriptPath = backendMain;
-    args = [];
-    log(`Starting backend: ${backendMain}`);
-  } else {
-    log("No backend script found — running in cloud mode");
+  if (!fs.existsSync(backendMain)) {
+    log("Backend main.py not found — running in cloud mode");
     return;
+  }
+
+  // Always start the full backend (serves API + frontend)
+  const scriptPath = backendMain;
+  const args = [];
+  log(`Starting backend: ${scriptPath}`);
+
+  // Set port via env
+  const env = { ...process.env, PYTHONUNBUFFERED: "1", JARVIS_PORT: String(BACKEND_PORT) };
+
+  // Install Python dependencies if needed
+  const reqFile = path.join(path.dirname(backendMain), "requirements-render.txt");
+  const markerFile = path.join(JARVIS_DIR, ".deps_installed");
+  if (fs.existsSync(reqFile) && !fs.existsSync(markerFile)) {
+    log("Installing Python dependencies...");
+    try {
+      const { execSync } = require("child_process");
+      execSync(`${py} -m pip install -r "${reqFile}" --quiet`, {
+        timeout: 120000,
+        stdio: "pipe",
+      });
+      if (!fs.existsSync(JARVIS_DIR)) fs.mkdirSync(JARVIS_DIR, { recursive: true });
+      fs.writeFileSync(markerFile, new Date().toISOString());
+      log("Dependencies installed");
+    } catch (e) {
+      log(`Dependency install warning: ${e.message?.slice(0, 100)}`);
+    }
+  }
+
+  // Copy relay.py to ~/.jarvis if it exists
+  const relaySrc = path.join(path.dirname(backendMain), "relay.py");
+  const relayDst = path.join(JARVIS_DIR, "relay.py");
+  if (fs.existsSync(relaySrc) && !fs.existsSync(relayDst)) {
+    try {
+      if (!fs.existsSync(JARVIS_DIR)) fs.mkdirSync(JARVIS_DIR, { recursive: true });
+      fs.copyFileSync(relaySrc, relayDst);
+      log(`Copied relay.py to ${JARVIS_DIR}`);
+    } catch {}
   }
 
   backendProcess = spawn(py, [scriptPath, ...args], {
     cwd: path.dirname(scriptPath),
     stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    env,
   });
 
   backendProcess.stdout.on("data", (data) => {
@@ -180,16 +204,51 @@ function createWindow() {
     transparent: false,
   });
 
-  // Load the frontend — always use the full HF Space UI
-  if (isDev) {
+  // Load the frontend — local backend serves it, fallback to HF Space
+  const loadFrontend = async () => {
+    // Show loading screen immediately
+    mainWindow.loadURL(`data:text/html,${encodeURIComponent(`
+      <!DOCTYPE html>
+      <html><head><style>
+        body{margin:0;background:#030303;color:#a1a1aa;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px}
+        .spinner{width:40px;height:40px;border:3px solid #1a1a2e;border-top-color:#00ff66;border-radius:50%;animation:spin 1s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        h2{color:#e4e4e7;font-size:18px;margin:0}p{font-size:13px;margin:0}
+      </style></head><body>
+        <div class="spinner"></div>
+        <h2>JARVIS</h2>
+        <p>Starting local backend...</p>
+      </body></html>
+    `)}`);
+
+    // Poll until backend is ready
+    const http = require("http");
+    let attempts = 0;
+    const maxAttempts = 30;
+    const tryConnect = () => new Promise((resolve, reject) => {
+      const req = http.get(`${BACKEND_URL}/api/health`, { timeout: 2000 }, (res) => {
+        if (res.statusCode === 200) resolve(true);
+        else reject(new Error("not ok"));
+      });
+      req.on("error", reject);
+      req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
+    });
+
+    while (attempts < maxAttempts) {
+      try {
+        await tryConnect();
+        log(`Backend ready after ${attempts} attempts`);
+        mainWindow.loadURL(LOCAL_FRONTEND);
+        return;
+      } catch {
+        attempts++;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+    log("Backend failed to start — falling back to HF Space");
     mainWindow.loadURL(HF_URL);
-    mainWindow.webContents.openDevTools({ mode: "detach" });
-  } else {
-    // In production, load the full HF Space — it has ALL features
-    // The HF Space serves the complete JARVIS UI with AI, agents, devices, etc.
-    log("Loading HF Space frontend...");
-    mainWindow.loadURL(HF_URL);
-  }
+  };
+  loadFrontend();
 
   // Show when ready
   mainWindow.once("ready-to-show", () => {
