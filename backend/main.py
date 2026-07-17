@@ -4317,7 +4317,14 @@ async def init_context_relay():
         print(f"[ProactiveEngine] Init skipped: {e}")
 
 # ── Serve Frontend Static Files (for Electron local mode) ──────────────────
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+
+@app.get("/api/download/windows")
+async def download_windows():
+    """Redirect to Windows zip download hosted on HF Space."""
+    from fastapi.responses import RedirectResponse
+    url = "https://huggingface.co/spaces/dgfhgjhj/jarvis-ai-brain/resolve/main/downloads/JARVIS-Windows.zip"
+    return RedirectResponse(url=url)
 
 def _find_frontend_dir():
     """Find the frontend/out directory across dev, packaged, and env-based paths."""

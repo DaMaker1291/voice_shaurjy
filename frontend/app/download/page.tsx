@@ -15,7 +15,7 @@ function detectOS(): OS {
 }
 
 const OS_DATA: Record<OS, { icon: string; label: string; ext: string; file: string }> = {
-  windows: { icon: '⊞', label: 'Windows', ext: '.exe', file: 'JARVIS_Setup_v4.0.0.exe' },
+  windows: { icon: '⊞', label: 'Windows', ext: '.zip', file: 'JARVIS-Windows.zip' },
   mac:     { icon: '⌘', label: 'macOS',   ext: '.dmg', file: 'JARVIS-4.0.0-arm64.dmg' },
   linux:   { icon: '⏣', label: 'Linux',   ext: '.AppImage', file: 'JARVIS-4.0.0.AppImage' },
   unknown: { icon: '⬡', label: 'Your OS', ext: '', file: '' },
@@ -24,6 +24,7 @@ const OS_DATA: Record<OS, { icon: string; label: string; ext: string; file: stri
 const REPO = 'https://github.com/DaMaker1291/voice_shaurjy';
 
 function dlUrl(os: OS): string {
+  if (os === 'windows') return 'https://dgfhgjhj-jarvis-ai-brain.hf.space/api/download/windows';
   const f = OS_DATA[os].file;
   return f ? `${REPO}/releases/latest/download/${f}` : '#';
 }
