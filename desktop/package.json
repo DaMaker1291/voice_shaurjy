@@ -57,13 +57,14 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "portable",
           "arch": [
             "x64"
           ]
         }
       ],
       "icon": "assets/icon.ico",
+      "artifactName": "JARVIS-${version}.${ext}"
       "artifactName": "JARVIS_Setup_v${version}.${ext}"
     },
     "nsis": {
