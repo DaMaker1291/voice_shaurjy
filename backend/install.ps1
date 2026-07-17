@@ -32,7 +32,7 @@ Write-Host "  ║                                                          ║" 
 Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor DarkGreen
 Write-Host ""
 
-$total = 8
+$total = 9
 
 # ── Step 1: Check Python ───────────────────────────────────────────────
 Write-Step 1 $total "Checking Python..."
@@ -186,6 +186,34 @@ try {
     Write-OK "Defender exclusion added for $jarvisDir"
 } catch {
     Write-Warn "Could not add Defender exclusion (run as Admin for full access)"
+}
+
+# ── Step 9: Auto-start on login ────────────────────────────────────────
+Write-Step 9 $total "Setting up auto-start on login..."
+
+# Method 1: Windows Registry Run key
+try {
+    $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+    $regValue = "`"$batPath`" /min"
+    Set-ItemProperty -Path $regPath -Name "JARVIS Relay" -Value $regValue -ErrorAction Stop
+    Write-OK "Registry auto-start entry added"
+} catch {
+    Write-Warn "Could not add registry auto-start: $_"
+}
+
+# Method 2: Startup folder shortcut (fallback)
+try {
+    $startupFolder = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
+    $startupShortcut = $wshShell.CreateShortcut("$startupFolder\JARVIS Relay.lnk")
+    $startupShortcut.TargetPath = "cmd.exe"
+    $startupShortcut.Arguments = "/c `"$batPath`" /min"
+    $startupShortcut.WorkingDirectory = $jarvisDir
+    $startupShortcut.Description = "JARVIS Relay — Auto-start on login"
+    $startupShortcut.WindowStyle = 7  # Minimized
+    $startupShortcut.Save()
+    Write-OK "Startup folder shortcut created"
+} catch {
+    Write-Warn "Could not create startup shortcut: $_"
 }
 
 # ── Done ───────────────────────────────────────────────────────────────

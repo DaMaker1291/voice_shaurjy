@@ -26,6 +26,19 @@ const BASE = typeof window !== "undefined" && (window.location.hostname === "loc
   ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
   : "https://dgfhgjhj-jarvis-ai-brain.hf.space";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) {
+    let text = "";
+    try { text = await res.text(); } catch {}
+    throw new Error(`HTTP ${res.status}: ${text.slice(0, 200) || res.statusText}`);
+  }
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch {
+    throw new Error(`Invalid JSON from server: ${text.slice(0, 200)}`);
+  }
+}
+
 const SUGGESTIONS = [
   { text: "scan network", icon: "📡" },
   { text: "open VS Code", icon: "💻" },
@@ -85,14 +98,14 @@ export default function Home() {
     const poll = async () => {
       try {
         const res = await fetch("/api/proactive/messages");
-        const data = await res.json();
+        const data = await safeJson(res);
         if (data.messages?.length > 0) {
           setProactiveMessages(prev => [...prev, ...data.messages.map((m: any) => m.message)]);
         }
       } catch {}
       try {
         const res = await fetch("/api/autonomous/tasks");
-        const data = await res.json();
+        const data = await safeJson(res);
         setLiveAgents(data.tasks || []);
       } catch {}
     };
@@ -146,7 +159,7 @@ export default function Home() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_input: text, user_id: "local", history }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       let reply = data?.text || data?.message || "Acknowledged.";
       reply = reply.replace(/={3,} COCKPIT BLOCK =={3,}[\s\S]*?(?==={3,}|$)/g, "").trim();
       reply = reply.replace(/={3,} COCKPIT =={3,}[\s\S]*?={3,} END COCKPIT =={3,}/g, "").trim();
@@ -156,6 +169,20 @@ export default function Home() {
       if (!reply) reply = "Acknowledged.";
       const agent = data?.routing?.target_agent || data?.agent || "CORE";
       setMessages(p => [...p, { role: "assistant", content: reply, ts: Date.now(), agent }]);
+      // Play TTS response
+      try {
+        const ttsRes = await fetch(`${BASE}/api/tts`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: reply }),
+        });
+        if (ttsRes.ok) {
+          const blob = await ttsRes.blob();
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.onended = () => URL.revokeObjectURL(url);
+          await audio.play();
+        }
+      } catch (_) { /* TTS is best-effort */ }
     } catch (err: any) {
       const errMsg = err.message || "Unknown error";
       if (errMsg.includes("429") || errMsg.includes("rate") || errMsg.includes("Rate")) {
@@ -181,7 +208,7 @@ export default function Home() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
     const rec = new SR();
-    rec.continuous = false; rec.interimResults = true; rec.lang = "en-GB";
+    rec.continuous = true; rec.interimResults = true; rec.lang = "en-GB";
     rec.onresult = (e: any) => {
       let interim = "", final = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -239,9 +266,9 @@ export default function Home() {
           <div style={{ flex: 1, overflowY: "auto", padding: chatPadding, position: "relative", zIndex: 1 }}>
             {messages.length === 0 && (
               <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
-                <KineticOrb size={orbSize} />
-                <div style={{ fontSize: isMobile ? 10 : 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em" }}>AWAITING INPUT</div>
-                {!isMobile && <div style={{ fontSize: 9, color: "var(--text-muted)", opacity: 0.4, fontFamily: "var(--font-mono)" }}>Move mouse over orb to interact</div>}
+                <KineticOrb size={orbSize} onClick={handleVoice} listening={listening} />
+                <div style={{ fontSize: isMobile ? 10 : 11, color: listening ? "var(--neon-green)" : "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em" }}>{listening ? "LISTENING — SPEAK NOW" : "CLICK ORB TO TALK"}</div>
+                {!isMobile && <div style={{ fontSize: 9, color: "var(--text-muted)", opacity: 0.4, fontFamily: "var(--font-mono)" }}>{listening ? "Click orb or type to stop" : "Click orb or press mic to start voice"}</div>}
               </div>
             )}
 
@@ -369,7 +396,7 @@ export default function Home() {
                   { key: "⌘1-4", label: "Navigate" },
                 ].map(h => (
                   <div key={h.key} style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                    <span style={{ fontSize: 7, padding: "1px 4px", borderRadius: 2, background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{h.key}</span>
+                    <span style={{ fontSize: 7, padding: "1px 4px", borderRadius: 2, background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{typeof window !== "undefined" && /mac/i.test(navigator.userAgent) ? h.key : h.key.replace(/⌘/g, "Ctrl+")}</span>
                     <span style={{ fontSize: 7, color: "var(--text-muted)", opacity: 0.5 }}>{h.label}</span>
                   </div>
                 ))}

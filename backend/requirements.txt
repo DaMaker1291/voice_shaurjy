@@ -6,6 +6,7 @@ sentence-transformers
 faster-whisper
 optimum-quanto
 piper-tts
+kokoro-onnx
 soundfile
 pypdf
 livekit

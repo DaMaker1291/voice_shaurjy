@@ -35,13 +35,17 @@ const shortcuts = [
 
 export default function ShortcutsModal({ onClose }: Props) {
   const [visible, setVisible] = useState(false);
+  const [isMac, setIsMac] = useState(true);
 
   useEffect(() => {
+    setIsMac(/mac/i.test(navigator.userAgent));
     setTimeout(() => setVisible(true), 10);
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  const mod = isMac ? "⌘" : "Ctrl";
 
   return (
     <div
@@ -95,7 +99,7 @@ export default function ShortcutsModal({ onClose }: Props) {
                       background: "#1a1d23", border: "1px solid #252830", color: "#e5e5e5",
                       fontFamily: "inherit", minWidth: 20, textAlign: "center",
                     }}>
-                      {k}
+                      {k === "⌘" ? mod : k}
                     </span>
                   ))}
                 </div>

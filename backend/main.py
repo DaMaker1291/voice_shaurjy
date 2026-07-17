@@ -552,7 +552,7 @@ async def health():
         "models": {
             "llm": "Groq Llama3-70B (cloud, instant)",
             "stt": "Web Speech API",
-            "tts": "edge-tts AriaNeural",
+            "tts": "kokoro-onnx (am_michael)",
         },
     }
 
@@ -697,23 +697,40 @@ async def livekit_token(req: LiveKitTokenRequest):
     return {"token": token.jwt, "url": os.getenv("LIVEKIT_URL")}
 
 
-# ── Text-to-Speech via edge-tts (streaming) ───────────────────
+# ── Text-to-Speech via Kokoro TTS (local, hyper-realistic) ──────────────
 
 from pydantic import BaseModel
 
 class TTSRequest(BaseModel):
     text: str
-    voice: str = "en-GB-RyanNeural"
+    voice: str = "am_michael"
+
+_kokoro_pipe = None
+_kokoro_lock = asyncio.Lock()
+
+async def _get_kokoro():
+    global _kokoro_pipe
+    if _kokoro_pipe is not None:
+        return _kokoro_pipe
+    async with _kokoro_lock:
+        if _kokoro_pipe is not None:
+            return _kokoro_pipe
+        try:
+            from kokoro_onnx import Kokoro
+            _kokoro_pipe = Kokoro("kokoro-v0_19.onnx", "voices-v0_19.bin")
+            return _kokoro_pipe
+        except Exception:
+            return None
 
 @app.post("/api/tts")
 async def text_to_speech(req: TTSRequest):
     from fastapi.responses import StreamingResponse, Response
-    import io, asyncio, re
+    import io, re, wave, struct
 
     text = req.text
-    voice = req.voice or "en-GB-RyanNeural"
+    voice = req.voice or "am_michael"
 
-    # Strip emoji and special chars that cause TTS issues
+    # Strip emoji and markdown
     text_clean = re.sub(r'[\U0001F300-\U0001FAFF\U0001F600-\U0001F64F\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\u2600-\u26FF\u2700-\u27BF\uFE00-\uFE0F]', '', text)
     text_clean = re.sub(r'\*{1,2}(.*?)\*{1,2}', r'\1', text_clean)
     text_clean = re.sub(r'[-_#>`|]', ' ', text_clean)
@@ -722,10 +739,29 @@ async def text_to_speech(req: TTSRequest):
     if not text_clean:
         text_clean = "Done."
 
-    # Try edge_tts with plain text (avoid SSML — causes XML tag reading on some voices)
+    # Try Kokoro TTS first
+    kokoro = await _get_kokoro()
+    if kokoro:
+        try:
+            import numpy as np
+            audio, sample_rate = kokoro.create(text_clean, voice=voice, speed=1.0)
+            # Convert float32 numpy array to WAV bytes
+            audio_int16 = (audio * 32767).astype(np.int16)
+            wav_buf = io.BytesIO()
+            with wave.open(wav_buf, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+                wf.writeframes(audio_int16.tobytes())
+            wav_bytes = wav_buf.getvalue()
+            return Response(content=wav_bytes, media_type="audio/wav")
+        except Exception:
+            pass
+
+    # Fallback: edge-tts
     try:
         import edge_tts
-        communicate = edge_tts.Communicate(text_clean, voice)
+        communicate = edge_tts.Communicate(text_clean, "en-GB-RyanNeural")
 
         async def stream():
             async for chunk in communicate.stream():
@@ -736,7 +772,6 @@ async def text_to_speech(req: TTSRequest):
     except Exception:
         pass
 
-    # Fallback: browser speech synthesis (handled client-side)
     return Response(content="TTS unavailable on server", status_code=503, media_type="text/plain")
 
 

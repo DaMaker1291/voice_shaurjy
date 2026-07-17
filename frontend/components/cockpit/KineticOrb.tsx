@@ -2,7 +2,7 @@
 
 import { useRef, useEffect } from "react";
 
-export default function KineticOrb({ size = 300 }: { size?: number }) {
+export default function KineticOrb({ size = 300, onClick, listening }: { size?: number; onClick?: () => void; listening?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<number>(0);
   const mouseRef = useRef({ x: 0.5, y: 0.5, active: false });
@@ -111,8 +111,10 @@ export default function KineticOrb({ size = 300 }: { size?: number }) {
       mouseRef.current.active = true;
     };
     const handleMouseLeave = () => { mouseRef.current.active = false; };
+    const handleClick = () => { onClick?.(); };
     canvas.addEventListener("mousemove", handleMouseMove);
     canvas.addEventListener("mouseleave", handleMouseLeave);
+    canvas.addEventListener("click", handleClick);
 
     const project = (x: number, y: number, z: number, rY: number, rX: number) => {
       // Rotate Y
@@ -312,18 +314,26 @@ export default function KineticOrb({ size = 300 }: { size?: number }) {
 
       // ── Center core ──
       const corePulse = Math.sin(time * 1.2) * 0.2 + 0.8;
-      const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 20);
-      coreGlow.addColorStop(0, `rgba(30,200,180,${0.25 * corePulse})`);
-      coreGlow.addColorStop(0.5, `rgba(15,120,110,${0.08 * corePulse})`);
-      coreGlow.addColorStop(1, "rgba(0,0,0,0)");
+      const isListening = listening;
+      const coreR = isListening ? 28 : 20;
+      const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+      if (isListening) {
+        coreGlow.addColorStop(0, `rgba(0,255,102,${0.4 * corePulse})`);
+        coreGlow.addColorStop(0.5, `rgba(0,200,80,${0.15 * corePulse})`);
+        coreGlow.addColorStop(1, "rgba(0,0,0,0)");
+      } else {
+        coreGlow.addColorStop(0, `rgba(30,200,180,${0.25 * corePulse})`);
+        coreGlow.addColorStop(0.5, `rgba(15,120,110,${0.08 * corePulse})`);
+        coreGlow.addColorStop(1, "rgba(0,0,0,0)");
+      }
       ctx.fillStyle = coreGlow;
       ctx.beginPath();
-      ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+      ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.beginPath();
-      ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(40,220,200,${0.9 * corePulse})`;
+      ctx.arc(cx, cy, isListening ? 4 : 2, 0, Math.PI * 2);
+      ctx.fillStyle = isListening ? `rgba(0,255,102,${0.95 * corePulse})` : `rgba(40,220,200,${0.9 * corePulse})`;
       ctx.fill();
 
       frameRef.current = requestAnimationFrame(draw);
@@ -334,13 +344,14 @@ export default function KineticOrb({ size = 300 }: { size?: number }) {
       cancelAnimationFrame(frameRef.current);
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("mouseleave", handleMouseLeave);
+      canvas.removeEventListener("click", handleClick);
     };
-  }, [size]);
+  }, [size, onClick, listening]);
 
   return (
     <canvas
       ref={canvasRef}
-      style={{ width: size, height: size, cursor: "crosshair" }}
+      style={{ width: size, height: size, cursor: "pointer" }}
     />
   );
 }
