@@ -92,6 +92,15 @@ function startBackend() {
   // Set port via env
   const env = { ...process.env, PYTHONUNBUFFERED: "1", JARVIS_PORT: String(BACKEND_PORT) };
 
+  // Pass frontend dir so main.py can find it
+  const frontendDir = app.isPackaged
+    ? path.join(process.resourcesPath, "frontend")
+    : path.join(__dirname, "..", "frontend", "out");
+  if (fs.existsSync(frontendDir)) {
+    env.JARVIS_FRONTEND_DIR = frontendDir;
+    log(`Frontend dir: ${frontendDir}`);
+  }
+
   // Install Python dependencies if needed
   const reqFile = path.join(path.dirname(backendMain), "requirements-render.txt");
   const markerFile = path.join(JARVIS_DIR, ".deps_installed");

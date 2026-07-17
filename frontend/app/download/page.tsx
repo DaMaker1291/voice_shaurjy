@@ -16,8 +16,8 @@ function detectOS(): OS {
 
 const OS_DATA: Record<OS, { icon: string; label: string; ext: string; file: string }> = {
   windows: { icon: '⊞', label: 'Windows', ext: '.exe', file: 'JARVIS_Setup_v4.0.0.exe' },
-  mac:     { icon: '⌘', label: 'macOS',   ext: '.dmg', file: 'JARVIS-3.0.0-arm64.dmg' },
-  linux:   { icon: '⏣', label: 'Linux',   ext: '.AppImage', file: 'JARVIS-3.0.0.AppImage' },
+  mac:     { icon: '⌘', label: 'macOS',   ext: '.dmg', file: 'JARVIS-4.0.0-arm64.dmg' },
+  linux:   { icon: '⏣', label: 'Linux',   ext: '.AppImage', file: 'JARVIS-4.0.0.AppImage' },
   unknown: { icon: '⬡', label: 'Your OS', ext: '', file: '' },
 };
 

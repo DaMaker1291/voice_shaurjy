@@ -4317,10 +4317,54 @@ async def init_context_relay():
         print(f"[ProactiveEngine] Init skipped: {e}")
 
 # ── Serve Frontend Static Files (for Electron local mode) ──────────────────
-_frontend_out = os.path.join(os.path.dirname(__file__), "..", "frontend", "out")
-if os.path.isdir(_frontend_out):
+from fastapi.responses import FileResponse
+
+def _find_frontend_dir():
+    """Find the frontend/out directory across dev, packaged, and env-based paths."""
+    env_dir = os.environ.get("JARVIS_FRONTEND_DIR")
+    if env_dir and os.path.isdir(env_dir):
+        return env_dir
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(here, "..", "frontend", "out"),        # dev: backend/ → frontend/out/
+        os.path.join(here, "..", "frontend"),                # packaged: resources/frontend/ (extraResources to:"frontend")
+        os.path.join(here, "..", "..", "frontend", "out"),   # nested dev
+        os.path.join(here, "..", "..", "frontend"),          # nested packaged
+    ]
+    for c in candidates:
+        if os.path.isdir(c) and os.path.isfile(os.path.join(c, "index.html")):
+            return os.path.abspath(c)
+    return None
+
+_frontend_out = _find_frontend_dir()
+
+if _frontend_out:
+    @app.get("/voice_shaurjy/download")
+    async def serve_download():
+        f = os.path.join(_frontend_out, "download.html")
+        if os.path.isfile(f):
+            return FileResponse(f, media_type="text/html")
+        return {"error": "not found"}
+
+    @app.get("/voice_shaurjy/install")
+    async def serve_install():
+        f = os.path.join(_frontend_out, "install.html")
+        if os.path.isfile(f):
+            return FileResponse(f, media_type="text/html")
+        return {"error": "not found"}
+
+    @app.get("/voice_shaurjy/welcome")
+    async def serve_welcome():
+        f = os.path.join(_frontend_out, "welcome.html")
+        if os.path.isfile(f):
+            return FileResponse(f, media_type="text/html")
+        return {"error": "not found"}
+
     app.mount("/voice_shaurjy", StaticFiles(directory=_frontend_out, html=True), name="frontend")
     print(f"[Frontend] Serving static files from {_frontend_out}")
+else:
+    print("[Frontend] No frontend/out directory found — running in API-only mode")
 
 # ── Local Run (Electron mode) ─────────────────────────────────────────────
 if __name__ == "__main__":
