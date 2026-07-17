@@ -15,7 +15,7 @@ function detectOS(): OS {
 }
 
 const OS_DATA: Record<OS, { icon: string; label: string; ext: string; file: string }> = {
-  windows: { icon: '⊞', label: 'Windows', ext: '.exe', file: 'JARVIS_Setup_v3.0.0.exe' },
+  windows: { icon: '⊞', label: 'Windows', ext: '.exe', file: 'JARVIS_Setup_v4.0.0.exe' },
   mac:     { icon: '⌘', label: 'macOS',   ext: '.dmg', file: 'JARVIS-3.0.0-arm64.dmg' },
   linux:   { icon: '⏣', label: 'Linux',   ext: '.AppImage', file: 'JARVIS-3.0.0.AppImage' },
   unknown: { icon: '⬡', label: 'Your OS', ext: '', file: '' },
@@ -156,7 +156,7 @@ export default function DownloadPage() {
               <span style={{ fontSize: 13, opacity: 0.6, fontWeight: 400 }}>{info.ext}</span>
             </a>
             <div style={{ marginTop: 12, fontSize: 12, color: '#555' }}>
-              v3.0.0 — MIT License — ~32 MB
+              v4.0.0 — MIT License — ~32 MB
             </div>
           </div>
         )}
