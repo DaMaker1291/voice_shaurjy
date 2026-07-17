@@ -70,7 +70,8 @@ export default function ContextRelayPanel() {
     try {
       const res = await fetch(`${BASE}/api/context/relay/full?user_id=local`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const d = await res.json();
+      const text = await res.text();
+      const d = text ? JSON.parse(text) : {};
       setData(d);
       setError(null);
     } catch (e: any) {

@@ -1,7 +1,7 @@
 # Core server
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
-python-dotenv>=1.0.0
+python-dotenv>=0.0.0
 pydantic>=2.0.0
 python-multipart>=0.0.6
 
@@ -34,3 +34,6 @@ starlette>=0.36.0
 
 # WebSocket (for headless browser)
 websocket-client>=1.6.0
+
+# TTS (fallback on cloud — Kokoro runs locally via Electron)
+edge-tts>=6.1.0

@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 interface InterceptAction {
   id: string;
   text: string;
@@ -16,7 +23,7 @@ export default function InterceptBar({ onApprove, onDeny }: { onApprove: (id: st
     const checkPending = async () => {
       try {
         const res = await fetch("/api/sovereign/pending-actions");
-        const data = await res.json();
+        const data = await safeJson(res);
         if (data.actions?.length > 0) {
           setPending(data.actions[0]);
           setVisible(true);

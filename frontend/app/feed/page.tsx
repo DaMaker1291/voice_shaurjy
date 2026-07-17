@@ -3,6 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 const API = "";
 
 interface FeedItem {
@@ -29,7 +36,7 @@ export default function FeedPage() {
     // System events
     try {
       const res = await fetch(`${API}/api/health`);
-      const data = await res.json();
+      const data = await safeJson(res);
       feed.push({
         id: "sys-health", type: "system", title: "System Health",
         summary: `Relay: ${data.relay ? "Online" : "Offline"} | Model: ${data.models?.llm || "GROQ"}`,
@@ -40,7 +47,7 @@ export default function FeedPage() {
     // Device events
     try {
       const res = await fetch(`${API}/api/relay/devices?user_id=local`);
-      const data = await res.json();
+      const data = await safeJson(res);
       const devices = data.devices || [];
       if (devices.length > 0) {
         feed.push({
@@ -54,7 +61,7 @@ export default function FeedPage() {
     // Task events
     try {
       const res = await fetch(`${API}/api/autonomous/tasks`);
-      const data = await res.json();
+      const data = await safeJson(res);
       const tasks = data.tasks || [];
       tasks.forEach((t: any) => {
         feed.push({

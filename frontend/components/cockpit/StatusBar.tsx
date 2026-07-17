@@ -3,6 +3,13 @@
 import { useEffect, useState } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 interface SystemStatus {
   tier: string;
   ram_percent: number;
@@ -37,27 +44,27 @@ export default function StatusBar() {
     const poll = async () => {
       try {
         const res = await window.fetch("/api/health");
-        const data = await res.json();
+        const data = await safeJson(res);
         setRelay(!!data.relay);
       } catch {}
       try {
         const res = await window.fetch("/api/autonomous/tasks");
-        const data = await res.json();
+        const data = await safeJson(res);
         setAgents((data.tasks || []).filter((t: any) => t.status === "running").length);
       } catch {}
       try {
         const res = await window.fetch("/api/relay/devices?user_id=local");
-        const data = await res.json();
+        const data = await safeJson(res);
         setDevices((data.devices || []).length);
       } catch {}
       try {
         const res = await window.fetch("/api/device/current?user_id=local");
-        const data = await res.json();
+        const data = await safeJson(res);
         if (data.hostname) setDevice(data);
       } catch {}
       try {
         const res = await window.fetch("/api/system/status");
-        const data = await res.json();
+        const data = await safeJson(res);
         setSys(data);
       } catch {}
     };

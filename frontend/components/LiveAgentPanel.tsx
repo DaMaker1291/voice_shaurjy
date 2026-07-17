@@ -2,6 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 interface Agent {
   task_id: string;
   intent: string;
@@ -38,7 +45,7 @@ export default function LiveAgentPanel({ agents, activeAgent, onSelectAgent, onS
       for (const agent of running) {
         try {
           const res = await fetch(`/api/autonomous/tasks/${agent.task_id}`);
-          const data = await res.json();
+          const data = await safeJson(res);
           if (data.steps?.length > 0) {
             const currentStep = data.steps[data.current_step || 0];
             if (currentStep) {

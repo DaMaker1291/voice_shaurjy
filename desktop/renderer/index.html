@@ -375,7 +375,18 @@
           headers: { "Content-Type": "application/json" },
           ...opts,
         });
-        return await res.json();
+        if (!res.ok) {
+          let text = "";
+          try { text = await res.text(); } catch {}
+          console.error("API error:", res.status, text.slice(0, 200));
+          return null;
+        }
+        const text = await res.text();
+        if (!text) return {};
+        try { return JSON.parse(text); } catch {
+          console.error("Invalid JSON:", text.slice(0, 200));
+          return null;
+        }
       } catch (e) {
         console.error("API error:", e);
         return null;

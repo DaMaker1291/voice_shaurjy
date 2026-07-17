@@ -2,6 +2,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 interface OrgStatus {
@@ -77,7 +84,7 @@ export default function EnterpriseCockpit() {
   const fetchOrg = useCallback(async () => {
     try {
       const res = await fetch(`${BACKEND}/api/org/status`);
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.ok) setOrg(data);
     } catch {}
   }, []);
@@ -85,7 +92,7 @@ export default function EnterpriseCockpit() {
   const fetchSeats = useCallback(async () => {
     try {
       const res = await fetch(`${BACKEND}/api/org/seats`);
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.ok) setSeats(data.seats || []);
     } catch {}
   }, []);
@@ -93,7 +100,7 @@ export default function EnterpriseCockpit() {
   const fetchNodes = useCallback(async () => {
     try {
       const res = await fetch(`${BACKEND}/api/org/nodes`);
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.ok) setNodes(data.nodes || []);
     } catch {}
   }, []);
@@ -105,7 +112,7 @@ export default function EnterpriseCockpit() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent_domain: agentDomain, tool_name: toolName }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.ok) setPolicyVerdict(data);
     } catch {}
   }, []);
@@ -118,7 +125,7 @@ export default function EnterpriseCockpit() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.ok) {
         setInviteEmail('');
         fetchSeats();

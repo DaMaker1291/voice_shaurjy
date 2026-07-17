@@ -3,6 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 type Step = "welcome" | "os-detect" | "relay" | "devices" | "permissions" | "ready";
 
 interface OSInfo {
@@ -57,7 +64,7 @@ export default function OnboardingPage() {
     const detectOS = async () => {
       try {
         const res = await fetch("/api/device/current?user_id=local");
-        const data = await res.json();
+        const data = await safeJson(res);
         const platform = (data.platform || "").toLowerCase();
         if (platform.includes("win")) setOsInfo(OS_MAP.windows);
         else if (platform.includes("darwin") || platform.includes("mac")) setOsInfo(OS_MAP.mac);
@@ -76,7 +83,7 @@ export default function OnboardingPage() {
   const checkRelay = useCallback(async () => {
     try {
       const res = await fetch("/api/health");
-      const data = await res.json();
+        const data = await safeJson(res);
       setRelayOnline(!!data.relay);
       return !!data.relay;
     } catch { return false; }
@@ -107,7 +114,7 @@ export default function OnboardingPage() {
       });
       await new Promise(r => setTimeout(r, 5000));
       const res = await fetch("/api/relay/devices?user_id=local");
-      const data = await res.json();
+        const data = await safeJson(res);
       setDevices(data.devices || []);
       setDeviceCount((data.devices || []).length);
     } catch {}

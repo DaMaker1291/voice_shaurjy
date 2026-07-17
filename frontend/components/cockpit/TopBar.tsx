@@ -5,6 +5,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 interface SystemStatus {
   network: string;
   supervisorMs: number;
@@ -48,7 +55,7 @@ export default function TopBar({ onNewChat, onCommandPalette, onToggleLivePanel,
     const fetchStatus = async () => {
       try {
         const res = await fetch("/api/health");
-        const data = await res.json();
+        const data = await safeJson(res);
         setStatus(p => ({
           ...p,
           network: data.relay ? "OPTIMAL" : "STANDBY",
@@ -57,12 +64,12 @@ export default function TopBar({ onNewChat, onCommandPalette, onToggleLivePanel,
       } catch {}
       try {
         const res = await fetch("/api/autonomous/tasks");
-        const data = await res.json();
+        const data = await safeJson(res);
         setAgentCount((data.tasks || []).filter((t: any) => t.status === "running").length);
       } catch {}
       try {
         const res = await fetch("/api/relay/devices?user_id=local");
-        const data = await res.json();
+        const data = await safeJson(res);
         setDeviceCount((data.devices || []).length);
       } catch {}
     };

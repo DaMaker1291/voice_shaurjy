@@ -2,6 +2,13 @@
 
 import { useRef, useState } from "react";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 interface Props {
   onUploadComplete: (name: string, chunks: number) => void;
 }
@@ -29,7 +36,7 @@ export default function FileUploader({ onUploadComplete }: Props) {
             content_b64: b64,
           }),
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (data.status === "ok") onUploadComplete(file.name, data.chunks);
       } finally {
         setUploading(false);

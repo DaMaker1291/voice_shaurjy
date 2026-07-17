@@ -3,6 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 const API = "";
 
 interface Device {
@@ -37,7 +44,7 @@ export default function SovereignPage() {
   const fetchDevices = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/relay/devices?user_id=local`);
-      const data = await res.json();
+      const data = await safeJson(res);
       setDevices(data.devices || []);
     } catch {}
   }, []);

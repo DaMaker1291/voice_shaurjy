@@ -2,6 +2,13 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 interface HeadlessSession {
   session_id: string;
   display_id: number;
@@ -82,7 +89,7 @@ export default function HeadlessWorkstationMonitor() {
     const poll = async () => {
       try {
         const res = await fetch(`${base}/api/headless/status`);
-        const data = await res.json();
+        const data = await safeJson(res);
         if (data.sessions?.length > 0) setSession(data.sessions[0]);
         else if (data.session) setSession(data.session);
       } catch {}
@@ -100,7 +107,7 @@ export default function HeadlessWorkstationMonitor() {
     setError("");
     try {
       const res = await fetch(`${base}/api/headless/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: "default" }) });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.ok) setSession(data.session);
       else setError(data.error || data.install_hint || "Failed to start");
     } catch (e: any) { setError(e.message); }
@@ -122,7 +129,7 @@ export default function HeadlessWorkstationMonitor() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: "default", app_name: launchApp, command: cmd.length ? cmd : [launchApp] }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.ok) { setLaunchApp(""); setLaunchCmd(""); setCurrentTask(`Running: ${launchApp}`); }
       else setError(data.error || "Launch failed");
     } catch (e: any) { setError(e.message); }

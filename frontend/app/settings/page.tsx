@@ -1,37 +1,106 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import CredentialModal from "@/components/cockpit/CredentialModal";
 
-type Tab = "general" | "devices" | "security" | "advanced";
+const BASE = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+  ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+  : "https://dgfhgjhj-jarvis-ai-brain.hf.space";
+
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+type Tab = "general" | "devices" | "security" | "account";
+
+interface UserProfile {
+  name: string;
+  email: string;
+  avatar?: string;
+  created: string;
+}
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("general");
   const [showCredModal, setShowCredModal] = useState(false);
+  const [health, setHealth] = useState<any>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [toast, setToast] = useState("");
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+
+  // Load profile from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("jarvis_profile");
+      if (saved) setProfile(JSON.parse(saved));
+      else {
+        const p = { name: "User", email: "", created: new Date().toISOString() };
+        setProfile(p);
+        localStorage.setItem("jarvis_profile", JSON.stringify(p));
+      }
+    } catch {
+      const p = { name: "User", email: "", created: new Date().toISOString() };
+      setProfile(p);
+    }
+  }, []);
+
+  // Fetch health on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${BASE}/api/health`);
+        setHealth(await safeJson(res));
+      } catch { /* ok */ }
+    })();
+  }, []);
+
+  const saveProfile = useCallback((updates: Partial<UserProfile>) => {
+    if (!profile) return;
+    const updated = { ...profile, ...updates };
+    setProfile(updated);
+    localStorage.setItem("jarvis_profile", JSON.stringify(updated));
+    showToast("Profile saved");
+  }, [profile]);
 
   const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: "general", label: "GENERAL", icon: "⚙️" },
     { id: "devices", label: "DEVICES", icon: "📡" },
     { id: "security", label: "SECURITY", icon: "🔒" },
-    { id: "advanced", label: "ADVANCED", icon: "🛠️" },
+    { id: "account", label: "ACCOUNT", icon: "👤" },
   ];
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#030303", color: "#e5e5e5", fontFamily: "'JetBrains Mono', monospace" }}>
       <style jsx global>{`
         @keyframes fade-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes toast-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
         .sf { animation: fade-in 0.2s cubic-bezier(0.16,1,0.3,1) both; }
       `}</style>
 
-      {/* Header */}
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 20, right: 20, zIndex: 9999,
+          padding: "10px 16px", borderRadius: 6, fontSize: 11, fontWeight: 500,
+          background: "rgba(0,255,102,0.15)", color: "#00FF66",
+          border: "1px solid rgba(0,255,102,0.3)", animation: "toast-in 0.2s ease",
+        }}>
+          ✓ {toast}
+        </div>
+      )}
+
       <header style={{ height: 40, background: "#0d0f12", borderBottom: "1px solid #1a1d23", display: "flex", alignItems: "center", padding: "0 16px", gap: 12, flexShrink: 0 }}>
         <Link href="/" style={{ fontSize: 10, color: "#667085", textDecoration: "none" }}>← CHAT</Link>
         <div style={{ width: 1, height: 16, background: "#1a1d23" }} />
         <span style={{ fontSize: 11, color: "#00FF66", fontWeight: 600, letterSpacing: "0.08em" }}>SETTINGS</span>
       </header>
 
-      {/* Tabs */}
       <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #1a1d23", padding: "0 16px", flexShrink: 0 }}>
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
@@ -44,22 +113,18 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {/* Content */}
       <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
 
           {activeTab === "general" && (
             <div className="sf" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <SectionTitle>Identity</SectionTitle>
+              <SectionTitle>System</SectionTitle>
               <SettingRow label="Product" value="JARVIS AI Brain" />
-              <SettingRow label="Version" value="v3.0 Sovereign Network" />
-              <SettingRow label="Interface" value="Cursor-style Tactical Cockpit" />
-
-              <SectionTitle>Backend</SectionTitle>
-              <SettingRow label="Cloud Model" value="GROQ Llama 3.3 70B" accent />
-              <SettingRow label="Local Model" value="Qwen 2.5 1.5B (optional)" />
-              <SettingRow label="Agent Mode" value="Autonomous Multi-Step" accent />
-              <SettingRow label="Browser" value="Headless Chrome (CDP)" />
+              <SettingRow label="Version" value="v4.0 Sovereign Network" accent />
+              <SettingRow label="LLM" value={health?.model || "GROQ Llama 3.3 70B"} accent />
+              <SettingRow label="Relay" value={health?.relay === "alive" ? "ONLINE" : "OFFLINE"} accent={health?.relay === "alive"} />
+              <SettingRow label="TTS" value={health?.tts || "kokoro-onnx (am_michael)"} />
+              <SettingRow label="Memory" value={health?.memory?.substring(0, 30) || "Checking..."} />
 
               <SectionTitle>Navigation</SectionTitle>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -68,6 +133,8 @@ export default function SettingsPage() {
                   { href: "/agents", label: "AGENTS", desc: "⌘2" },
                   { href: "/sovereign", label: "DEVICES", desc: "⌘3" },
                   { href: "/feed", label: "FEED", desc: "⌘4" },
+                  { href: "/workspace", label: "WORKSPACE", desc: "Console" },
+                  { href: "/welcome", label: "SETUP", desc: "Onboarding" },
                 ].map(item => (
                   <Link key={item.href} href={item.href} style={{
                     padding: "10px 14px", borderRadius: 6, textDecoration: "none",
@@ -85,38 +152,15 @@ export default function SettingsPage() {
           {activeTab === "devices" && (
             <div className="sf" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <SectionTitle>Network Scanner</SectionTitle>
-              <SettingRow label="Relay Status" value="Running on localhost:9880" accent />
+              <SettingRow label="Relay Status" value={health?.relay === "alive" ? "ONLINE" : "OFFLINE (start relay.py)"} accent={health?.relay === "alive"} />
               <SettingRow label="ARP Scan" value="Enabled — discovers all local devices" />
-              <SettingRow label="Protocol Cascade" value="HTTP → MQTT → UPnP → WLED → Tapo" />
-              <SettingRow label="Alexa Discovery" value="SSDP + Amazon MAC OUI lookup" />
-
-              <SectionTitle>Device Types</SectionTitle>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {[
-                  { icon: "💡", label: "Smart Plugs", desc: "Tapo P100/P110", color: "#00B4D8" },
-                  { icon: "🔊", label: "Smart Speakers", desc: "Amazon Echo", color: "#00B4D8" },
-                  { icon: "🖨️", label: "Printers", desc: "HP LaserJet", color: "#F97316" },
-                  { icon: "📱", label: "Phones", desc: "Samsung/ADB", color: "#A855F7" },
-                  { icon: "📷", label: "Cameras", desc: "RTSP/ONVIF", color: "#FF3333" },
-                  { icon: "🌐", label: "Routers", desc: "Sky/TP-Link", color: "#FFB300" },
-                ].map(d => (
-                  <div key={d.label} style={{
-                    padding: "10px 14px", borderRadius: 6, background: "#0d0f12",
-                    border: "1px solid #1a1d23", borderLeft: `3px solid ${d.color}`,
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                      <span>{d.icon}</span>
-                      <span style={{ fontSize: 11, color: "#e5e5e5" }}>{d.label}</span>
-                    </div>
-                    <div style={{ fontSize: 9, color: "#667085" }}>{d.desc}</div>
-                  </div>
-                ))}
-              </div>
+              <SettingRow label="Protocol" value="HTTP → MQTT → UPnP → WLED → Tapo" />
+              <SettingRow label="Discovery" value="SSDP + Amazon MAC OUI lookup" />
 
               <SectionTitle>Credentials</SectionTitle>
               <div style={{ padding: "14px 16px", borderRadius: 8, background: "#0d0f12", border: "1px solid #1a1d23" }}>
                 <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 8 }}>
-                  Set Tapo device credentials for plug control. Stored encrypted on your machine only.
+                  Set Tapo device credentials for smart plug control. Stored encrypted locally.
                 </div>
                 <button onClick={() => setShowCredModal(true)} style={{
                   padding: "8px 16px", borderRadius: 6, fontSize: 11, fontFamily: "inherit",
@@ -136,57 +180,137 @@ export default function SettingsPage() {
                 <div style={{ fontSize: 11, color: "#00FF66", fontWeight: 600, marginBottom: 6 }}>TIER 5 — MAXIMUM HARDENING</div>
                 <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.6 }}>
                   • Sandbox isolation with zero ingress/egress by default<br />
-                  • Per-execution MAC address rotation<br />
                   • Encrypted local vault for all credentials<br />
                   • 50+ attack vector real-time monitoring<br />
                   • Human-in-the-loop for all destructive actions
                 </div>
               </div>
 
-              <SectionTitle>Sandbox</SectionTitle>
-              <SettingRow label="Status" value="AIRGAPPED" accent />
-              <SettingRow label="Filesystem" value="Read-only base, writable overlay" />
-              <SettingRow label="Network" value="Simulated eth0 (no real egress)" />
-              <SettingRow label="Process Limit" value="512 concurrent" />
-
-              <SectionTitle>Crypto</SectionTitle>
+              <SectionTitle>Encryption</SectionTitle>
               <SettingRow label="Key Derivation" value="PBKDF2-SHA256" />
-              <SettingRow label="Encryption" value="AES-256-GCM" />
-              <SettingRow label="Local Vault" value="AES-256-GCM" accent />
+              <SettingRow label="Encryption" value="AES-256-GCM" accent />
+              <SettingRow label="Vault" value="Encrypted at rest" accent />
             </div>
           )}
 
-          {activeTab === "advanced" && (
+          {activeTab === "account" && (
             <div className="sf" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <SectionTitle>Autonomous Agent</SectionTitle>
-              <SettingRow label="Mode" value="Multi-Step Autonomous" accent />
-              <SettingRow label="Max Steps" value="Unlimited (never stops until done)" />
-              <SettingRow label="Evaluation" value="Auto-evaluate completion per step" />
-              <SettingRow label="Follow-up" value="Adds more steps if task incomplete" />
+              <SectionTitle>Profile</SectionTitle>
+              <div style={{ padding: "16px", borderRadius: 8, background: "#0d0f12", border: "1px solid #1a1d23" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+                  <div style={{
+                    width: 56, height: 56, borderRadius: "50%",
+                    background: "linear-gradient(135deg, rgba(0,255,102,0.2), rgba(0,150,255,0.2))",
+                    border: "2px solid rgba(0,255,102,0.3)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 22, fontWeight: 700, color: "#00FF66",
+                  }}>
+                    {profile?.name?.[0]?.toUpperCase() || "U"}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{profile?.name || "User"}</div>
+                    <div style={{ fontSize: 10, color: "#667085" }}>{profile?.email || "No email set"}</div>
+                    <div style={{ fontSize: 9, color: "#667085", marginTop: 2 }}>
+                      Member since {profile?.created ? new Date(profile.created).toLocaleDateString() : "—"}
+                    </div>
+                  </div>
+                </div>
 
-              <SectionTitle>Headless Browser</SectionTitle>
-              <SettingRow label="Mode" value="Chrome --headless=new (CDP)" accent />
-              <SettingRow label="Port" value="9222 (local WebSocket)" />
-              <SettingRow label="Scope" value="Background — no mouse/keyboard hijack" />
-              <SettingRow label="Control" value="Navigate, Click, Type, Screenshot, JS Eval" />
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 10, color: "#9ca3af", width: 80 }}>Name</span>
+                    {editingName ? (
+                      <div style={{ display: "flex", gap: 6, flex: 1 }}>
+                        <input
+                          value={nameInput}
+                          onChange={e => setNameInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") { saveProfile({ name: nameInput }); setEditingName(false); } }}
+                          autoFocus
+                          style={{
+                            flex: 1, padding: "4px 8px", borderRadius: 4, fontSize: 11,
+                            background: "#1a1d23", border: "1px solid #252830", color: "#e5e5e5",
+                            fontFamily: "inherit", outline: "none",
+                          }}
+                        />
+                        <button onClick={() => { saveProfile({ name: nameInput }); setEditingName(false); }}
+                          style={{ padding: "4px 10px", borderRadius: 4, fontSize: 10, background: "rgba(0,255,102,0.15)", color: "#00FF66", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                          Save
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                        <span style={{ fontSize: 11, color: "#e5e5e5" }}>{profile?.name || "—"}</span>
+                        <button onClick={() => { setNameInput(profile?.name || ""); setEditingName(true); }}
+                          style={{ padding: "2px 8px", borderRadius: 3, fontSize: 9, background: "#1a1d23", color: "#667085", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
-              <SectionTitle>Relay</SectionTitle>
-              <SettingRow label="Protocol" value="WebSocket (9880)" />
-              <SettingRow label="Heartbeat" value="30s interval" />
-              <SettingRow label="Auto-register" value="Re-registers on heartbeat failure" accent />
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 10, color: "#9ca3af", width: 80 }}>Email</span>
+                    <span style={{ fontSize: 11, color: "#e5e5e5", flex: 1 }}>{profile?.email || "Not set"}</span>
+                    <button onClick={() => {
+                      const email = prompt("Enter your email:", profile?.email || "");
+                      if (email !== null) saveProfile({ email });
+                    }}
+                      style={{ padding: "2px 8px", borderRadius: 3, fontSize: 9, background: "#1a1d23", color: "#667085", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <SectionTitle>Local Storage</SectionTitle>
+              <div style={{ padding: "14px 16px", borderRadius: 8, background: "#0d0f12", border: "1px solid #1a1d23" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, color: "#9ca3af" }}>Stored data</span>
+                  <span style={{ fontSize: 11, color: "#e5e5e5" }}>
+                    {typeof window !== "undefined" ? `${(JSON.stringify(localStorage).length / 1024).toFixed(1)} KB` : "..."}
+                  </span>
+                </div>
+                <button onClick={() => {
+                  if (confirm("Clear all local data? This cannot be undone.")) {
+                    localStorage.clear();
+                    showToast("Local data cleared");
+                  }
+                }} style={{
+                  padding: "6px 12px", borderRadius: 4, fontSize: 10, fontFamily: "inherit",
+                  cursor: "pointer", background: "rgba(255,51,51,0.1)", color: "#FF3333",
+                  border: "1px solid rgba(255,51,51,0.2)",
+                }}>
+                  Clear Local Data
+                </button>
+              </div>
 
               <SectionTitle>Danger Zone</SectionTitle>
               <div style={{ padding: "14px 16px", borderRadius: 8, background: "rgba(255,51,51,0.05)", border: "1px solid rgba(255,51,51,0.15)" }}>
                 <div style={{ fontSize: 10, color: "#FF3333", marginBottom: 8 }}>These actions cannot be undone.</div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button style={{
+                  <button onClick={async () => {
+                    if (!confirm("Reset all discovered devices?")) return;
+                    try {
+                      await fetch(`${BASE}/api/device/scan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: "local", reset: true }) });
+                      showToast("Devices reset");
+                    } catch { showToast("Reset failed"); }
+                  }} style={{
                     padding: "6px 12px", borderRadius: 4, fontSize: 10, fontFamily: "inherit",
                     cursor: "pointer", background: "rgba(255,51,51,0.1)", color: "#FF3333",
                     border: "1px solid rgba(255,51,51,0.2)",
                   }}>
                     Reset All Devices
                   </button>
-                  <button style={{
+                  <button onClick={async () => {
+                    if (!confirm("Clear all stored credentials?")) return;
+                    try {
+                      await fetch(`${BASE}/api/entity/process`, {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ text: "clear all credentials", user_id: "local" }),
+                      });
+                      showToast("Credentials cleared");
+                    } catch { showToast("Clear failed"); }
+                  }} style={{
                     padding: "6px 12px", borderRadius: 4, fontSize: 10, fontFamily: "inherit",
                     cursor: "pointer", background: "rgba(255,51,51,0.1)", color: "#FF3333",
                     border: "1px solid rgba(255,51,51,0.2)",
@@ -212,7 +336,7 @@ export default function SettingsPage() {
           ]}
           onSubmit={async (values) => {
             try {
-              await fetch("/api/entity/process", {
+              await fetch(`${BASE}/api/entity/process`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -221,7 +345,8 @@ export default function SettingsPage() {
                   session_id: "settings",
                 }),
               });
-            } catch {}
+              showToast("Credentials saved");
+            } catch { showToast("Failed to save"); }
             setShowCredModal(false);
           }}
           onClose={() => setShowCredModal(false)}

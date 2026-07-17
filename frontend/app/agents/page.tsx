@@ -6,6 +6,13 @@ import dynamic from "next/dynamic";
 
 const AgentWorksheet = dynamic(() => import("@/components/AgentWorksheet"), { ssr: false });
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 const API = "";
 
 interface Task {
@@ -46,9 +53,9 @@ export default function AgentsPage() {
         fetch(`${API}/api/relay/devices?user_id=local`),
         fetch(`${API}/api/headless/status`),
       ]);
-      const tData = await tRes.json();
-      const dData = await dRes.json();
-      const hData = await hRes.json();
+      const tData = await safeJson(tRes);
+      const dData = await safeJson(dRes);
+      const hData = await safeJson(hRes);
       setTasks(tData.tasks || []);
       setDevices(dData.devices || []);
       setHeadlessRunning(hData.running);
@@ -77,7 +84,7 @@ export default function AgentsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ intents: lines, user_id: "local" }),
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (data.tasks?.length > 0) setSelectedTask(data.tasks[0].task_id);
       } else {
         // Single execution
@@ -86,7 +93,7 @@ export default function AgentsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ intent: intent.trim(), user_id: "local" }),
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         setSelectedTask(data.task_id);
       }
       setIntent("");
@@ -102,7 +109,7 @@ export default function AgentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ intents, user_id: "local" }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.tasks?.length > 0) setSelectedTask(data.tasks[0].task_id);
     } catch {}
     setStarting(false);

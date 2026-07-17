@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+async function safeJson(res: Response): Promise<any> {
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 interface Task {
   task_id: string;
   intent: string;
@@ -23,7 +30,7 @@ export default function AgentWorksheet({ task, onClose }: { task: Task; onClose:
     const i = setInterval(async () => {
       try {
         const res = await fetch(`/api/autonomous/tasks/${task.task_id}`);
-        const data = await res.json();
+        const data = await safeJson(res);
         setLiveLog(data.log || []);
         setActiveStep(data.current_step || 0);
       } catch {}
