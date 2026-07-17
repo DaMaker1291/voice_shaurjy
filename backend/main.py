@@ -6,6 +6,7 @@ system control, smart home, and web automation.
 
 import os
 import sys
+import asyncio
 
 sys.path.insert(0, os.path.dirname(__file__))
 
