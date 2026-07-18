@@ -1861,6 +1861,70 @@ async def jarvis_hud(user_id: str = "local"):
     }
 
 
+# ── Core Engine API (SQLite Graph Memory + Compliance Ledger) ───────────
+
+class CoreDispatchRequest(BaseModel):
+    intent: str
+    agent_domain: str = "CORE_AGENT"
+
+@app.get("/api/core/status")
+async def core_status():
+    try:
+        from core_engine import get_core_engine
+        engine = get_core_engine()
+        return engine.get_system_status()
+    except Exception as e:
+        return {"error": str(e), "memory_nodes": 0, "audit_blocks": 0, "chain_valid": True, "active_processes": 0, "security_intercepts": 0}
+
+@app.post("/api/core/dispatch")
+async def core_dispatch(req: CoreDispatchRequest):
+    try:
+        from core_engine import get_core_engine
+        engine = get_core_engine()
+        result = engine.process_intent(req.intent)
+        status = engine.get_system_status()
+        result["audit_blocks"] = status["audit_blocks"]
+        return result
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e)}
+
+@app.get("/api/core/graph")
+async def core_graph(node_type: str = None, limit: int = 50):
+    try:
+        from core_engine import get_core_engine
+        engine = get_core_engine()
+        return {"nodes": engine.memory.query_nodes(node_type, limit)}
+    except Exception as e:
+        return {"nodes": [], "error": str(e)}
+
+@app.get("/api/core/graph/recall")
+async def core_recall(entity: str, hops: int = 2):
+    try:
+        from core_engine import get_core_engine
+        engine = get_core_engine()
+        return {"entity": entity, "connections": engine.memory.multi_hop_recall(entity, hops)}
+    except Exception as e:
+        return {"connections": [], "error": str(e)}
+
+@app.get("/api/core/audit")
+async def core_audit(limit: int = 50):
+    try:
+        from core_engine import get_core_engine
+        engine = get_core_engine()
+        return {"trail": engine.memory.get_audit_trail(limit)}
+    except Exception as e:
+        return {"trail": [], "error": str(e)}
+
+@app.get("/api/core/audit/verify")
+async def core_audit_verify():
+    try:
+        from core_engine import get_core_engine
+        engine = get_core_engine()
+        return engine.memory.verify_chain_integrity()
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
+
+
 @app.get("/api/system/info")
 async def system_info():
     import platform as _platform
