@@ -262,6 +262,22 @@ async def startup_event():
     except Exception as e:
         print(f"[MCP] Initialization failed: {e}")
 
+    # ── Auto-deploy core agents ───────────────────────────────────────
+    try:
+        from agent_pool import get_pool, AgentType
+        pool = get_pool()
+        for agent_type in [AgentType.OS, AgentType.HAL, AgentType.WEB, AgentType.DEVICE, AgentType.MONITOR]:
+            try:
+                agent = pool.spawn(f"JARVIS {agent_type.value.upper()} Agent", agent_type)
+                print(f"[AGENTS] Spawned {agent_type.value} agent: {agent.id}")
+            except Exception as e:
+                print(f"[AGENTS] Failed to spawn {agent_type.value}: {e}")
+        print(f"[AGENTS] Core agents initialized: {len(pool.get_all())} active")
+    except ImportError:
+        print("[AGENTS] agent_pool module not available")
+    except Exception as e:
+        print(f"[AGENTS] Auto-deploy failed: {e}")
+
 
 class RouterDispatchRequest(BaseModel):
     user_text: str

@@ -39,6 +39,7 @@ const HF_URL = "https://dgfhgjhj-jarvis-ai-brain.hf.space";
 let mainWindow = null;
 let tray = null;
 let backendProcess = null;
+let relayProcess = null;
 let backendReady = false;
 let isQuitting = false;
 
@@ -175,6 +176,62 @@ function stopBackend() {
     backendProcess = null;
     backendReady = false;
   }
+  if (relayProcess) {
+    try {
+      relayProcess.kill("SIGTERM");
+    } catch {}
+    relayProcess = null;
+  }
+}
+
+// ── Relay Management ────────────────────────────────────────────────────
+function startRelay() {
+  if (relayProcess) return;
+
+  const py = findPython();
+  if (!py) {
+    log("Python not found — relay will not start");
+    return;
+  }
+
+  // Look for relay.py in backend dir or ~/.jarvis
+  const backendDir = app.isPackaged
+    ? path.join(process.resourcesPath, "backend")
+    : path.join(__dirname, "..", "backend");
+
+  let relayScript = path.join(backendDir, "relay.py");
+  if (!fs.existsSync(relayScript)) {
+    relayScript = path.join(JARVIS_DIR, "relay.py");
+  }
+  if (!fs.existsSync(relayScript)) {
+    log("relay.py not found — relay will not start");
+    return;
+  }
+
+  log(`Starting relay: ${relayScript}`);
+  relayProcess = spawn(py, [relayScript, "--user", "local"], {
+    cwd: path.dirname(relayScript),
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, PYTHONUNBUFFERED: "1" },
+  });
+
+  relayProcess.stdout.on("data", (data) => {
+    const msg = data.toString().trim();
+    if (msg) log(`[Relay] ${msg}`);
+  });
+
+  relayProcess.stderr.on("data", (data) => {
+    const msg = data.toString().trim();
+    if (msg) log(`[Relay] ${msg}`);
+  });
+
+  relayProcess.on("exit", (code) => {
+    log(`Relay exited with code ${code}`);
+    relayProcess = null;
+    if (!isQuitting) {
+      setTimeout(startRelay, 5000);
+    }
+  });
 }
 
 // ── Logging ─────────────────────────────────────────────────────────────
@@ -317,12 +374,11 @@ function createTray() {
     },
     { type: "separator" },
     {
-      label: "Backend Status",
+      label: backendReady ? "● Backend Online" : "○ Backend Offline",
       enabled: false,
-      toolTip: backendReady ? "Online" : "Offline",
     },
     {
-      label: backendReady ? "● Online" : "○ Offline",
+      label: relayProcess ? "● Relay Running" : "○ Relay Stopped",
       enabled: false,
     },
     { type: "separator" },
@@ -331,6 +387,7 @@ function createTray() {
       click: () => {
         stopBackend();
         setTimeout(startBackend, 1000);
+        setTimeout(startRelay, 3000);
       },
     },
     {
@@ -486,6 +543,9 @@ if (!gotTheLock) {
     createTray();
     setupAutoLaunch();
     startBackend();
+
+    // Start relay after backend is up
+    setTimeout(startRelay, 5000);
 
     // Register global shortcut
     globalShortcut.register("CommandOrControl+Shift+J", () => {
