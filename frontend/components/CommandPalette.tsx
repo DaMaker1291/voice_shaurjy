@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { modKey } from "@/hooks/useModKey";
 
 interface Command {
   id: string;
@@ -131,7 +132,7 @@ export function CommandPalette({ open, onClose, onCommand }: Props) {
       >
         {/* Input */}
         <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #1a1d23" }}>
-          <span style={{ color: "#00FF66", marginRight: 10, fontSize: 14 }}>⌘</span>
+          <span style={{ color: "#00FF66", marginRight: 10, fontSize: 14 }}>{modKey()}</span>
           <input
             ref={inputRef}
             value={query}

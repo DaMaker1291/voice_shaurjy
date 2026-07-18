@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { modKey } from "@/hooks/useModKey";
 
 async function safeJson(res: Response): Promise<any> {
   if (!res.ok) return null;
@@ -87,11 +88,16 @@ export default function TopBar({ onNewChat, onCommandPalette, onToggleLivePanel,
     return () => { clearInterval(interval); clearInterval(statusInterval); window.removeEventListener("keydown", handleKeyDown); };
   }, [onCommandPalette]);
 
+  const mod = modKey();
   const navItems = [
-    { href: "/", label: "CHAT", icon: "💬", shortcut: "⌘1" },
-    { href: "/agents", label: "AGENTS", icon: "🤖", shortcut: "⌘2" },
-    { href: "/sovereign", label: "DEVICES", icon: "📡", shortcut: "⌘3" },
-    { href: "/feed", label: "FEED", icon: "📋", shortcut: "⌘4" },
+    { href: "/", label: "CHAT", icon: "💬", shortcut: `${mod}1` },
+    { href: "/agents", label: "AGENTS", icon: "🤖", shortcut: `${mod}2` },
+    { href: "/sovereign", label: "DEVICES", icon: "📡", shortcut: `${mod}3` },
+    { href: "/learning", label: "LEARN", icon: "📈" },
+    { href: "/workflows", label: "AUTO", icon: "⚡" },
+    { href: "/skills", label: "SKILLS", icon: "🧩" },
+    { href: "/enterprise", label: "TEAM", icon: "🏢" },
+    { href: "/feed", label: "FEED", icon: "📋", shortcut: `${mod}4` },
     { href: "/settings", label: "CONFIG", icon: "⚙️" },
   ];
 

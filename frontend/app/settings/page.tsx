@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import CredentialModal from "@/components/cockpit/CredentialModal";
+import { modKey } from "@/hooks/useModKey";
 
 const BASE = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
   ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -129,10 +130,10 @@ export default function SettingsPage() {
               <SectionTitle>Navigation</SectionTitle>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {[
-                  { href: "/", label: "CHAT", desc: "⌘1" },
-                  { href: "/agents", label: "AGENTS", desc: "⌘2" },
-                  { href: "/sovereign", label: "DEVICES", desc: "⌘3" },
-                  { href: "/feed", label: "FEED", desc: "⌘4" },
+                  { href: "/", label: "CHAT", desc: `${modKey()}1` },
+                  { href: "/agents", label: "AGENTS", desc: `${modKey()}2` },
+                  { href: "/sovereign", label: "DEVICES", desc: `${modKey()}3` },
+                  { href: "/feed", label: "FEED", desc: `${modKey()}4` },
                   { href: "/workspace", label: "WORKSPACE", desc: "Console" },
                   { href: "/welcome", label: "SETUP", desc: "Onboarding" },
                 ].map(item => (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { modKey } from "@/hooks/useModKey";
 
 async function safeJson(res: Response): Promise<any> {
   if (!res.ok) return null;
@@ -96,7 +97,7 @@ export default function FeedPage() {
 
     feed.push({
       id: "tip", type: "notification", title: "Quick Tip",
-      summary: "Press ⌘K to open the command palette for instant access to any feature.",
+      summary: `Press ${modKey()}K to open the command palette for instant access to any feature.`,
       time: "Now", priority: "low", source: "JARVIS",
     });
 

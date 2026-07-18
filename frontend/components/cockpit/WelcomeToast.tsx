@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { modKey } from "@/hooks/useModKey";
 
 export default function WelcomeToast() {
   const [show, setShow] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const mod = modKey();
 
   useEffect(() => {
     const seen = sessionStorage.getItem("jarvis-welcome-seen");
@@ -37,7 +39,7 @@ export default function WelcomeToast() {
       <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#00FF66", boxShadow: "0 0 8px rgba(0,255,102,0.5)" }} />
       <div>
         <div style={{ fontSize: 11, color: "#e5e5e5", fontWeight: 500 }}>Welcome to JARVIS</div>
-        <div style={{ fontSize: 9, color: "#667085", marginTop: 2 }}>Press <span style={{ color: "#00FF66" }}>⌘K</span> for commands · <span style={{ color: "#00FF66" }}>⌘⇧?</span> for shortcuts</div>
+        <div style={{ fontSize: 9, color: "#667085", marginTop: 2 }}>Press <span style={{ color: "#00FF66" }}>{mod}K</span> for commands · <span style={{ color: "#00FF66" }}>{mod}⇧?</span> for shortcuts</div>
       </div>
       <span style={{ fontSize: 8, color: "#667085", marginLeft: 8 }}>✕</span>
     </div>

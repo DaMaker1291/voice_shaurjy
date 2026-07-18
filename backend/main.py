@@ -23,6 +23,11 @@ from document_processor import process_upload
 from rag_engine import index_document, has_documents, count_chunks
 from billing import get_tier, activate_license, is_premium
 from ai_agent import generate_response
+from self_improvement import get_learning_engine
+from device_mesh import get_device_mesh
+from autonomous_engine import get_autonomous_engine
+from enterprise import get_enterprise_engine
+from skill_marketplace import get_skill_marketplace
 
 load_dotenv()
 
@@ -4217,7 +4222,303 @@ def _find_frontend_dir():
 
 _frontend_out = _find_frontend_dir()
 
-if _frontend_out:
+# ── Self-Improvement Engine ──────────────────────────────────────────────
+
+@app.get("/api/learning/metrics/{agent_id}")
+async def learning_metrics(agent_id: str):
+    engine = get_learning_engine()
+    return engine.get_agent_metrics(agent_id)
+
+@app.get("/api/learning/curve/{agent_id}")
+async def learning_curve(agent_id: str, days: int = 30):
+    engine = get_learning_engine()
+    return {"curve": engine.get_learning_curve(agent_id, days)}
+
+@app.get("/api/learning/leaderboard")
+async def learning_leaderboard():
+    engine = get_learning_engine()
+    return {"leaderboard": engine.get_leaderboard()}
+
+@app.post("/api/learning/record")
+async def learning_record(data: dict):
+    engine = get_learning_engine()
+    interaction_id = engine.record_interaction(
+        agent_id=data.get("agent_id", "unknown"),
+        task_type=data.get("task_type", "general"),
+        input_text=data.get("input_text", ""),
+        output_text=data.get("output_text", ""),
+        strategy_id=data.get("strategy_id"),
+        success=data.get("success", True),
+        latency_ms=data.get("latency_ms", 0),
+        user_feedback=data.get("user_feedback"),
+        confidence=data.get("confidence", 0),
+    )
+    return {"id": interaction_id}
+
+@app.get("/api/learning/strategies/{agent_id}")
+async def learning_strategies(agent_id: str):
+    engine = get_learning_engine()
+    best = engine.get_best_strategy(agent_id)
+    return {"best_strategy": best}
+
+@app.post("/api/learning/evolve")
+async def learning_evolve(data: dict):
+    engine = get_learning_engine()
+    new_id = engine.evolve_strategy(data["agent_id"], data["strategy_id"], data["new_parameters"])
+    return {"new_strategy_id": new_id}
+
+@app.get("/api/learning/timeline/{agent_id}")
+async def learning_timeline(agent_id: str, limit: int = 50):
+    engine = get_learning_engine()
+    return {"timeline": engine.get_improvement_timeline(agent_id, limit)}
+
+# ── Device Mesh Orchestration ─────────────────────────────────────────────
+
+@app.get("/api/mesh/topology")
+async def mesh_topology():
+    mesh = get_device_mesh()
+    return mesh.get_mesh_topology()
+
+@app.get("/api/mesh/devices")
+async def mesh_devices(status: str = None, zone: str = None, type: str = None):
+    mesh = get_device_mesh()
+    return {"devices": mesh.get_all_devices(status=status, zone=zone, type=type)}
+
+@app.post("/api/mesh/register")
+async def mesh_register(data: dict):
+    mesh = get_device_mesh()
+    return mesh.register_device(
+        name=data["name"], type=data["type"],
+        platform=data.get("platform", "unknown"),
+        ip_address=data.get("ip_address", ""),
+        capabilities=data.get("capabilities", []),
+        zone=data.get("zone", "default"),
+        tags=data.get("tags", []),
+        relay_id=data.get("relay_id"),
+    )
+
+@app.post("/api/mesh/command")
+async def mesh_command(data: dict):
+    mesh = get_device_mesh()
+    return mesh.send_command(
+        command=data["command"],
+        target_device_id=data.get("target_device_id"),
+        target_group_id=data.get("target_group_id"),
+        retries=data.get("retries", 2),
+    )
+
+@app.post("/api/mesh/broadcast")
+async def mesh_broadcast(data: dict):
+    mesh = get_device_mesh()
+    return mesh.broadcast_command(
+        command=data["command"],
+        zone=data.get("zone"),
+        device_type=data.get("device_type"),
+    )
+
+@app.get("/api/mesh/stats")
+async def mesh_stats():
+    mesh = get_device_mesh()
+    return mesh.get_mesh_stats()
+
+@app.post("/api/mesh/groups")
+async def mesh_create_group(data: dict):
+    mesh = get_device_mesh()
+    return mesh.create_group(data["name"], data.get("description", ""), data.get("device_ids", []))
+
+@app.get("/api/mesh/groups")
+async def mesh_groups():
+    mesh = get_device_mesh()
+    return {"groups": mesh.get_all_groups()}
+
+@app.post("/api/mesh/zones")
+async def mesh_create_zone(data: dict):
+    mesh = get_device_mesh()
+    return mesh.create_zone(data["name"], data.get("description", ""), data.get("device_ids", []))
+
+@app.get("/api/mesh/zones")
+async def mesh_zones():
+    mesh = get_device_mesh()
+    return {"zones": mesh.get_all_zones()}
+
+@app.get("/api/mesh/history")
+async def mesh_history(limit: int = 50):
+    mesh = get_device_mesh()
+    return {"history": mesh.get_command_history(limit)}
+
+# ── Autonomous Workflow Engine ─────────────────────────────────────────────
+
+@app.get("/api/workflows")
+async def workflows(status: str = None):
+    engine = get_autonomous_engine()
+    return {"workflows": engine.get_all_workflows(status)}
+
+@app.post("/api/workflows")
+async def create_workflow(data: dict):
+    engine = get_autonomous_engine()
+    return engine.create_workflow(
+        name=data["name"],
+        description=data.get("description", ""),
+        trigger_type=data.get("trigger_type", "manual"),
+        trigger_config=data.get("trigger_config", {}),
+        actions=data.get("actions", []),
+        priority=data.get("priority", 5),
+    )
+
+@app.get("/api/workflows/{workflow_id}")
+async def get_workflow(workflow_id: str):
+    engine = get_autonomous_engine()
+    wf = engine.get_workflow(workflow_id)
+    if not wf:
+        raise HTTPException(404, "Workflow not found")
+    return wf
+
+@app.post("/api/workflows/{workflow_id}/run")
+async def run_workflow(workflow_id: str, data: dict = None):
+    engine = get_autonomous_engine()
+    return engine.run_workflow(workflow_id, data or {})
+
+@app.get("/api/workflows/{workflow_id}/runs")
+async def workflow_runs(workflow_id: str, limit: int = 20):
+    engine = get_autonomous_engine()
+    return {"runs": engine.get_workflow_runs(workflow_id, limit)}
+
+@app.post("/api/workflows/events")
+async def emit_event(data: dict):
+    engine = get_autonomous_engine()
+    event_id = engine.emit_event(data["event_type"], data.get("source", "api"), data.get("payload", {}), data.get("severity", "info"))
+    return {"event_id": event_id}
+
+@app.get("/api/workflows/events")
+async def get_events(event_type: str = None, limit: int = 100):
+    engine = get_autonomous_engine()
+    return {"events": engine.get_events(event_type, limit)}
+
+@app.post("/api/workflows/feedback")
+async def workflow_feedback(data: dict):
+    engine = get_autonomous_engine()
+    engine.add_feedback(data["workflow_id"], data.get("run_id"), data["rating"], data.get("comment", ""))
+    return {"status": "recorded"}
+
+@app.get("/api/workflows/stats")
+async def workflow_stats():
+    engine = get_autonomous_engine()
+    return engine.get_engine_stats()
+
+# ── Enterprise Auth & Teams ──────────────────────────────────────────────
+
+@app.post("/api/auth/register")
+async def auth_register(data: dict):
+    eng = get_enterprise_engine()
+    return eng.create_user(data["username"], data["password"], data.get("email"), data.get("display_name"), data.get("role", "viewer"), data.get("team_id"))
+
+@app.post("/api/auth/login")
+async def auth_login(data: dict):
+    eng = get_enterprise_engine()
+    result = eng.authenticate(data["username"], data["password"])
+    if not result:
+        raise HTTPException(401, "Invalid credentials")
+    return result
+
+@app.get("/api/auth/me")
+async def auth_me(token: str = ""):
+    eng = get_enterprise_engine()
+    user = eng.validate_token(token)
+    if not user:
+        raise HTTPException(401, "Invalid or expired token")
+    return user
+
+@app.get("/api/enterprise/dashboard")
+async def enterprise_dashboard():
+    eng = get_enterprise_engine()
+    return eng.get_compliance_dashboard()
+
+@app.get("/api/enterprise/users")
+async def enterprise_users():
+    eng = get_enterprise_engine()
+    return {"users": eng.get_all_users()}
+
+@app.post("/api/enterprise/teams")
+async def enterprise_create_team(data: dict):
+    eng = get_enterprise_engine()
+    return eng.create_team(data["name"], data["owner_id"], data.get("description", ""))
+
+@app.get("/api/enterprise/audit")
+async def enterprise_audit(limit: int = 100, user_id: str = None):
+    eng = get_enterprise_engine()
+    return {"audit_log": eng.get_audit_log(limit, user_id)}
+
+@app.post("/api/enterprise/role")
+async def enterprise_role(data: dict):
+    eng = get_enterprise_engine()
+    success = eng.update_user_role(data["user_id"], data["new_role"], data["admin_id"])
+    if not success:
+        raise HTTPException(403, "Not authorized")
+    return {"status": "updated"}
+
+# ── Skill Marketplace ────────────────────────────────────────────────────
+
+@app.get("/api/skills")
+async def skills(category: str = None, search: str = None):
+    mp = get_skill_marketplace()
+    return {"skills": mp.get_all_skills(category=category, search=search)}
+
+@app.get("/api/skills/installed")
+async def skills_installed():
+    mp = get_skill_marketplace()
+    return {"skills": mp.get_all_skills(installed_only=True)}
+
+@app.get("/api/skills/{skill_id}")
+async def skill_detail(skill_id: str):
+    mp = get_skill_marketplace()
+    skill = mp.get_skill(skill_id)
+    if not skill:
+        raise HTTPException(404, "Skill not found")
+    reviews = mp.get_reviews(skill_id)
+    config = mp.get_skill_config(skill_id)
+    return {**skill, "reviews": reviews, "config": config}
+
+@app.post("/api/skills/{skill_id}/install")
+async def skill_install(skill_id: str):
+    mp = get_skill_marketplace()
+    return mp.install_skill(skill_id)
+
+@app.post("/api/skills/{skill_id}/uninstall")
+async def skill_uninstall(skill_id: str):
+    mp = get_skill_marketplace()
+    return mp.uninstall_skill(skill_id)
+
+@app.post("/api/skills/{skill_id}/execute")
+async def skill_execute(skill_id: str, data: dict = None):
+    mp = get_skill_marketplace()
+    return mp.execute_skill(skill_id, data or {})
+
+@app.post("/api/skills/{skill_id}/review")
+async def skill_review(skill_id: str, data: dict):
+    mp = get_skill_marketplace()
+    return mp.add_review(skill_id, data["rating"], data.get("comment", ""), data.get("user_id", "local"))
+
+@app.get("/api/skills/categories")
+async def skill_categories():
+    mp = get_skill_marketplace()
+    return {"categories": mp.get_categories()}
+
+@app.get("/api/skills/templates/list")
+async def skill_templates(category: str = None):
+    mp = get_skill_marketplace()
+    return {"templates": mp.get_templates(category)}
+
+@app.post("/api/skills/create")
+async def skill_create(data: dict):
+    mp = get_skill_marketplace()
+    return mp.create_skill(data["name"], data["display_name"], data["description"], data["category"], data["entry_point"], data.get("version", "1.0.0"), data.get("author", "local"), data.get("icon", "🧩"))
+
+@app.get("/api/skills/stats")
+async def skill_stats():
+    mp = get_skill_marketplace()
+    return mp.get_marketplace_stats()
+
+    if _frontend_out:
     @app.get("/voice_shaurjy/download")
     async def serve_download():
         f = os.path.join(_frontend_out, "download.html")

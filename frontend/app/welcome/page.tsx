@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { modKey } from "@/hooks/useModKey";
 
 async function safeJson(res: Response): Promise<any> {
   if (!res.ok) return null;
@@ -520,7 +521,7 @@ export default function OnboardingPage() {
               {userName ? `Welcome, ${userName}` : "You're All Set"}
             </div>
             <div style={{ fontSize: 10, color: "#667085", marginBottom: 28, lineHeight: 1.6 }}>
-              JARVIS is ready. Press <span style={{ color: "#00FF66", fontWeight: 600 }}>⌘K</span> anywhere for commands.
+              JARVIS is ready. Press <span style={{ color: "#00FF66", fontWeight: 600 }}>{modKey()}K</span> anywhere for commands.
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 24, textAlign: "left" }}>
