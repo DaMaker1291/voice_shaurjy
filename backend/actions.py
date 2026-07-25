@@ -1186,7 +1186,7 @@ def execute_action(action: str, user_text: str = "") -> str:
         return f"Failed: {e}"
 
 
-RELAY_INSTRUCTIONS = """I need your computer's relay agent to execute that command.
+RELAY_INSTRUCTIONS_TEMPLATE = """I need your computer's relay agent to execute that command.
 
 **Quick setup (takes 30 seconds):**
 
@@ -1197,7 +1197,7 @@ python3 relay.py --user $USER
 
 Or install fresh:
 ```bash
-curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user $USER
+curl -sL '{deploy_url}/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user $USER
 ```
 
 Keep the terminal open — I'll auto-discover your devices and you can control them by voice.
@@ -1209,19 +1209,27 @@ Keep the terminal open — I'll auto-discover your devices and you can control t
   • Printers (HP, etc.)
   • Any device on your network"""
 
+
+def _get_relay_instructions() -> str:
+    """Get relay installation instructions with the correct deployment URL."""
+    from config import get_config
+    deploy_url = get_config().get_deployment_url()
+    return RELAY_INSTRUCTIONS_TEMPLATE.format(deploy_url=deploy_url)
+
+
 def relay_action(action: str, params: str = "", user_id: str = "local") -> str:
     """Queue a desktop action and return relay_id. Frontend polls for result."""
     try:
         from relay import is_relay_alive, queue_action
     except Exception:
-        return f"__NEEDS_RELAY__:Relay bridge not available on this server.\n\n{RELAY_INSTRUCTIONS}"
+        return f"__NEEDS_RELAY__:Relay bridge not available on this server.\n\n{_get_relay_instructions()}"
     try:
         if not is_relay_alive(user_id):
-            return f"__NEEDS_RELAY__:Action '{action}' needs your computer.\n\n{RELAY_INSTRUCTIONS}"
+            return f"__NEEDS_RELAY__:Action '{action}' needs your computer.\n\n{_get_relay_instructions()}"
         relay_id = queue_action(action, params, user_id=user_id)
         return f"__RELAY__:{relay_id}:{action}"
     except Exception as e:
-        return f"__NEEDS_RELAY__:Cannot execute '{action}' on server.\n\n{RELAY_INSTRUCTIONS}\n\n(Error: {e})"
+        return f"__NEEDS_RELAY__:Cannot execute '{action}' on server.\n\n{_get_relay_instructions()}\n\n(Error: {e})"
 
 
 # Cloud-safe actions — ones that work on Linux without needing a relay agent

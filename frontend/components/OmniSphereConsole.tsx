@@ -1,10 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-
-const BASE = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-  ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-  : "https://dgfhgjhj-jarvis-ai-brain.hf.space";
+import { BASE } from "@/lib/api";
 
 interface TelemetryStats {
   p95Latency: number;

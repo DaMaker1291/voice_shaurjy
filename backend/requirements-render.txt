@@ -28,6 +28,7 @@ psutil>=5.9.0
 
 # Auth
 PyJWT>=2.8.0
+cryptography>=42.0.0
 
 # CORS
 starlette>=0.36.0
@@ -37,3 +38,4 @@ websocket-client>=1.6.0
 
 # TTS (fallback on cloud — Kokoro runs locally via Electron)
 edge-tts>=6.1.0
+# rebuild v2.2.0

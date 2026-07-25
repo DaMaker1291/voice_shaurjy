@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { modKey } from "@/hooks/useModKey";
+import { BASE } from "@/lib/api";
 
 async function safeJson(res: Response): Promise<any> {
   if (!res.ok) return null;
@@ -55,7 +56,7 @@ export default function TopBar({ onNewChat, onCommandPalette, onToggleLivePanel,
 
     const fetchStatus = async () => {
       try {
-        const res = await fetch("/api/health");
+        const res = await fetch(`${BASE}/api/health`);
         const data = await safeJson(res);
         setStatus(p => ({
           ...p,
@@ -64,12 +65,12 @@ export default function TopBar({ onNewChat, onCommandPalette, onToggleLivePanel,
         }));
       } catch {}
       try {
-        const res = await fetch("/api/autonomous/tasks");
+        const res = await fetch(`${BASE}/api/autonomous/tasks`);
         const data = await safeJson(res);
         setAgentCount((data.tasks || []).filter((t: any) => t.status === "running").length);
       } catch {}
       try {
-        const res = await fetch("/api/relay/devices?user_id=local");
+        const res = await fetch(`${BASE}/api/relay/devices?user_id=local`);
         const data = await safeJson(res);
         setDeviceCount((data.devices || []).length);
       } catch {}
@@ -97,6 +98,7 @@ export default function TopBar({ onNewChat, onCommandPalette, onToggleLivePanel,
     { href: "/workflows", label: "AUTO", icon: "⚡" },
     { href: "/skills", label: "SKILLS", icon: "🧩" },
     { href: "/enterprise", label: "TEAM", icon: "🏢" },
+    { href: "/hardware", label: "HARDWARE", icon: "🖥️" },
     { href: "/feed", label: "FEED", icon: "📋", shortcut: `${mod}4` },
     { href: "/settings", label: "CONFIG", icon: "⚙️" },
   ];

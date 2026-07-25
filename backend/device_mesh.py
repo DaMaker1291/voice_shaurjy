@@ -265,7 +265,11 @@ class DeviceMesh:
         }
 
     def _execute_on_device(self, device: Dict, command: str, retries: int) -> Dict:
-        """Execute a command on a specific device with retry logic."""
+        """Execute a command on a specific device via relay with retry logic."""
+        import urllib.request
+        import urllib.error
+        import json as _json
+
         if device["status"] != "online":
             return {"device_id": device["id"], "success": False, "error": "device_offline"}
 
@@ -273,16 +277,39 @@ class DeviceMesh:
         if not relay_id:
             return {"device_id": device["id"], "success": False, "error": "no_relay"}
 
+        relay_url = os.environ.get("JARVIS_RELAY_URL", "http://127.0.0.1:8765")
+        payload = _json.dumps({
+            "type": "device_command",
+            "device_id": device["id"],
+            "device_name": device["name"],
+            "relay_id": relay_id,
+            "command": command,
+            "timestamp": datetime.utcnow().isoformat(),
+        }).encode("utf-8")
+
         for attempt in range(retries + 1):
             try:
-                return {
-                    "device_id": device["id"],
-                    "device_name": device["name"],
-                    "relay_id": relay_id,
-                    "success": True,
-                    "attempt": attempt + 1,
-                    "command": command,
-                }
+                req = urllib.request.Request(
+                    f"{relay_url}/relay/command",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    result_data = _json.loads(resp.read().decode())
+                    return {
+                        "device_id": device["id"],
+                        "device_name": device["name"],
+                        "relay_id": relay_id,
+                        "success": result_data.get("success", True),
+                        "attempt": attempt + 1,
+                        "command": command,
+                        "response": result_data,
+                    }
+            except urllib.error.URLError as e:
+                if attempt == retries:
+                    return {"device_id": device["id"], "success": False, "error": f"relay_unreachable: {e.reason}", "attempts": attempt + 1}
+                time.sleep(0.5 * (attempt + 1))
             except Exception as e:
                 if attempt == retries:
                     return {"device_id": device["id"], "success": False, "error": str(e), "attempts": attempt + 1}

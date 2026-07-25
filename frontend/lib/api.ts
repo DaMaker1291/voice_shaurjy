@@ -11,7 +11,7 @@ function getBaseURL(): string {
 
 export const BASE = getBaseURL();
 
-async function safeJson(res: Response): Promise<any> {
+export async function safeJson(res: Response): Promise<any> {
   if (!res.ok) {
     let text = "";
     try { text = await res.text(); } catch {}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BASE } from "@/lib/api";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "";
+const API = BASE;
 
 export default function MeshPage() {
   const [topology, setTopology] = useState<any>(null);

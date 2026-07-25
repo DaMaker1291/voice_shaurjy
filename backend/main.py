@@ -10,8 +10,8 @@ import asyncio
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -23,23 +23,53 @@ from document_processor import process_upload
 from rag_engine import index_document, has_documents, count_chunks
 from billing import get_tier, activate_license, is_premium
 from ai_agent import generate_response
-from self_improvement import get_learning_engine
-from device_mesh import get_device_mesh
-from autonomous_engine import get_autonomous_engine
-from enterprise import get_enterprise_engine
-from skill_marketplace import get_skill_marketplace
+
+import importlib as _importlib
+
+def _lazy_import(module_name, attr_name):
+    """Lazily import a module attribute, returning None on failure."""
+    def getter():
+        try:
+            mod = _importlib.import_module(module_name)
+            return getattr(mod, attr_name)()
+        except Exception:
+            return None
+    return getter
+
+get_learning_engine = _lazy_import("self_improvement", "get_learning_engine")
+get_device_mesh = _lazy_import("device_mesh", "get_device_mesh")
+get_autonomous_engine = _lazy_import("autonomous_engine", "get_autonomous_engine")
+get_enterprise_engine = _lazy_import("enterprise", "get_enterprise_engine")
+get_skill_marketplace = _lazy_import("skill_marketplace", "get_skill_marketplace")
+
+from auth import authenticate, AuthContext, create_jwt_token
+from rate_limiter import RateLimitMiddleware, get_rate_limiter
+from error_handler import ErrorHandlerMiddleware
 
 load_dotenv()
 
-app = FastAPI(title="JARVIS — The System Engine", version="1.0.0")
+app = FastAPI(title="JARVIS — The System Engine", version="2.0.0")
+
+# ── Security: Restricted CORS ──────────────────────────────────
+ALLOWED_ORIGINS = os.getenv("JARVIS_ALLOWED_ORIGINS", "").split(",")
+ALLOWED_ORIGINS = [o.strip() for o in ALLOWED_ORIGINS if o.strip()]
+if not ALLOWED_ORIGINS:
+    # Dev mode: allow all. Production: restrict to known origins.
+    ALLOWED_ORIGINS = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-User-ID"],
 )
+
+# ── Rate Limiting Middleware ────────────────────────────────────
+app.add_middleware(RateLimitMiddleware)
+
+# ── Error Handler Middleware ────────────────────────────────────
+app.add_middleware(ErrorHandlerMiddleware)
 
 
 @app.on_event("startup")
@@ -291,7 +321,7 @@ class RouterDispatchRequest(BaseModel):
 
 
 @app.post("/api/router/dispatch")
-async def router_dispatch(req: RouterDispatchRequest):
+async def router_dispatch(req: RouterDispatchRequest, auth: AuthContext = Depends(authenticate)):
     """
     Multi-Agent Router Dispatch — JARVIS cognitive triage pipeline.
     Stage 1: Supervisor Router classifies intent (<100ms, 8B model).
@@ -302,9 +332,10 @@ async def router_dispatch(req: RouterDispatchRequest):
         from multi_agent_router import route_and_execute
         result = route_and_execute(
             user_text=req.user_text,
-            user_id=req.user_id,
+            user_id=auth.user_id if auth.user_id != "local" else req.user_id,
             relay_context=req.relay_context or {},
         )
+        result["auth"] = {"user_id": auth.user_id, "method": auth.auth_method}
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -579,6 +610,59 @@ async def health():
     }
 
 
+# ── Auth Endpoints ──────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    username: str
+    password: Optional[str] = None
+
+class TokenRefreshRequest(BaseModel):
+    token: str
+
+@app.post("/api/auth/login")
+async def auth_login(req: LoginRequest):
+    """Authenticate and receive a JWT token."""
+    # Simple credential check via env vars
+    expected_user = os.getenv("JARVIS_ADMIN_USER", "admin")
+    expected_pass = os.getenv("JARVIS_ADMIN_PASS", "")
+
+    if expected_pass and (req.username != expected_user or req.password != expected_pass):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = create_jwt_token(
+        user_id=req.username,
+        scopes=["read", "write", "admin"],
+        tenant_id="default",
+    )
+    return {"token": token, "user_id": req.username, "expires_in_hours": 72}
+
+
+@app.post("/api/auth/refresh")
+async def auth_refresh(req: TokenRefreshRequest):
+    """Refresh an existing JWT token."""
+    from auth import refresh_token
+    new_token = refresh_token(req.token)
+    return {"token": new_token}
+
+
+@app.get("/api/auth/status")
+async def auth_status(auth: AuthContext = Depends(authenticate)):
+    """Get current authentication status."""
+    return {
+        "authenticated": auth.auth_method != "anonymous",
+        "user_id": auth.user_id,
+        "auth_method": auth.auth_method,
+        "scopes": auth.scopes,
+        "tenant_id": auth.tenant_id,
+    }
+
+
+@app.get("/api/rate-limit/stats")
+async def rate_limit_stats():
+    """Get rate limiter statistics."""
+    return get_rate_limiter().get_stats()
+
+
 @app.post("/api/text/chat")
 async def text_chat(query: TextQuery):
     from reminders import create_reminder
@@ -614,7 +698,9 @@ async def task_respond(req: TaskRespond):
             # App requires relay — force relay check (bypass cloud-safe)
             result = relay_action(action_name, req.response, user_id=req.user_id or "local")
             if "__NEEDS_RELAY__" in result:
-                return {"type": "ask", "question": "Relay agent is offline. Start J.A.R.V.I.S. Relay on your desktop:\n\n**Mac/Linux:**\n```bash\ncurl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user $USER\n```\n\n**Windows (PowerShell):**\n```powershell\npowershell -c \"curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\\\\relay.py; python $env:TEMP\\\\relay.py --user $env:USERNAME\"\n```\n\nRun that on your machine, then ask me again.", "session_id": req.session_id}
+                from config import get_config
+                deploy_url = get_config().get_deployment_url()
+                return {"type": "ask", "question": f"Relay agent is offline. Start J.A.R.V.I.S. Relay on your desktop:\n\n**Mac/Linux:**\n```bash\ncurl -sL '{deploy_url}/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user $USER\n```\n\n**Windows (PowerShell):**\n```powershell\npowershell -c \"curl.exe -sL '{deploy_url}/relay' -o $env:TEMP\\\\relay.py; python $env:TEMP\\\\relay.py --user $env:USERNAME\"\n```\n\nRun that on your machine, then ask me again.", "session_id": req.session_id}
             if result.startswith("__RELAY__:"):
                 parts = result.split(":", 2)
                 relay_id = parts[1] if len(parts) > 1 else ""
@@ -904,10 +990,11 @@ async def context_relay_inject(data: dict):
     return {"status": "ok"}
 
 
-# ── Multi-Agent Router Endpoint ────────────────────────────────────
+# ── Multi-Agent Strategy Endpoint ────────────────────────────────────
 
-@app.post("/api/router/dispatch")
-async def router_dispatch(req: StrategyRequest):
+@app.post("/api/router/strategy")
+async def router_strategy(req: StrategyRequest):
+    """Strategy generation endpoint (entity-based, uses StrategyRequest model)."""
     from multi_agent_router import route_and_execute
     result = route_and_execute(req.user_input, user_id=req.user_id)
     return result
@@ -4227,21 +4314,25 @@ _frontend_out = _find_frontend_dir()
 @app.get("/api/learning/metrics/{agent_id}")
 async def learning_metrics(agent_id: str):
     engine = get_learning_engine()
+    if not engine: return {"error": "engine_unavailable"}
     return engine.get_agent_metrics(agent_id)
 
 @app.get("/api/learning/curve/{agent_id}")
 async def learning_curve(agent_id: str, days: int = 30):
     engine = get_learning_engine()
+    if not engine: return {"error": "engine_unavailable"}
     return {"curve": engine.get_learning_curve(agent_id, days)}
 
 @app.get("/api/learning/leaderboard")
 async def learning_leaderboard():
     engine = get_learning_engine()
+    if not engine: return {"error": "engine_unavailable"}
     return {"leaderboard": engine.get_leaderboard()}
 
 @app.post("/api/learning/record")
 async def learning_record(data: dict):
     engine = get_learning_engine()
+    if not engine: return {"error": "engine_unavailable"}
     interaction_id = engine.record_interaction(
         agent_id=data.get("agent_id", "unknown"),
         task_type=data.get("task_type", "general"),
@@ -4258,18 +4349,21 @@ async def learning_record(data: dict):
 @app.get("/api/learning/strategies/{agent_id}")
 async def learning_strategies(agent_id: str):
     engine = get_learning_engine()
+    if not engine: return {"error": "engine_unavailable"}
     best = engine.get_best_strategy(agent_id)
     return {"best_strategy": best}
 
 @app.post("/api/learning/evolve")
 async def learning_evolve(data: dict):
     engine = get_learning_engine()
+    if not engine: return {"error": "engine_unavailable"}
     new_id = engine.evolve_strategy(data["agent_id"], data["strategy_id"], data["new_parameters"])
     return {"new_strategy_id": new_id}
 
 @app.get("/api/learning/timeline/{agent_id}")
 async def learning_timeline(agent_id: str, limit: int = 50):
     engine = get_learning_engine()
+    if not engine: return {"error": "engine_unavailable"}
     return {"timeline": engine.get_improvement_timeline(agent_id, limit)}
 
 # ── Device Mesh Orchestration ─────────────────────────────────────────────
@@ -4277,16 +4371,19 @@ async def learning_timeline(agent_id: str, limit: int = 50):
 @app.get("/api/mesh/topology")
 async def mesh_topology():
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable", "nodes": [], "edges": [], "zones": [], "stats": {}}
     return mesh.get_mesh_topology()
 
 @app.get("/api/mesh/devices")
 async def mesh_devices(status: str = None, zone: str = None, type: str = None):
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable", "devices": []}
     return {"devices": mesh.get_all_devices(status=status, zone=zone, type=type)}
 
 @app.post("/api/mesh/register")
 async def mesh_register(data: dict):
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable"}
     return mesh.register_device(
         name=data["name"], type=data["type"],
         platform=data.get("platform", "unknown"),
@@ -4300,6 +4397,7 @@ async def mesh_register(data: dict):
 @app.post("/api/mesh/command")
 async def mesh_command(data: dict):
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable"}
     return mesh.send_command(
         command=data["command"],
         target_device_id=data.get("target_device_id"),
@@ -4310,6 +4408,7 @@ async def mesh_command(data: dict):
 @app.post("/api/mesh/broadcast")
 async def mesh_broadcast(data: dict):
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable"}
     return mesh.broadcast_command(
         command=data["command"],
         zone=data.get("zone"),
@@ -4319,31 +4418,37 @@ async def mesh_broadcast(data: dict):
 @app.get("/api/mesh/stats")
 async def mesh_stats():
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable"}
     return mesh.get_mesh_stats()
 
 @app.post("/api/mesh/groups")
 async def mesh_create_group(data: dict):
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable"}
     return mesh.create_group(data["name"], data.get("description", ""), data.get("device_ids", []))
 
 @app.get("/api/mesh/groups")
 async def mesh_groups():
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable", "groups": []}
     return {"groups": mesh.get_all_groups()}
 
 @app.post("/api/mesh/zones")
 async def mesh_create_zone(data: dict):
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable"}
     return mesh.create_zone(data["name"], data.get("description", ""), data.get("device_ids", []))
 
 @app.get("/api/mesh/zones")
 async def mesh_zones():
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable", "zones": []}
     return {"zones": mesh.get_all_zones()}
 
 @app.get("/api/mesh/history")
 async def mesh_history(limit: int = 50):
     mesh = get_device_mesh()
+    if not mesh: return {"error": "engine_unavailable", "history": []}
     return {"history": mesh.get_command_history(limit)}
 
 # ── Autonomous Workflow Engine ─────────────────────────────────────────────
@@ -4351,11 +4456,13 @@ async def mesh_history(limit: int = 50):
 @app.get("/api/workflows")
 async def workflows(status: str = None):
     engine = get_autonomous_engine()
+    if not engine: return {"error": "engine_unavailable", "workflows": []}
     return {"workflows": engine.get_all_workflows(status)}
 
 @app.post("/api/workflows")
 async def create_workflow(data: dict):
     engine = get_autonomous_engine()
+    if not engine: return {"error": "engine_unavailable"}
     return engine.create_workflow(
         name=data["name"],
         description=data.get("description", ""),
@@ -4368,6 +4475,7 @@ async def create_workflow(data: dict):
 @app.get("/api/workflows/{workflow_id}")
 async def get_workflow(workflow_id: str):
     engine = get_autonomous_engine()
+    if not engine: raise HTTPException(503, "Engine unavailable")
     wf = engine.get_workflow(workflow_id)
     if not wf:
         raise HTTPException(404, "Workflow not found")
@@ -4376,33 +4484,39 @@ async def get_workflow(workflow_id: str):
 @app.post("/api/workflows/{workflow_id}/run")
 async def run_workflow(workflow_id: str, data: dict = None):
     engine = get_autonomous_engine()
+    if not engine: return {"error": "engine_unavailable"}
     return engine.run_workflow(workflow_id, data or {})
 
 @app.get("/api/workflows/{workflow_id}/runs")
 async def workflow_runs(workflow_id: str, limit: int = 20):
     engine = get_autonomous_engine()
+    if not engine: return {"error": "engine_unavailable", "runs": []}
     return {"runs": engine.get_workflow_runs(workflow_id, limit)}
 
 @app.post("/api/workflows/events")
 async def emit_event(data: dict):
     engine = get_autonomous_engine()
+    if not engine: return {"error": "engine_unavailable"}
     event_id = engine.emit_event(data["event_type"], data.get("source", "api"), data.get("payload", {}), data.get("severity", "info"))
     return {"event_id": event_id}
 
 @app.get("/api/workflows/events")
 async def get_events(event_type: str = None, limit: int = 100):
     engine = get_autonomous_engine()
+    if not engine: return {"error": "engine_unavailable", "events": []}
     return {"events": engine.get_events(event_type, limit)}
 
 @app.post("/api/workflows/feedback")
 async def workflow_feedback(data: dict):
     engine = get_autonomous_engine()
+    if not engine: return {"error": "engine_unavailable"}
     engine.add_feedback(data["workflow_id"], data.get("run_id"), data["rating"], data.get("comment", ""))
     return {"status": "recorded"}
 
 @app.get("/api/workflows/stats")
 async def workflow_stats():
     engine = get_autonomous_engine()
+    if not engine: return {"error": "engine_unavailable"}
     return engine.get_engine_stats()
 
 # ── Enterprise Auth & Teams ──────────────────────────────────────────────
@@ -4410,11 +4524,13 @@ async def workflow_stats():
 @app.post("/api/auth/register")
 async def auth_register(data: dict):
     eng = get_enterprise_engine()
+    if not eng: return {"error": "engine_unavailable"}
     return eng.create_user(data["username"], data["password"], data.get("email"), data.get("display_name"), data.get("role", "viewer"), data.get("team_id"))
 
 @app.post("/api/auth/login")
 async def auth_login(data: dict):
     eng = get_enterprise_engine()
+    if not eng: return {"error": "engine_unavailable"}
     result = eng.authenticate(data["username"], data["password"])
     if not result:
         raise HTTPException(401, "Invalid credentials")
@@ -4423,6 +4539,7 @@ async def auth_login(data: dict):
 @app.get("/api/auth/me")
 async def auth_me(token: str = ""):
     eng = get_enterprise_engine()
+    if not eng: return {"error": "engine_unavailable"}
     user = eng.validate_token(token)
     if not user:
         raise HTTPException(401, "Invalid or expired token")
@@ -4431,26 +4548,31 @@ async def auth_me(token: str = ""):
 @app.get("/api/enterprise/dashboard")
 async def enterprise_dashboard():
     eng = get_enterprise_engine()
+    if not eng: return {"error": "engine_unavailable"}
     return eng.get_compliance_dashboard()
 
 @app.get("/api/enterprise/users")
 async def enterprise_users():
     eng = get_enterprise_engine()
+    if not eng: return {"error": "engine_unavailable", "users": []}
     return {"users": eng.get_all_users()}
 
 @app.post("/api/enterprise/teams")
 async def enterprise_create_team(data: dict):
     eng = get_enterprise_engine()
+    if not eng: return {"error": "engine_unavailable"}
     return eng.create_team(data["name"], data["owner_id"], data.get("description", ""))
 
 @app.get("/api/enterprise/audit")
 async def enterprise_audit(limit: int = 100, user_id: str = None):
     eng = get_enterprise_engine()
+    if not eng: return {"error": "engine_unavailable", "audit_log": []}
     return {"audit_log": eng.get_audit_log(limit, user_id)}
 
 @app.post("/api/enterprise/role")
 async def enterprise_role(data: dict):
     eng = get_enterprise_engine()
+    if not eng: return {"error": "engine_unavailable"}
     success = eng.update_user_role(data["user_id"], data["new_role"], data["admin_id"])
     if not success:
         raise HTTPException(403, "Not authorized")
@@ -4461,16 +4583,19 @@ async def enterprise_role(data: dict):
 @app.get("/api/skills")
 async def skills(category: str = None, search: str = None):
     mp = get_skill_marketplace()
+    if not mp: return {"error": "engine_unavailable", "skills": []}
     return {"skills": mp.get_all_skills(category=category, search=search)}
 
 @app.get("/api/skills/installed")
 async def skills_installed():
     mp = get_skill_marketplace()
+    if not mp: return {"error": "engine_unavailable", "skills": []}
     return {"skills": mp.get_all_skills(installed_only=True)}
 
 @app.get("/api/skills/{skill_id}")
 async def skill_detail(skill_id: str):
     mp = get_skill_marketplace()
+    if not mp: raise HTTPException(503, "Engine unavailable")
     skill = mp.get_skill(skill_id)
     if not skill:
         raise HTTPException(404, "Skill not found")
@@ -4481,44 +4606,112 @@ async def skill_detail(skill_id: str):
 @app.post("/api/skills/{skill_id}/install")
 async def skill_install(skill_id: str):
     mp = get_skill_marketplace()
+    if not mp: return {"error": "engine_unavailable"}
     return mp.install_skill(skill_id)
 
 @app.post("/api/skills/{skill_id}/uninstall")
 async def skill_uninstall(skill_id: str):
     mp = get_skill_marketplace()
+    if not mp: return {"error": "engine_unavailable"}
     return mp.uninstall_skill(skill_id)
 
 @app.post("/api/skills/{skill_id}/execute")
 async def skill_execute(skill_id: str, data: dict = None):
     mp = get_skill_marketplace()
+    if not mp: return {"error": "engine_unavailable"}
     return mp.execute_skill(skill_id, data or {})
 
 @app.post("/api/skills/{skill_id}/review")
 async def skill_review(skill_id: str, data: dict):
     mp = get_skill_marketplace()
+    if not mp: return {"error": "engine_unavailable"}
     return mp.add_review(skill_id, data["rating"], data.get("comment", ""), data.get("user_id", "local"))
 
 @app.get("/api/skills/categories")
 async def skill_categories():
     mp = get_skill_marketplace()
+    if not mp: return {"error": "engine_unavailable", "categories": []}
     return {"categories": mp.get_categories()}
 
 @app.get("/api/skills/templates/list")
 async def skill_templates(category: str = None):
     mp = get_skill_marketplace()
+    if not mp: return {"error": "engine_unavailable", "templates": []}
     return {"templates": mp.get_templates(category)}
 
 @app.post("/api/skills/create")
 async def skill_create(data: dict):
     mp = get_skill_marketplace()
+    if not mp: return {"error": "engine_unavailable"}
     return mp.create_skill(data["name"], data["display_name"], data["description"], data["category"], data["entry_point"], data.get("version", "1.0.0"), data.get("author", "local"), data.get("icon", "🧩"))
 
 @app.get("/api/skills/stats")
 async def skill_stats():
     mp = get_skill_marketplace()
+    if not mp: return {"error": "engine_unavailable"}
     return mp.get_marketplace_stats()
 
-    if _frontend_out:
+
+# ── Hardware Detection & AI Model Recommendation ───────────────────────
+
+@app.get("/api/hardware/detect")
+async def hardware_detect():
+    """Detect user hardware and return full profile with AI model recommendations."""
+    try:
+        from hardware_detector import detect_hardware
+        profile = detect_hardware()
+        return profile.to_dict()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/hardware/refresh")
+async def hardware_refresh():
+    """Force re-detection of hardware (cached result is invalidated)."""
+    try:
+        from hardware_detector import refresh_hardware_profile
+        profile = refresh_hardware_profile()
+        return profile.to_dict()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/hardware/tier")
+async def hardware_tier():
+    """Get just the performance tier and top recommendation."""
+    try:
+        from hardware_detector import get_hardware_profile
+        profile = get_hardware_profile()
+        top_model = profile.recommended_models[0] if profile.recommended_models else None
+        return {
+            "tier": profile.performance_tier,
+            "top_recommendation": top_model,
+            "config": profile.recommended_config,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/hardware/models")
+async def hardware_models():
+    """Get all recommended AI models for this hardware."""
+    try:
+        from hardware_detector import get_hardware_profile
+        profile = get_hardware_profile()
+        return {
+            "models": profile.recommended_models,
+            "tier": profile.performance_tier,
+            "hardware_summary": {
+                "cpu": profile.cpu_brand,
+                "ram_gb": profile.ram_total_gb,
+                "gpu": f"{profile.gpu_name} ({profile.gpu_vram_gb}GB VRAM)" if profile.gpu_brand != "None" else "None",
+            },
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+if _frontend_out:
     @app.get("/voice_shaurjy/download")
     async def serve_download():
         f = os.path.join(_frontend_out, "download.html")

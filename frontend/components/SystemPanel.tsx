@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getSystemStats, getSystemProcesses, getClipboard, takeScreenshot, runAction, setVolume, setBrightness, sendNotification, webSearch, getWeather, computerRunTask, computerTaskStatus, computerStopTask } from "@/lib/api";
+import { BASE, getSystemStats, getSystemProcesses, getClipboard, takeScreenshot, runAction, setVolume, setBrightness, sendNotification, webSearch, getWeather, computerRunTask, computerTaskStatus, computerStopTask } from "@/lib/api";
 
 async function safeJson(res: Response): Promise<any> {
   if (!res.ok) return null;
@@ -57,7 +57,7 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     (async () => {
       try {
-        const a = await safeJson(await fetch(`http://localhost:8000/api/actions`));
+        const a = await safeJson(await fetch(`${BASE}/api/actions`));
         setActions(a.actions || {});
       } catch {}
     })();
@@ -361,8 +361,8 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
             <div className="p-3">
               <input type="text" placeholder="Search actions..." className="w-full text-[10px] font-mono bg-gray-900/40 border border-gray-800/30 rounded-lg px-3 py-1.5 text-gray-400 outline-none focus:border-purple-500/30 transition-colors mb-3" onChange={async (e) => {
                 const q = e.target.value;
-                if (!q) { try { const a = await safeJson(await fetch(`http://localhost:8000/api/actions`)); setActions(a.actions || {}); } catch {} return; }
-                try { const a = await safeJson(await fetch(`http://localhost:8000/api/actions/search?q=${encodeURIComponent(q)}`)); setActions(a.actions || {}); } catch {}
+                if (!q) { try { const a = await safeJson(await fetch(`${BASE}/api/actions`)); setActions(a.actions || {}); } catch {} return; }
+                try { const a = await safeJson(await fetch(`${BASE}/api/actions/search?q=${encodeURIComponent(q)}`)); setActions(a.actions || {}); } catch {}
               }} />
               <div className="grid grid-cols-3 gap-1">
                 {Object.entries(actions).slice(0, 90).map(([id, info]) => (

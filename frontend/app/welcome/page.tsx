@@ -3,13 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { modKey } from "@/hooks/useModKey";
-
-async function safeJson(res: Response): Promise<any> {
-  if (!res.ok) return null;
-  const text = await res.text();
-  if (!text) return {};
-  try { return JSON.parse(text); } catch { return null; }
-}
+import { BASE, safeJson } from "@/lib/api";
 
 type Step = "welcome" | "os-detect" | "relay" | "devices" | "permissions" | "ready";
 
@@ -25,19 +19,19 @@ interface OSInfo {
 const OS_MAP: Record<string, OSInfo> = {
   windows: {
     platform: "windows", name: "Windows", icon: "🪟",
-    relayCmd: `curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user`,
+    relayCmd: `curl.exe -sL '${typeof window !== "undefined" ? BASE : "https://dgfhgjhj-jarvis-ai-brain.hf.space"}/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user`,
     relayCmdLabel: "PowerShell (Run as Admin)",
     installNote: "Windows Defender may ask for permission — allow it.",
   },
   mac: {
     platform: "mac", name: "macOS", icon: "🍎",
-    relayCmd: `curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' | python3 - --user`,
+    relayCmd: `curl -sL '${typeof window !== "undefined" ? BASE : "https://dgfhgjhj-jarvis-ai-brain.hf.space"}/relay' | python3 - --user`,
     relayCmdLabel: "Terminal",
     installNote: "Grant Accessibility permissions when prompted.",
   },
   linux: {
     platform: "linux", name: "Linux", icon: "🐧",
-    relayCmd: `curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' | python3 - --user`,
+    relayCmd: `curl -sL '${typeof window !== "undefined" ? BASE : "https://dgfhgjhj-jarvis-ai-brain.hf.space"}/relay' | python3 - --user`,
     relayCmdLabel: "Terminal",
     installNote: "May need sudo for full device access.",
   },
@@ -64,7 +58,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     const detectOS = async () => {
       try {
-        const res = await fetch("/api/device/current?user_id=local");
+        const res = await fetch(`${BASE}/api/device/current?user_id=local`);
         const data = await safeJson(res);
         const platform = (data.platform || "").toLowerCase();
         if (platform.includes("win")) setOsInfo(OS_MAP.windows);
@@ -83,7 +77,7 @@ export default function OnboardingPage() {
 
   const checkRelay = useCallback(async () => {
     try {
-      const res = await fetch("/api/health");
+      const res = await fetch(`${BASE}/api/health`);
         const data = await safeJson(res);
       setRelayOnline(!!data.relay);
       return !!data.relay;
@@ -108,13 +102,13 @@ export default function OnboardingPage() {
   const scanDevices = async () => {
     setScanning(true);
     try {
-      await fetch("/api/relay/action", {
+      await fetch(`${BASE}/api/relay/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action_id: "universal_scan", params: "", user_id: "local" }),
       });
       await new Promise(r => setTimeout(r, 5000));
-      const res = await fetch("/api/relay/devices?user_id=local");
+      const res = await fetch(`${BASE}/api/relay/devices?user_id=local`);
         const data = await safeJson(res);
       setDevices(data.devices || []);
       setDeviceCount((data.devices || []).length);

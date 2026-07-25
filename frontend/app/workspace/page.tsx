@@ -2,17 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
-
-const BASE = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-  ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-  : "https://dgfhgjhj-jarvis-ai-brain.hf.space";
-
-async function safeJson(res: Response): Promise<any> {
-  if (!res.ok) return null;
-  const text = await res.text();
-  if (!text) return {};
-  try { return JSON.parse(text); } catch { return null; }
-}
+import { BASE, safeJson } from "@/lib/api";
 
 type Tab = "workspace" | "worksheets" | "console" | "devices";
 

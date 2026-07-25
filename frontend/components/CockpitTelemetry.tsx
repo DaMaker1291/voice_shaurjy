@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { BASE } from "@/lib/api";
 
 interface DeviceNode {
   id: string;
@@ -326,9 +327,7 @@ function PlatformStats() {
   useEffect(() => {
     const load = async () => {
       try {
-        const base = typeof window !== "undefined"
-          ? (localStorage.getItem("backend_url") || "https://dgfhgjhj-jarvis-ai-brain.hf.space")
-          : "";
+        const base = BASE;
         const res = await fetch(`${base}/api/platform/latency`).then(r => r.json()).catch(() => null);
         const vox = await fetch(`${base}/api/platform/vault`).then(r => r.json()).catch(() => null);
         const hel = await fetch(`${base}/api/platform/healing`).then(r => r.json()).catch(() => null);

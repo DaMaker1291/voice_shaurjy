@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { BASE } from "@/lib/api";
 
 interface CalendarEvent {
   subject: string;
@@ -54,11 +55,6 @@ interface ContextRelayData {
   };
   summary: string;
 }
-
-const BASE =
-  typeof window !== "undefined" && window.location.hostname === "localhost"
-    ? "http://localhost:8000"
-    : "https://dgfhgjhj-jarvis-ai-brain.hf.space";
 
 export default function ContextRelayPanel() {
   const [data, setData] = useState<ContextRelayData | null>(null);

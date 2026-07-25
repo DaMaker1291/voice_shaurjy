@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { BASE, safeJson } from "@/lib/api";
 
 const TopBar = dynamic(() => import("@/components/cockpit/TopBar"), { ssr: false });
 const AgentGraph = dynamic(() => import("@/components/cockpit/AgentGraph"), { ssr: false });
@@ -21,23 +22,6 @@ const HeadlessWorkstationMonitor = dynamic(() => import("@/components/cockpit/He
 const ContextRelayPanel = dynamic(() => import("@/components/cockpit/ContextRelayPanel"), { ssr: false });
 
 interface Message { role: string; content: string; ts: number; agent?: string }
-
-const BASE = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-  ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-  : "https://dgfhgjhj-jarvis-ai-brain.hf.space";
-
-async function safeJson(res: Response): Promise<any> {
-  if (!res.ok) {
-    let text = "";
-    try { text = await res.text(); } catch {}
-    throw new Error(`HTTP ${res.status}: ${text.slice(0, 200) || res.statusText}`);
-  }
-  const text = await res.text();
-  if (!text) return {};
-  try { return JSON.parse(text); } catch {
-    throw new Error(`Invalid JSON from server: ${text.slice(0, 200)}`);
-  }
-}
 
 const SUGGESTIONS = [
   { text: "scan network", icon: "📡" },
@@ -97,14 +81,14 @@ export default function Home() {
     if (!user) return;
     const poll = async () => {
       try {
-        const res = await fetch("/api/proactive/messages");
+        const res = await fetch(`${BASE}/api/proactive/messages`);
         const data = await safeJson(res);
         if (data.messages?.length > 0) {
           setProactiveMessages(prev => [...prev, ...data.messages.map((m: any) => m.message)]);
         }
       } catch {}
       try {
-        const res = await fetch("/api/autonomous/tasks");
+        const res = await fetch(`${BASE}/api/autonomous/tasks`);
         const data = await safeJson(res);
         setLiveAgents(data.tasks || []);
       } catch {}
@@ -417,7 +401,7 @@ export default function Home() {
                 agents={liveAgents}
                 activeAgent={activeAgentId}
                 onSelectAgent={setActiveAgentId}
-                onStopAgent={async (id) => { await fetch(`/api/autonomous/tasks/stop/${id}`, { method: "POST" }); }}
+                onStopAgent={async (id) => { await fetch(`${BASE}/api/autonomous/tasks/stop/${id}`, { method: "POST" }); }}
               />
             ) : (
               <TelemetryPanel />

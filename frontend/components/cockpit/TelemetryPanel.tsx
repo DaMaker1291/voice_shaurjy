@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BASE } from "@/lib/api";
 
 interface Telemetry {
   cpu: number;
@@ -32,8 +33,8 @@ export default function TelemetryPanel() {
     const fetchStats = async () => {
       try {
         const [sysRes, agentRes] = await Promise.all([
-          fetch("/api/system/stats"),
-          fetch("/api/agents/pool/stats"),
+          fetch(`${BASE}/api/system/stats`),
+          fetch(`${BASE}/api/agents/pool/stats`),
         ]);
         const sys = await sysRes.json();
         const agents = await agentRes.json();

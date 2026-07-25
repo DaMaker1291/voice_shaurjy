@@ -1,13 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-
-async function safeJson(res: Response): Promise<any> {
-  if (!res.ok) return null;
-  const text = await res.text();
-  if (!text) return {};
-  try { return JSON.parse(text); } catch { return null; }
-}
+import { BASE, safeJson } from "@/lib/api";
 
 interface HeadlessSession {
   session_id: string;
@@ -34,12 +28,7 @@ export default function HeadlessWorkstationMonitor() {
   const [launchCmd, setLaunchCmd] = useState("");
   const [error, setError] = useState("");
 
-  const base = typeof window !== "undefined"
-    ? (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-        ? "http://localhost:8000"
-        : "https://dgfhgjhj-jarvis-ai-brain.hf.space")
-    : "";
-
+  const base = BASE;
   const wsBase = base.replace("http", "ws");
 
   const connectWs = useCallback(() => {

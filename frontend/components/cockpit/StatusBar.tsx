@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { BASE } from "@/lib/api";
 
 async function safeJson(res: Response): Promise<any> {
   if (!res.ok) return null;
@@ -43,27 +44,27 @@ export default function StatusBar() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const res = await window.fetch("/api/health");
+        const res = await window.fetch(`${BASE}/api/health`);
         const data = await safeJson(res);
         setRelay(!!data.relay);
       } catch {}
       try {
-        const res = await window.fetch("/api/autonomous/tasks");
+        const res = await window.fetch(`${BASE}/api/autonomous/tasks`);
         const data = await safeJson(res);
         setAgents((data.tasks || []).filter((t: any) => t.status === "running").length);
       } catch {}
       try {
-        const res = await window.fetch("/api/relay/devices?user_id=local");
+        const res = await window.fetch(`${BASE}/api/relay/devices?user_id=local`);
         const data = await safeJson(res);
         setDevices((data.devices || []).length);
       } catch {}
       try {
-        const res = await window.fetch("/api/device/current?user_id=local");
+        const res = await window.fetch(`${BASE}/api/device/current?user_id=local`);
         const data = await safeJson(res);
         if (data.hostname) setDevice(data);
       } catch {}
       try {
-        const res = await window.fetch("/api/system/status");
+        const res = await window.fetch(`${BASE}/api/system/status`);
         const data = await safeJson(res);
         setSys(data);
       } catch {}

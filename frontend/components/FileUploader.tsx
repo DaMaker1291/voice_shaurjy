@@ -1,13 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-
-async function safeJson(res: Response): Promise<any> {
-  if (!res.ok) return null;
-  const text = await res.text();
-  if (!text) return {};
-  try { return JSON.parse(text); } catch { return null; }
-}
+import { BASE, safeJson } from "@/lib/api";
 
 interface Props {
   onUploadComplete: (name: string, chunks: number) => void;
@@ -26,7 +20,7 @@ export default function FileUploader({ onUploadComplete }: Props) {
     reader.onloadend = async () => {
       const b64 = (reader.result as string).split(",")[1];
       try {
-        const res = await fetch("http://localhost:8000/api/documents/upload", {
+        const res = await fetch(`${BASE}/api/documents/upload`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

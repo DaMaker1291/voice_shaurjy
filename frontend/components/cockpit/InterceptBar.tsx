@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { BASE } from "@/lib/api";
 
 async function safeJson(res: Response): Promise<any> {
   if (!res.ok) return null;
@@ -22,7 +23,7 @@ export default function InterceptBar({ onApprove, onDeny }: { onApprove: (id: st
   useEffect(() => {
     const checkPending = async () => {
       try {
-        const res = await fetch("/api/sovereign/pending-actions");
+        const res = await fetch(`${BASE}/api/sovereign/pending-actions`);
         const data = await safeJson(res);
         if (data.actions?.length > 0) {
           setPending(data.actions[0]);

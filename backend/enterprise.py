@@ -107,7 +107,16 @@ class EnterpriseEngine:
         return conn
 
     def _hash_password(self, password: str, salt: str) -> str:
-        return hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+        return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100000).hex()
+
+    def _hash_password_fast(self, password: str, salt: str) -> str:
+        return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 10000).hex()
+
+    def _verify_password(self, password: str, salt: str, stored_hash: str) -> bool:
+        """Verify password against stored hash, supporting both old and new iteration counts."""
+        if self._hash_password_fast(password, salt) == stored_hash:
+            return True
+        return self._hash_password(password, salt) == stored_hash
 
     def _create_default_admin(self) -> None:
         with self._lock:
@@ -119,7 +128,7 @@ class EnterpriseEngine:
                 self._conn.execute(
                     """INSERT INTO users (id, username, email, password_hash, salt, display_name, role, is_admin, api_key)
                     VALUES (?, 'admin', 'admin@jarvis.local', ?, ?, 'Administrator', 'admin', 1, ?)""",
-                    (admin_id, self._hash_password("admin", salt), salt, api_key),
+                    (admin_id, self._hash_password_fast("admin", salt), salt, api_key),
                 )
                 self._conn.commit()
 
@@ -157,7 +166,7 @@ class EnterpriseEngine:
             ).fetchone()
             if not user:
                 return None
-            if self._hash_password(password, user["salt"]) != user["password_hash"]:
+            if self._verify_password(password, user["salt"], user["password_hash"]):
                 return None
 
             token = secrets.token_urlsafe(32)

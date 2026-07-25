@@ -340,17 +340,19 @@ def _get_user_os(ctx: dict = None) -> str:
 
 def _user_os_term(os_name: str) -> dict:
     """Return platform-appropriate terms for the user's device."""
+    from config import get_config
+    deploy_url = get_config().get_deployment_url()
     if os_name == "mac":
         return {"device": "your Mac", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "Terminal",
-                "install_relay": "curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local"}
+                "install_relay": f"curl -sL '{deploy_url}/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local"}
     elif os_name == "windows":
         return {"device": "your PC", "command": "python", "start_relay": "python relay.py", "dir": "$env:TEMP", "shell": "PowerShell",
-                "install_relay": "curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user local"}
+                "install_relay": f"curl.exe -sL '{deploy_url}/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user local"}
     elif os_name == "linux":
         return {"device": "your machine", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "terminal",
-                "install_relay": "curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local"}
+                "install_relay": f"curl -sL '{deploy_url}/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local"}
     return {"device": "your computer", "command": "python3", "start_relay": "python3 relay.py", "dir": "/tmp", "shell": "terminal",
-            "install_relay": "curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local"}
+            "install_relay": f"curl -sL '{deploy_url}/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local"}
 
 
 def _gather_system_context() -> dict:
