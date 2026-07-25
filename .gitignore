@@ -8,6 +8,11 @@ env/
 .mypy_cache/
 .ruff_cache/
 
+# Binary assets (HF Space doesn't allow binary files)
+desktop/assets/*.icns
+desktop/assets/*.ico
+desktop/assets/*.bmp
+
 # Node
 node_modules/
 .next/
