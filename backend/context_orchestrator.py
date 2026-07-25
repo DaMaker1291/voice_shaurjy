@@ -570,7 +570,9 @@ class ContextOrchestrator:
                 return ""
             lines = ["RELEVANT ENTITIES:"]
             for r in results:
-                lines.append(f"  [{r['type']}] {r['label']} (relevance: {r['relevance']:.0%})")
+                name = r.get("name", r.get("label", "?"))
+                rel = r.get("importance", r.get("relevance", 0))
+                lines.append(f"  [{r.get('node_type', '?')}] {name} (relevance: {rel:.0%})")
             return "\n".join(lines)
         except Exception:
             return ""
@@ -635,11 +637,7 @@ class ContextOrchestrator:
             return ""
         try:
             from graph_memory import memory as graph_mem
-            # Get recent conversations
-            rows = graph_mem._q(
-                """SELECT * FROM conversations
-                   ORDER BY timestamp DESC LIMIT 10"""
-            )
+            rows = graph_mem.get_recent_conversations(limit=10)
             if not rows:
                 return ""
             lines = ["RECENT CONVERSATION:"]

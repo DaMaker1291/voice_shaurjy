@@ -329,7 +329,7 @@ class JARVISMCPClient:
     async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> MCPToolResult:
         """
         Invoke an MCP tool. Routes to the correct server.
-        Logs the invocation to the compliance ledger.
+        Auto-reconnects on failure. Logs to compliance ledger.
         """
         if tool_name not in self._tools:
             return MCPToolResult(
@@ -347,12 +347,35 @@ class JARVISMCPClient:
                 session = self._sessions[server_name]
                 result = await self._invoke_tool(server_name, session, tool_name, arguments)
             else:
-                result = MCPToolResult(
-                    content=[{"type": "text", "text": f"Server {server_name} not connected"}],
-                    is_error=True,
-                    tool_name=tool_name,
-                    server_name=server_name,
-                )
+                # Auto-reconnect attempt
+                log.info(f"Server {server_name} disconnected — attempting reconnect...")
+                if server_name in self.servers:
+                    try:
+                        await self._connect_server(server_name, self.servers[server_name])
+                        if server_name in self._sessions:
+                            session = self._sessions[server_name]
+                            result = await self._invoke_tool(server_name, session, tool_name, arguments)
+                        else:
+                            result = MCPToolResult(
+                                content=[{"type": "text", "text": f"Reconnect failed for {server_name}"}],
+                                is_error=True,
+                                tool_name=tool_name,
+                                server_name=server_name,
+                            )
+                    except Exception:
+                        result = MCPToolResult(
+                            content=[{"type": "text", "text": f"Server {server_name} not connected"}],
+                            is_error=True,
+                            tool_name=tool_name,
+                            server_name=server_name,
+                        )
+                else:
+                    result = MCPToolResult(
+                        content=[{"type": "text", "text": f"Server {server_name} not registered"}],
+                        is_error=True,
+                        tool_name=tool_name,
+                        server_name=server_name,
+                    )
         except Exception as e:
             result = MCPToolResult(
                 content=[{"type": "text", "text": f"Error: {str(e)}"}],
@@ -504,6 +527,57 @@ class JARVISMCPClient:
             "total_tools": len(self._tools),
             "total_servers": len(self.servers),
             "connected_servers": sum(1 for v in self._connected.values() if v),
+        }
+
+    async def chain_tools(self, steps: list[dict]) -> dict:
+        """
+        Execute a chain of MCP tool calls. Each step's output is available
+        to subsequent steps via {{step_N_output}} template variables.
+
+        Steps: [{"tool": "tool_name", "arguments": {...}}, ...]
+        Returns: {"results": [...], "success": bool, "total_ms": float}
+        """
+        import time
+        start = time.time()
+        results = []
+        context = {}
+        success = True
+
+        for i, step in enumerate(steps):
+            tool_name = step.get("tool", "")
+            arguments = step.get("arguments", {})
+
+            # Template substitution: replace {{step_0_output}} etc.
+            for key, val in arguments.items():
+                if isinstance(val, str) and "{{" in val:
+                    for tpl_key, tpl_val in context.items():
+                        arguments[key] = arguments[key].replace(f"{{{{{tpl_key}}}}}", str(tpl_val))
+
+            result = await self.call_tool(tool_name, arguments)
+            output = ""
+            if result.content:
+                for item in result.content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        output += item.get("text", "")
+
+            context[f"step_{i}_output"] = output
+            results.append({
+                "step": i,
+                "tool": tool_name,
+                "success": not result.is_error,
+                "output": output[:500],
+                "duration_ms": result.duration_ms,
+            })
+
+            if result.is_error:
+                success = False
+                break
+
+        return {
+            "results": results,
+            "success": success,
+            "total_ms": (time.time() - start) * 1000,
+            "steps_completed": len(results),
         }
 
 

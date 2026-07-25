@@ -4711,6 +4711,97 @@ async def hardware_models():
         return {"error": str(e)}
 
 
+# ── Tool Chaining API ────────────────────────────────────────────────
+
+@app.post("/api/mcp/chain")
+async def mcp_tool_chain(body: dict):
+    """
+    Execute a chain of MCP tool calls with output routing.
+
+    Body: {"steps": [{"tool": "name", "arguments": {...}}, ...]}
+    Each step can reference previous outputs via {{step_N_output}} templates.
+    """
+    steps = body.get("steps", [])
+    if not steps:
+        return {"error": "No steps provided"}
+
+    try:
+        from mcp_client import get_mcp_client
+        client = get_mcp_client()
+        result = await client.chain_tools(steps)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/mcp/add_server")
+async def mcp_add_server(body: dict):
+    """Add a new MCP server configuration."""
+    name = body.get("name", "")
+    config = body.get("config", {})
+    if not name:
+        return {"error": "Missing server name"}
+
+    try:
+        from mcp_registry import get_registry
+        registry = get_registry()
+        registry.add_server(name, config)
+        return {"ok": True, "message": f"Server {name} added. Restart to connect."}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── Graph Memory API ─────────────────────────────────────────────────
+
+@app.get("/api/graph/visualization")
+async def graph_visualization():
+    """Get graph data formatted for frontend visualization."""
+    try:
+        from graph_memory import memory
+        return memory.get_graph_for_visualization(limit=300)
+    except Exception as e:
+        return {"error": str(e), "nodes": [], "edges": []}
+
+
+@app.get("/api/graph/embeddings/status")
+async def graph_embeddings_status():
+    """Check embedding generation status."""
+    try:
+        from graph_memory import memory
+        total = memory.query("SELECT COUNT(*) as c FROM nodes")[0]["c"]
+        embedded = memory.query("SELECT COUNT(*) as c FROM nodes WHERE embedding IS NOT NULL")[0]["c"]
+        return {"total_nodes": total, "embedded": embedded, "pending": total - embedded}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/graph/embeddings/generate")
+async def graph_generate_embeddings():
+    """Generate embeddings for all nodes without them."""
+    try:
+        from graph_memory import memory
+        import concurrent.futures
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, lambda: memory.embed_all_pending())
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/graph/semantic_search")
+async def graph_semantic_search(q: str = "", limit: int = 10):
+    """Semantic search over graph nodes using local embeddings."""
+    if not q:
+        return {"error": "Missing query parameter ?q=..."}
+    try:
+        from graph_memory import memory
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(None, lambda: memory.semantic_search(q, limit=limit))
+        return {"query": q, "results": results}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ── Voice Pipeline WebSocket ────────────────────────────────────────
 
 @app.websocket("/ws/voice")

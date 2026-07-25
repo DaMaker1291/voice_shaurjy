@@ -178,8 +178,9 @@ async def headless_ws_stream(websocket: WebSocket):
     await websocket.accept()
     session_id = "default"
     running = True
-    fps_target = 5  # Lower FPS for relay streaming
+    fps_target = 10  # Adaptive FPS — drops under load
     frame_interval = 1.0 / fps_target
+    adaptive_interval = frame_interval
 
     try:
         while running:
@@ -233,6 +234,15 @@ async def headless_ws_stream(websocket: WebSocket):
                 pass
             except json.JSONDecodeError:
                 pass
+
+            # Adaptive FPS: slow down if frame took too long
+            elapsed = time.time() - start
+            if elapsed > frame_interval * 1.5:
+                adaptive_interval = min(adaptive_interval * 1.2, 0.5)
+            else:
+                adaptive_interval = max(adaptive_interval * 0.95, frame_interval)
+
+            await asyncio.sleep(max(0, adaptive_interval - elapsed))
 
             elapsed = time.time() - start
             sleep_time = max(0, frame_interval - elapsed)

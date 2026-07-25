@@ -1216,6 +1216,121 @@ class HybridGraphMemory:
         return results
 
     # ------------------------------------------------------------------
+    # Local Embedding Generation (sentence-transformers)
+    # ------------------------------------------------------------------
+
+    _embed_model = None
+
+    def _get_embed_model(self):
+        if HybridGraphMemory._embed_model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+                HybridGraphMemory._embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+            except Exception:
+                return None
+        return HybridGraphMemory._embed_model
+
+    def generate_embedding(self, text: str) -> list[float] | None:
+        """Generate a local embedding for text using all-MiniLM-L6-v2."""
+        model = self._get_embed_model()
+        if model is None:
+            return None
+        try:
+            vec = model.encode(text, normalize_embeddings=True)
+            return vec.tolist()
+        except Exception:
+            return None
+
+    def embed_node(self, node_id: str) -> bool:
+        """Generate and store an embedding for a single node."""
+        node = self.get_node(node_id)
+        if not node:
+            return False
+        text = f"{node.get('name', '')} [{node.get('type', '')}]"
+        if node.get("metadata"):
+            for k, v in node["metadata"].items():
+                if isinstance(v, str):
+                    text += f" {k}: {v}"
+        vec = self.generate_embedding(text)
+        if vec:
+            self.store_embedding(node_id, vec)
+            return True
+        return False
+
+    def embed_all_pending(self, batch_size: int = 64) -> dict:
+        """Embed all nodes without embeddings. Returns stats."""
+        model = self._get_embed_model()
+        if model is None:
+            return {"error": "Embedding model not available", "embedded": 0}
+
+        pending = self.query(
+            "SELECT id, name, type, metadata FROM nodes WHERE embedding IS NULL"
+        )
+        if not pending:
+            return {"embedded": 0, "total": 0}
+
+        texts = []
+        ids = []
+        for row in pending:
+            text = f"{row.get('name', '')} [{row.get('type', '')}]"
+            if row.get("metadata"):
+                meta = row["metadata"]
+                if isinstance(meta, str):
+                    try:
+                        import json as _json
+                        meta = _json.loads(meta)
+                    except Exception:
+                        meta = {}
+                for k, v in meta.items():
+                    if isinstance(v, str):
+                        text += f" {k}: {v}"
+            texts.append(text)
+            ids.append(row["id"])
+
+        embedded = 0
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i : i + batch_size]
+            batch_ids = ids[i : i + batch_size]
+            try:
+                vecs = model.encode(batch_texts, normalize_embeddings=True, batch_size=batch_size)
+                with self._lock:
+                    for nid, vec in zip(batch_ids, vecs):
+                        blob = _pack_embedding(vec.tolist())
+                        self._db.execute(
+                            "UPDATE nodes SET embedding = ? WHERE id = ?",
+                            (blob, nid),
+                        )
+                        embedded += 1
+                    self._db.commit()
+            except Exception:
+                continue
+
+        return {"embedded": embedded, "total": len(pending)}
+
+    def semantic_search(self, query_text: str, limit: int = 10) -> list[dict]:
+        """Find nodes most similar to a text query using local embeddings."""
+        vec = self.generate_embedding(query_text)
+        if vec is None:
+            return []
+
+        rows = self.query(
+            "SELECT id, name, type, importance, embedding FROM nodes WHERE embedding IS NOT NULL"
+        )
+        scored = []
+        for r in rows:
+            node_vec = _unpack_embedding(r["embedding"])
+            sim = _cosine_similarity(vec, node_vec)
+            scored.append((r, sim))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        results = []
+        for node, sim in scored[:limit]:
+            node["similarity"] = round(sim, 4)
+            node.pop("embedding", None)
+            results.append(node)
+        return results
+
+    # ------------------------------------------------------------------
     # Statistics
     # ------------------------------------------------------------------
 
@@ -1311,6 +1426,46 @@ class HybridGraphMemory:
     def _dictify_rows(rows: list[sqlite3.Row]) -> list[dict]:
         """Convert a list of Rows to a list of dicts."""
         return [HybridGraphMemory._dictify_row(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Public Query Helpers (for context_orchestrator and others)
+    # ------------------------------------------------------------------
+
+    def query(self, sql: str, params: tuple = ()) -> list[dict]:
+        """Execute a read-only SQL query and return list of dicts."""
+        try:
+            rows = self._db.execute(sql, params).fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
+
+    def get_recent_conversations(self, limit: int = 10) -> list[dict]:
+        """Get recent conversation history from the conversations table."""
+        return self.query(
+            "SELECT * FROM conversations ORDER BY timestamp DESC LIMIT ?",
+            (limit,),
+        )
+
+    def get_all_nodes_for_embedding(self) -> list[dict]:
+        """Get all nodes that don't yet have embeddings (for batch embedding)."""
+        return self.query(
+            "SELECT id, name, node_type FROM nodes WHERE embedding IS NULL LIMIT 500"
+        )
+
+    def get_graph_for_visualization(self, limit: int = 200) -> dict:
+        """Get nodes and edges formatted for frontend graph visualization."""
+        nodes = self.query(
+            "SELECT id, name, node_type, importance FROM nodes ORDER BY importance DESC LIMIT ?",
+            (limit,),
+        )
+        node_ids = {n["id"] for n in nodes}
+        edges = self.query(
+            "SELECT source, target, edge_type, weight FROM edges WHERE source IN ({}) OR target IN ({})".format(
+                ",".join("?" * len(node_ids)), ",".join("?" * len(node_ids))
+            ),
+            tuple(node_ids) * 2,
+        )
+        return {"nodes": nodes, "edges": edges}
 
 
 # ---------------------------------------------------------------------------

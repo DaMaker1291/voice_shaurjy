@@ -87,6 +87,11 @@ class JarvisHeadlessWorker:
         self._lock = threading.Lock()
         print(f"[HEADLESS] Worker initialized — platform: {PLATFORM}")
 
+    def list_sessions(self) -> list[dict]:
+        """List all active headless sessions."""
+        with self._lock:
+            return [s.to_dict() for s in self.sessions.values()]
+
     # ------------------------------------------------------------------
     # Session lifecycle
     # ------------------------------------------------------------------
@@ -297,11 +302,22 @@ class JarvisHeadlessWorker:
     # ------------------------------------------------------------------
 
     def _start_macos(self, session: HeadlessSession):
+        """macOS: use screencapture for screenshots. No true virtual display,
+        but we manage a background process and use Quartz event injection
+        for automation without hijacking the cursor."""
         session.process = subprocess.Popen(
-            [sys.executable, "-c", "import time\nwhile True: time.sleep(1)"],
+            [sys.executable, "-c", """
+import time, os, signal
+# Keep-alive process that responds to SIGTERM
+signal.signal(signal.SIGTERM, lambda s, f: os._exit(0))
+while True: time.sleep(1)
+"""],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         session.pid = session.process.pid
+        # Create a workspace directory for this session
+        session_dir = os.path.expanduser(f"~/.jarvis/headless/{session.session_id}")
+        os.makedirs(session_dir, exist_ok=True)
 
     def _inject_click_macos(self, x: int, y: int, button: int) -> dict:
         try:
