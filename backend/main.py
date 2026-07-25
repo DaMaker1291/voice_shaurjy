@@ -4711,6 +4711,245 @@ async def hardware_models():
         return {"error": str(e)}
 
 
+# ── Voice Pipeline WebSocket ────────────────────────────────────────
+
+@app.websocket("/ws/voice")
+async def voice_websocket(websocket):
+    """
+    Real-time voice pipeline WebSocket.
+
+    Client sends:
+      - Binary frames: raw PCM audio (16kHz, 16-bit, mono)
+      - Text {"type":"config","sample_rate":16000} — configure audio params
+      - Text {"type":"text","text":"..."} — send text directly (skip STT)
+      - Text {"type":"ping"} — keepalive
+
+    Server sends:
+      - Text {"type":"transcript","role":"user","text":"..."}
+      - Text {"type":"transcript","role":"assistant","text":"..."}
+      - Text {"type":"audio","data":"<base64 wav>"} — TTS response audio
+      - Text {"type":"status","state":"listening"|"processing"|"speaking"|"idle"}
+      - Text {"type":"pong"}
+      - Text {"type":"error","message":"..."}
+    """
+    from fastapi import WebSocketDisconnect
+    await websocket.accept()
+
+    sample_rate = 16000
+    audio_buf = bytearray()
+    min_audio_bytes = sample_rate * 2  # 1 second of 16-bit PCM
+
+    async def send_status(state: str):
+        await websocket.send_json({"type": "status", "state": state})
+
+    async def send_error(msg: str):
+        await websocket.send_json({"type": "error", "message": msg})
+
+    async def process_text(text: str):
+        """Process text through LLM + TTS and send back."""
+        await send_status("processing")
+        try:
+            from ai_agent import generate_response
+            reply = generate_response("ws-user", text, "free")
+            reply_text = reply["text"] if isinstance(reply, dict) else str(reply)
+            await websocket.send_json({"type": "transcript", "role": "assistant", "text": reply_text})
+
+            await send_status("speaking")
+            try:
+                from voice_pipeline import tts_speak_b64
+                audio_b64 = await tts_speak_b64(reply_text)
+                await websocket.send_json({"type": "audio", "data": audio_b64})
+            except Exception:
+                pass  # TTS optional — text response is enough
+
+            await send_status("idle")
+        except Exception as e:
+            await send_error(f"LLM error: {e}")
+            await send_status("idle")
+
+    try:
+        await send_status("idle")
+        while True:
+            msg = await websocket.receive()
+
+            if msg.get("type") == "websocket.receive":
+                if "text" in msg and msg["text"]:
+                    try:
+                        data = __import__("json").loads(msg["text"])
+                    except Exception:
+                        continue
+
+                    msg_type = data.get("type", "")
+
+                    if msg_type == "ping":
+                        await websocket.send_json({"type": "pong"})
+
+                    elif msg_type == "config":
+                        sample_rate = data.get("sample_rate", 16000)
+                        min_audio_bytes = sample_rate * 2
+
+                    elif msg_type == "text":
+                        user_text = data.get("text", "").strip()
+                        if user_text:
+                            await websocket.send_json({"type": "transcript", "role": "user", "text": user_text})
+                            await process_text(user_text)
+
+                elif "bytes" in msg and msg["bytes"]:
+                    audio_buf.extend(msg["bytes"])
+
+                    if len(audio_buf) >= min_audio_bytes:
+                        await send_status("listening")
+                        try:
+                            from voice_pipeline import stt_transcribe
+                            import base64 as b64
+                            transcript = stt_transcribe(b64.b64encode(bytes(audio_buf)).decode())
+                            audio_buf.clear()
+                            if transcript and transcript.strip():
+                                await websocket.send_json({"type": "transcript", "role": "user", "text": transcript})
+                                await process_text(transcript)
+                            else:
+                                await send_status("idle")
+                        except ImportError:
+                            await send_error("STT not available — install faster-whisper")
+                            audio_buf.clear()
+                            await send_status("idle")
+                        except Exception as e:
+                            await send_error(f"STT error: {e}")
+                            audio_buf.clear()
+                            await send_status("idle")
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await send_error(str(e))
+        except Exception:
+            pass
+
+
+# ── MCP Gateway WebSocket (live tool invocation stream) ──────────────
+
+@app.websocket("/ws/mcp")
+async def mcp_gateway_websocket(websocket):
+    """
+    Live MCP tool invocation stream.
+
+    Client sends:
+      - {"type":"call","tool":"tool_name","arguments":{}} — invoke a tool
+      - {"type":"list_tools"} — request tool list
+      - {"type":"status"} — request MCP server status
+      - {"type":"ping"}
+
+    Server sends:
+      - {"type":"tool_result","tool":"...","result":{...},"duration_ms":...}
+      - {"type":"tool_error","tool":"...","error":"..."}
+      - {"type":"tools_list","tools":[...]}
+      - {"type":"mcp_status","servers":[...]}
+      - {"type":"pong"}
+    """
+    from fastapi import WebSocketDisconnect
+    await websocket.accept()
+
+    try:
+        while True:
+            msg = await websocket.receive()
+            if msg.get("type") != "websocket.receive" or "text" not in msg:
+                continue
+
+            try:
+                data = __import__("json").loads(msg["text"])
+            except Exception:
+                continue
+
+            msg_type = data.get("type", "")
+
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+
+            elif msg_type == "list_tools":
+                try:
+                    from mcp_client import get_mcp_client
+                    client = get_mcp_client()
+                    tools = []
+                    for name, info in client.tools.items():
+                        tools.append({
+                            "name": name,
+                            "description": info.get("description", ""),
+                            "server": info.get("server", ""),
+                            "input_schema": info.get("input_schema", {}),
+                        })
+                    await websocket.send_json({"type": "tools_list", "tools": tools})
+                except Exception as e:
+                    await websocket.send_json({"type": "tools_list", "tools": [], "error": str(e)})
+
+            elif msg_type == "status":
+                try:
+                    from mcp_client import get_mcp_client
+                    client = get_mcp_client()
+                    servers = []
+                    for name, conn in client.connections.items():
+                        servers.append({
+                            "name": name,
+                            "transport": conn.get("transport", "unknown"),
+                            "connected": conn.get("connected", False),
+                            "tool_count": len([t for t in client.tools.values() if t.get("server") == name]),
+                        })
+                    await websocket.send_json({"type": "mcp_status", "servers": servers})
+                except Exception as e:
+                    await websocket.send_json({"type": "mcp_status", "servers": [], "error": str(e)})
+
+            elif msg_type == "call":
+                tool_name = data.get("tool", "")
+                arguments = data.get("arguments", {})
+                if not tool_name:
+                    await websocket.send_json({"type": "tool_error", "error": "Missing tool name"})
+                    continue
+
+                import time
+                start = time.time()
+                try:
+                    from mcp_client import get_mcp_client
+                    from mcp_guardrails import screen_or_block
+                    from mcp_auth import get_local_identity
+                    from compliance_ledger import get_ledger
+
+                    # Guardrail check
+                    identity = get_local_identity()
+                    guardrail = screen_or_block(tool_name, arguments, identity.user_id, False)
+                    if not guardrail.allowed:
+                        await websocket.send_json({
+                            "type": "tool_error",
+                            "tool": tool_name,
+                            "error": guardrail.blocked_reason,
+                            "violations": guardrail.violations,
+                        })
+                        continue
+
+                    # Execute
+                    client = get_mcp_client()
+                    result = await client.call_tool(tool_name, arguments)
+                    duration_ms = int((time.time() - start) * 1000)
+
+                    from dataclasses import asdict
+                    await websocket.send_json({
+                        "type": "tool_result",
+                        "tool": tool_name,
+                        "result": asdict(result),
+                        "duration_ms": duration_ms,
+                    })
+                except Exception as e:
+                    await websocket.send_json({
+                        "type": "tool_error",
+                        "tool": tool_name,
+                        "error": str(e),
+                    })
+
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+
+
 if _frontend_out:
     @app.get("/voice_shaurjy/download")
     async def serve_download():

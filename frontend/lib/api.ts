@@ -526,3 +526,47 @@ export async function getJarvisThoughts() { const res = await fetch(`${BASE}/api
 }
 export async function scanLAN() { const res = await fetch(`${BASE}/api/scan/lan`);   return safeJson(res);
 }
+
+// ═══════════════════════════════════════════════════════
+//  VOICE WEBSOCKET API
+// ═══════════════════════════════════════════════════════
+
+export function getVoiceWSUrl(): string {
+  const base = BASE.replace(/^http/, "ws");
+  return `${base}/ws/voice`;
+}
+
+export function getMCPWSUrl(): string {
+  const base = BASE.replace(/^http/, "ws");
+  return `${base}/ws/mcp`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  MCP GATEWAY API
+// ═══════════════════════════════════════════════════════
+
+export async function getMCPStatus() { const res = await fetch(`${BASE}/api/mcp/status`);   return safeJson(res);
+}
+export async function getMCPTools() { const res = await fetch(`${BASE}/api/mcp/tools`);   return safeJson(res);
+}
+export async function callMCPTool(tool: string, arguments_ = {}) {
+  const res = await fetch(`${BASE}/api/mcp/call`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tool, arguments: arguments_ }),
+  });
+  return safeJson(res);
+}
+export async function getMCPGuardrails() { const res = await fetch(`${BASE}/api/mcp/guardrails`);   return safeJson(res);
+}
+export async function getMCPRegistry() { const res = await fetch(`${BASE}/api/mcp/registry`);   return safeJson(res);
+}
+export async function getMCPCompliance() { const res = await fetch(`${BASE}/api/mcp/compliance`);   return safeJson(res);
+}
+
+// ═══════════════════════════════════════════════════════
+//  LIVEKIT VOICE API
+// ═══════════════════════════════════════════════════════
+
+export async function getLiveKitHealth() { const res = await fetch(`${BASE}/health`);   const h = await safeJson(res); return h?.livekit || false;
+}

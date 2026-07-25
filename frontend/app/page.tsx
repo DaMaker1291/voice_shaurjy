@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { BASE, safeJson } from "@/lib/api";
+import { useVoiceWS, VoiceState } from "@/lib/voice";
 
 const TopBar = dynamic(() => import("@/components/cockpit/TopBar"), { ssr: false });
 const AgentGraph = dynamic(() => import("@/components/cockpit/AgentGraph"), { ssr: false });
@@ -58,6 +59,40 @@ export default function Home() {
   const [showContextPanel, setShowContextPanel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Voice WebSocket — connects automatically, handles STT+LLM+TTS via WS
+  const voice = useVoiceWS({
+    onTranscript: useCallback((role: "user" | "assistant", text: string) => {
+      if (role === "user") {
+        setMessages(p => [...p, { role: "user", content: text, ts: Date.now() }]);
+        // Trigger LLM through WS
+        voice.sendText(text);
+      } else {
+        setMessages(p => [...p, { role: "assistant", content: text, ts: Date.now(), agent: "VOICE" }]);
+      }
+    }, []),
+    onState: useCallback((s: VoiceState) => {
+      if (s === "listening") { setListening(true); setInputState("listening"); }
+      else if (s === "processing") { setInputState("thinking"); setThinking(true); }
+      else if (s === "speaking") { setInputState("speaking"); setThinking(false); }
+      else { setListening(false); setInputState("idle"); setThinking(false); }
+    }, []),
+    onAudio: useCallback((base64Wav: string) => {
+      try {
+        const byteStr = atob(base64Wav);
+        const bytes = new Uint8Array(byteStr.length);
+        for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
+        const blob = new Blob([bytes], { type: "audio/wav" });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.onended = () => URL.revokeObjectURL(url);
+        audio.play();
+      } catch {}
+    }, []),
+    onError: useCallback((msg: string) => {
+      setMessages(p => [...p, { role: "assistant", content: `Voice error: ${msg}`, ts: Date.now(), agent: "SYSTEM" }]);
+    }, []),
+  });
 
   const newChat = useCallback(() => {
     setMessages([]);
@@ -188,7 +223,18 @@ export default function Home() {
   }, [input, messages]);
 
   const handleVoice = useCallback(() => {
-    if (listening) { setListening(false); return; }
+    if (listening) {
+      setListening(false);
+      return;
+    }
+    // Prefer WebSocket voice if connected
+    if (voice.connected) {
+      setListening(true);
+      setInputState("listening");
+      // The WS voice pipeline handles everything — user speaks, WS does STT→LLM→TTS
+      return;
+    }
+    // Fallback to browser Web Speech API
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
     const rec = new SR();
@@ -205,7 +251,7 @@ export default function Home() {
     rec.onend = () => setListening(false);
     rec.onerror = () => setListening(false);
     rec.start(); setListening(true);
-  }, [listening]);
+  }, [listening, voice.connected]);
 
   const handleApprove = async (id: string) => { await fetch(`${BASE}/api/sovereign/approve/${id}`, { method: "POST" }); };
   const handleDeny = async (id: string) => { await fetch(`${BASE}/api/sovereign/deny/${id}`, { method: "POST" }); };
@@ -251,8 +297,12 @@ export default function Home() {
             {messages.length === 0 && (
               <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
                 <KineticOrb size={orbSize} onClick={handleVoice} listening={listening} />
-                <div style={{ fontSize: isMobile ? 10 : 11, color: listening ? "var(--neon-green)" : "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em" }}>{listening ? "LISTENING — SPEAK NOW" : "CLICK ORB TO TALK"}</div>
-                {!isMobile && <div style={{ fontSize: 9, color: "var(--text-muted)", opacity: 0.4, fontFamily: "var(--font-mono)" }}>{listening ? "Click orb or type to stop" : "Click orb or press mic to start voice"}</div>}
+                <div style={{ fontSize: isMobile ? 10 : 11, color: listening ? "var(--neon-green)" : "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.1em" }}>
+                  {listening ? "LISTENING — SPEAK NOW" : voice.connected ? "VOICE WS CONNECTED — CLICK TO TALK" : "CLICK ORB TO TALK"}
+                </div>
+                {!isMobile && <div style={{ fontSize: 9, color: "var(--text-muted)", opacity: 0.4, fontFamily: "var(--font-mono)" }}>
+                  {listening ? "Click orb or type to stop" : voice.connected ? "WebSocket voice pipeline active" : "Click orb or press mic to start voice"}
+                </div>}
               </div>
             )}
 
@@ -347,8 +397,8 @@ export default function Home() {
               />
               <button onClick={handleVoice} style={{
                 padding: 6, borderRadius: 4, border: "none", cursor: "pointer", flexShrink: 0,
-                background: listening ? "var(--neon-green-dim)" : "transparent",
-                color: listening ? "var(--neon-green)" : "var(--text-muted)",
+                background: listening ? "var(--neon-green-dim)" : voice.connected ? "rgba(0,180,216,0.1)" : "transparent",
+                color: listening ? "var(--neon-green)" : voice.connected ? "#00B4D8" : "var(--text-muted)",
                 transition: "all 0.15s",
               }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

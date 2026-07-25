@@ -99,6 +99,7 @@ export default function TopBar({ onNewChat, onCommandPalette, onToggleLivePanel,
     { href: "/skills", label: "SKILLS", icon: "🧩" },
     { href: "/enterprise", label: "TEAM", icon: "🏢" },
     { href: "/hardware", label: "HARDWARE", icon: "🖥️" },
+    { href: "/mcp", label: "MCP", icon: "🔧" },
     { href: "/feed", label: "FEED", icon: "📋", shortcut: `${mod}4` },
     { href: "/settings", label: "CONFIG", icon: "⚙️" },
   ];
