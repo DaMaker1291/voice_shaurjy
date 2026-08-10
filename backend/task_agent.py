@@ -1,7 +1,7 @@
 """Autonomous task agent — plans & executes ANY complex task, streaming real-time progress + visual scenes."""
 
 import json, re, time, threading
-from groq_agent import generate
+from hyperlocal_ai import get_hyperlocal
 from actions import detect_action, execute_action, _EXECUTORS
 
 _TASK_CATEGORIES = {
@@ -35,7 +35,7 @@ For each step, specify:
 
 Output ONLY valid JSON array. No other text. Example:
 [{{"step":"Opening Word","action":"run_dialog","params":"winword"}},{{"step":"Typing content","action":"type_keys","params":"Hello world"}}]"""
-    raw = generate(prompt + " _RESPOND_ONLY_JSON_ARRAY", max_tokens=300)
+    raw = get_hyperlocal("task")._generator.generate(prompt + " _RESPOND_ONLY_JSON_ARRAY", max_tokens=300)
     raw = raw.strip()
     # Extract JSON array
     m = re.search(r'\[.*\]', raw, re.DOTALL)
@@ -144,7 +144,7 @@ def execute_task(task: str):
         else:
             # Try Groq for freeform generation
             if params and len(params) > 5:
-                reply = generate(f"Execute this step concisely: {step_name}. Context: {params}", max_tokens=200)
+                reply = get_hyperlocal("task")._generator.generate(f"Execute this step concisely: {step_name}. Context: {params}", max_tokens=200)
                 yield {"type": "result", "step": step_name, "result": reply}
             else:
                 yield {"type": "result", "step": step_name, "result": "Done."}

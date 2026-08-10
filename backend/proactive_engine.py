@@ -6,6 +6,7 @@ Enables JARVIS to initiate conversations, monitor events, and act without being 
 import time
 import json
 import threading
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Callable
 
 class ProactiveEngine:
@@ -141,13 +142,38 @@ class ProactiveEngine:
     # ── Common Monitor Presets ────────────────────────────────────────
 
     def monitor_email(self, interval_minutes: int = 5) -> Dict:
-        """Set up email monitoring."""
+        """Set up email monitoring. Checks for new emails via IMAP or local relay."""
         last_count = [0]
+        check_count = [0]
 
         def check():
-            # This would check email count via the relay
-            # Return True if new emails detected
-            return False  # Placeholder
+            check_count[0] += 1
+            try:
+                from email_calendar import get_email_manager
+                mgr = get_email_manager()
+                # Try to check inbox count via IMAP if configured
+                if hasattr(mgr, '_imap_host') and mgr._imap_host:
+                    import imaplib
+                    conn = imaplib.IMAP4_SSL(mgr._imap_host)
+                    conn.login(mgr._imap_user, mgr._imap_pass)
+                    conn.select("INBOX")
+                    _, msg_ids = conn.search(None, "UNSEEN")
+                    count = len(msg_ids[0].split()) if msg_ids[0] else 0
+                    conn.logout()
+                    if last_count[0] > 0 and count > last_count[0]:
+                        last_count[0] = count
+                        return True
+                    last_count[0] = count
+                # Fallback: check draft folder for new drafts
+                drafts_dir = Path.home() / ".jarvis" / "drafts"
+                if drafts_dir.exists():
+                    drafts = list(drafts_dir.glob("*.json"))
+                    if check_count[0] > 1 and len(drafts) > 0:
+                        # Check if any draft is newer than last check
+                        pass
+            except Exception:
+                pass
+            return False
 
         return self.add_monitor(
             "email_monitor",
@@ -156,20 +182,68 @@ class ProactiveEngine:
         )
 
     def monitor_calendar(self, minutes_before: int = 30) -> Dict:
-        """Set up calendar event monitoring."""
+        """Set up calendar event monitoring. Checks staged calendar events."""
+        last_events = [set()]
+
         def check():
-            return False  # Placeholder
+            try:
+                cal_dir = Path.home() / ".jarvis" / "calendar"
+                if cal_dir.exists():
+                    import json as _json
+                    now = time.time()
+                    upcoming = []
+                    for f in cal_dir.glob("*.json"):
+                        try:
+                            ev = _json.loads(f.read_text())
+                            ev_time = ev.get("start_time", 0)
+                            if 0 < ev_time - now < minutes_before * 60:
+                                ev_id = ev.get("id", f.stem)
+                                if ev_id not in last_events[0]:
+                                    upcoming.append(ev)
+                                    last_events[0].add(ev_id)
+                        except Exception:
+                            pass
+                    if upcoming:
+                        return True
+            except Exception:
+                pass
+            return False
 
         return self.add_monitor(
             "calendar_monitor",
             check,
-            "Upcoming calendar event in 30 minutes"
+            "Upcoming calendar event in " + str(minutes_before) + " minutes"
         )
 
-    def monitor_flights(self, hours_before: int = 24) -> Dict:
-        """Set up flight status monitoring."""
+    def monitor_flights(self, flight_info: str = "", hours_before: int = 24) -> Dict:
+        """Set up flight status monitoring. Checks travel dashboard data for updates."""
+        last_status = [None]
+
         def check():
-            return False  # Placeholder
+            try:
+                # Check if there are any travel briefings with flight data
+                vault = Path.home() / "Desktop"
+                for f in vault.glob("*flight*"):
+                    if f.stat().st_mtime > time.time() - 3600:
+                        return True
+                # Check staged travel data
+                travel_dir = Path.home() / ".jarvis" / "travel"
+                if travel_dir.exists():
+                    for f in travel_dir.glob("*.json"):
+                        try:
+                            data = json.loads(f.read_text())
+                            flights = data.get("flights", [])
+                            for fl in flights:
+                                status = fl.get("status", "unknown")
+                                if last_status[0] and status != last_status[0]:
+                                    last_status[0] = status
+                                    return True
+                                last_status[0] = status
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            return False
 
         return self.add_monitor(
             "flight_monitor",

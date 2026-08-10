@@ -47,6 +47,10 @@ def _get_local_subnet() -> str:
     global _local_subnet
     if _local_subnet:
         return _local_subnet
+    env_subnet = os.environ.get("JARVIS_LOCAL_SUBNET", "").strip()
+    if env_subnet:
+        _local_subnet = env_subnet
+        return _local_subnet
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -55,7 +59,7 @@ def _get_local_subnet() -> str:
         _local_subnet = ".".join(ip.split(".")[:3])
         return _local_subnet
     except Exception:
-        return "192.168.1"
+        return ""
 
 
 def _get_local_ip() -> str:

@@ -30,7 +30,7 @@ if ! $PYTHON -c "import playwright" 2>/dev/null; then
 fi
 
 echo "[RELAY] Starting agent..."
-echo "[RELAY] Server: https://dgfhgjhj-jarvis-ai-brain.hf.space"
+echo "[RELAY] Server: ${HF_API_URL:-http://localhost:8000}"
 echo "[RELAY] User ID: local"
 echo ""
 echo "Commands will be processed on this computer."

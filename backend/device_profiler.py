@@ -25,10 +25,13 @@ from pathlib import Path
 
 
 def _run(cmd, timeout=15):
-    """Run a shell command and return output."""
+    """Run a shell command via ExecutionVault sandbox."""
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
-        return r.stdout.strip()
+        from execution_vault import vaulted_run
+        vr = vaulted_run(cmd, timeout=timeout)
+        if vr.blocked:
+            return f"BLOCKED: {vr.block_reason}"
+        return (vr.stdout or vr.stderr or "").strip()
     except Exception:
         return ""
 

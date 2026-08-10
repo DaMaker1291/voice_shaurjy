@@ -16,10 +16,10 @@ except:
     _HAS_ACTIONS = False
 
 try:
-    from groq_agent import generate as groq_generate
-    _HAS_GROQ = True
+    from hyperlocal_ai import get_hyperlocal
+    _HAS_HL = True
 except:
-    _HAS_GROQ = False
+    _HAS_HL = False
 
 _RELAY_DEVICES: dict[str, dict] = {}
 _RELAY_LOCK = threading.Lock()
@@ -183,7 +183,7 @@ def parse_command_for_device(device: dict, command_text: str) -> dict:
             "explanation": f"Mapped '{command_text}' to action '{matched_cap}' on {device_name}",
         }
 
-    if _HAS_GROQ:
+    if _HAS_HL:
         caps_str = ", ".join(capabilities) if capabilities else "none"
         prompt = f"""You are a device command parser. Map the user's natural language request to a device action.
 
@@ -205,15 +205,9 @@ Examples:
 
 JSON:"""
         try:
-            result = []
-            def _call():
-                r = groq_generate(prompt, "acc_parser", max_tokens=200)
-                result.append(r)
-            t = threading.Thread(target=_call, daemon=True)
-            t.start()
-            t.join(timeout=10)
-            if result:
-                raw = result[0].strip()
+            raw = get_hyperlocal("acc_parser")._generator.generate(prompt, max_tokens=200)
+            if raw:
+                raw = raw.strip()
                 m = re.search(r'\{.*\}', raw, re.DOTALL)
                 if m:
                     parsed = json.loads(m.group())

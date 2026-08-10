@@ -232,8 +232,11 @@ def delete_device(device_id: str):
 
 def _run(cmd: str, timeout=5) -> str:
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
-        return (r.stdout or r.stderr or "").strip()
+        from execution_vault import vaulted_run
+        vr = vaulted_run(cmd, timeout=timeout)
+        if vr.blocked:
+            return f"BLOCKED: {vr.block_reason}"
+        return (vr.stdout or vr.stderr or "").strip()
     except:
         return ""
 

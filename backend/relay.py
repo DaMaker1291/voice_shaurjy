@@ -1,18 +1,23 @@
 """Relay bridge — queues actions by user_id. Multi-tenant."""
 
 import json
+import os
 import threading
 import time
 import uuid
 
+from config import get_config
+
+_config = get_config()
+
 _lock = threading.Lock()
 _pending: dict[str, dict] = {}
 _results: dict[str, dict] = {}
-_expiry = 120
+_expiry = int(os.getenv("JARVIS_RELAY_EXPIRY", "120") or "120")
 
 # Heartbeat tracking
 _last_heartbeat: dict[str, float] = {}
-_HEARTBEAT_TIMEOUT = 60  # seconds before relay is considered dead
+_HEARTBEAT_TIMEOUT = int(os.getenv("JARVIS_RELAY_HEARTBEAT_TIMEOUT", "60") or "60")
 
 # Relay device registry (updated by main.py on register/heartbeat)
 _relay_devices: dict[str, dict] = {}
@@ -46,7 +51,7 @@ def is_relay_alive(user_id: str = "local") -> bool:
         # Fallback: check relay device last_seen
         dev = _relay_devices.get(user_id, {})
         relay_ls = dev.get("last_seen", 0)
-        if relay_ls > 0 and (time.time() - relay_ls) < 120:
+        if relay_ls > 0 and (time.time() - relay_ls) < _expiry:
             return True
     return False
 

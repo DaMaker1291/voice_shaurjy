@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS — OmniSphere v5.0</title>
+<style>
+:root {
+  --bg: #030712;
+  --surface: rgba(15,23,42,0.6);
+  --surface-solid: #0F172A;
+  --border: rgba(255,255,255,0.08);
+  --green: #00FF66;
+  --green-dim: rgba(0,255,102,0.08);
+  --green-glow: rgba(0,255,102,0.3);
+  --cyan: #06B6D4;
+  --cyan-dim: rgba(6,182,212,0.1);
+  --crimson: #EF4444;
+  --yellow: #FFB300;
+  --text: #F8FAFC;
+  --text-dim: rgba(248,250,252,0.5);
+  --text-muted: rgba(248,250,252,0.2);
+  --font: 'Inter','Segoe UI',-apple-system,sans-serif;
+  --mono: 'JetBrains Mono','Cascadia Code','Fira Code',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden;height:100vh;font-size:13px}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:4px}
+
+.titlebar{height:36px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 12px;-webkit-app-region:drag;backdrop-filter:blur(24px)}
+.titlebar-left{display:flex;align-items:center;gap:8px;-webkit-app-region:no-drag}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green-glow)}
+.title{font-size:11px;font-weight:600;letter-spacing:0.08em;color:var(--text-dim);font-family:var(--mono)}
+.meta{font-size:9px;color:var(--text-muted);font-family:var(--mono);margin-left:12px}
+.controls{display:flex;gap:1px;-webkit-app-region:no-drag}
+.tb{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;border-radius:4px}
+.tb:hover{background:rgba(255,255,255,0.04);color:var(--text)}
+.tb.x:hover{background:rgba(239,68,68,0.2);color:var(--crimson)}
+
+.app{display:flex;height:calc(100vh - 36px)}
+.sidebar{width:44px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:2px;flex-shrink:0;backdrop-filter:blur(24px)}
+.sb{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;transition:all 0.15s;position:relative}
+.sb:hover{background:rgba(0,255,102,0.06);color:var(--text)}
+.sb.on{background:rgba(0,255,102,0.1);color:var(--green)}
+.sb.on::before{content:'';position:absolute;left:-6px;width:2px;height:14px;background:var(--green);border-radius:0 2px 2px 0}
+.spacer{flex:1}
+.status-dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;cursor:pointer;margin-bottom:4px}
+.status-dot.ok{color:var(--green);background:var(--green-dim);border:1px solid rgba(0,255,102,0.15)}
+.status-dot.off{color:var(--crimson);background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.15)}
+
+.main{flex:1;display:flex;min-width:0}
+.cmd{width:35%;min-width:300px;max-width:460px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:rgba(3,7,18,0.4)}
+.canvas{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:var(--bg)}
+
+.cmd-head{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.cmd-head .lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);font-family:var(--mono)}
+.cmd-head .cnt{font-size:9px;color:var(--text-muted);font-family:var(--mono);margin-left:auto}
+.cmd-msgs{flex:1;overflow-y:auto;padding:8px 12px}
+.msg{margin-bottom:6px;animation:fadeUp 0.2s cubic-bezier(0.16,1,0.3,1)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.mu{display:flex;justify-content:flex-end;padding:2px 0}
+.mu .b{background:rgba(0,255,102,0.08);border:1px solid rgba(0,255,102,0.1);border-radius:10px 10px 2px 10px;padding:8px 14px;font-size:12.5px;line-height:1.5;max-width:90%;backdrop-filter:blur(10px)}
+.mj{display:flex;gap:8px;padding:2px 0}
+.mj .av{width:24px;height:24px;border-radius:50%;background:rgba(0,255,102,0.1);border:1px solid rgba(0,255,102,0.15);display:flex;align-items:center;justify-content:center;font-size:10px;font-family:var(--mono);color:var(--green);flex-shrink:0;margin-top:4px}
+.mj .b{background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:2px 10px 10px 10px;padding:8px 14px;font-size:12.5px;line-height:1.6;max-width:85%;backdrop-filter:blur(10px)}
+.mj .b .t{font-size:8px;color:var(--text-muted);margin-top:4px;display:block}
+.mj .b code{background:rgba(0,255,102,0.06);padding:1px 5px;border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--green)}
+.mj .b strong{color:var(--cyan)}
+.ms{text-align:center;padding:4px 0}
+.ms .b{font-size:10px;color:var(--text-muted);background:rgba(255,255,255,0.01);padding:4px 12px;border-radius:6px;display:inline-block}
+
+.welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;text-align:center}
+.welcome .orb-m{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle,rgba(0,255,102,0.15) 0%,transparent 70%);border:1px solid rgba(0,255,102,0.1);display:flex;align-items:center;justify-content:center;animation:pulse 3s ease-in-out infinite}
+.welcome .orb-mi{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 20px var(--green-glow)}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+.welcome h2{font-size:13px;font-weight:500;color:var(--text-dim)}
+.welcome p{font-size:10.5px;color:var(--text-muted);max-width:260px;line-height:1.6}
+.chips{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:4px}
+.chips span{font-size:9.5px;padding:4px 10px;border-radius:8px;background:rgba(15,23,42,0.6);color:var(--text-dim);cursor:pointer;border:1px solid var(--border);transition:all 0.15s;backdrop-filter:blur(10px);font-family:var(--mono)}
+.chips span:hover{background:rgba(0,255,102,0.08);color:var(--green);border-color:rgba(0,255,102,0.15)}
+
+.typing{display:flex;gap:3px;padding:6px 0}
+.dot-anim{width:5px;height:5px;border-radius:50%;background:var(--text-dim);animation:typeDot 1.2s ease-in-out infinite}
+.dot-anim:nth-child(2){animation-delay:0.2s}.dot-anim:nth-child(3){animation-delay:0.4s}
+@keyframes typeDot{0%,60%,100%{opacity:0.2;transform:scale(0.8)}30%{opacity:1;transform:scale(1)}}
+
+.input-bar{border-top:1px solid var(--border);padding:10px 12px 14px;flex-shrink:0}
+.input-row{display:flex;gap:6px;align-items:flex-end}
+.input-bar input{flex:1;background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:12.5px;outline:none;font-family:var(--font);min-height:40px;transition:border-color 0.15s;backdrop-filter:blur(10px)}
+.input-bar input:focus{border-color:rgba(0,255,102,0.2)}
+.input-bar input::placeholder{color:var(--text-muted)}
+.input-bar button{background:var(--green);color:#030712;border:none;border-radius:10px;padding:10px 16px;font-weight:600;font-size:11px;cursor:pointer;font-family:var(--mono);transition:all 0.15s;white-space:nowrap;min-height:40px}
+.input-bar button:disabled{opacity:0.25;cursor:default}
+.input-bar button:hover:not(:disabled){opacity:0.85;box-shadow:0 4px 20px rgba(0,255,102,0.2)}
+.hints{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.hints span{font-size:8px;color:var(--text-muted);font-family:var(--mono);padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.01);cursor:pointer;transition:all 0.1s}
+.hints span:hover{color:var(--text-dim);background:rgba(0,255,102,0.04)}
+
+#orbCanvas{display:block;width:100%;height:100%}
+
+.telemetry{position:absolute;top:14px;right:14px;display:flex;flex-direction:column;gap:3px;font-family:var(--mono);font-size:9px;color:var(--text-muted);text-align:right;pointer-events:none;background:rgba(3,7,18,0.6);padding:8px 12px;border-radius:8px;border:1px solid var(--border);backdrop-filter:blur(12px)}
+.telemetry .v{color:var(--text-dim)}
+
+.view-panel{display:none;flex-direction:column;width:100%;height:100%;padding:20px;overflow-y:auto;position:absolute;top:0;left:0;z-index:5;backdrop-filter:blur(24px);background:rgba(3,7,18,0.85)}
+
+.agent-net{position:absolute;bottom:14px;left:14px;display:flex;gap:6px;font-family:var(--mono);font-size:8px;pointer-events:none}
+.anode{display:flex;align-items:center;gap:4px;background:rgba(3,7,18,0.6);padding:3px 8px;border-radius:6px;border:1px solid var(--border);backdrop-filter:blur(12px)}
+.adot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
+.adot.idle{background:rgba(255,255,255,0.15)}.adot.on{background:var(--green);box-shadow:0 0 6px var(--green-glow)}.adot.busy{background:var(--yellow);box-shadow:0 0 6px rgba(255,179,0,0.4)}
+
+.live-badge{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:8px;color:var(--text-muted);display:flex;align-items:center;gap:6px;background:rgba(3,7,18,0.7);padding:4px 12px;border-radius:20px;border:1px solid var(--border);backdrop-filter:blur(12px);pointer-events:none}
+.ldot{width:4px;height:4px;border-radius:50%}
+.ldot.on{background:var(--green);box-shadow:0 0 8px var(--green-glow);animation:lpulse 1.5s ease-in-out infinite}
+.ldot.listen{background:var(--cyan);box-shadow:0 0 8px rgba(6,182,212,0.4)}
+.ldot.work{background:var(--yellow);box-shadow:0 0 8px rgba(255,179,0,0.4)}
+@keyframes lpulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+.artifact{position:absolute;inset:32px;display:none;flex-direction:column;background:rgba(3,7,18,0.3);border-radius:12px;border:1px solid var(--border);backdrop-filter:blur(8px);overflow:hidden;z-index:10}
+.artifact.show{display:flex}
+.art-toolbar{display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid var(--border);font-size:9px;font-family:var(--mono);color:var(--text-muted);gap:8px}
+.art-close{margin-left:auto;cursor:pointer;color:var(--text-muted);background:none;border:none;font-size:12px}
+.art-close:hover{color:var(--crimson)}
+.art-body{flex:1;overflow:auto;padding:12px}
+.art-body pre{background:rgba(3,7,18,0.6);padding:12px;border-radius:6px;font-size:11px;line-height:1.5;color:var(--text-dim);overflow-x:auto}
+
+.clarify{width:100%}
+.clarify .q{color:var(--yellow);font-size:12px;margin-bottom:4px;font-weight:500}
+.clarify input{width:100%;background:rgba(3,7,18,0.6);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;outline:none;font-family:var(--font);margin-bottom:8px}
+.clarify input:focus{border-color:rgba(0,255,102,0.2)}
+.clarify button{background:var(--green);color:#030712;border:none;border-radius:8px;padding:6px 16px;font-weight:600;cursor:pointer;font-family:var(--mono);font-size:10px}
+
+.laser-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(3,7,18,0.85);backdrop-filter:blur(8px);align-items:center;justify-content:center}
+.laser-overlay.show{display:flex}
+.laser-frame{position:relative;width:520px;max-width:90vw;background:var(--surface);border-radius:16px;border:1px solid var(--border);overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,0.6);animation:lin 0.3s cubic-bezier(0.16,1,0.3,1)}
+@keyframes lin{from{opacity:0;transform:scale(0.95) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.laser-border{position:absolute;inset:-1px;border-radius:16px;pointer-events:none;border:1.5px solid var(--crimson);box-shadow:0 0 24px rgba(239,68,68,0.2),inset 0 0 24px rgba(239,68,68,0.05);animation:lpulse2 2s ease-in-out infinite}
+@keyframes lpulse2{0%,100%{opacity:0.6}50%{opacity:1}}
+.laser-hdr{display:flex;align-items:center;gap:8px;padding:16px 20px;border-bottom:1px solid rgba(239,68,68,0.1)}
+.laser-hdr .ic{color:var(--crimson);font-size:18px}
+.laser-hdr .tt{font-size:12px;font-weight:600;color:var(--crimson);font-family:var(--mono);letter-spacing:0.05em}
+.laser-body{padding:20px}
+.laser-body .albl{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;font-family:var(--mono);margin-bottom:6px}
+.laser-body .aprev{background:rgba(3,7,18,0.6);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:12px;font-family:var(--mono);color:var(--text-dim);line-height:1.6;margin-bottom:16px;max-height:160px;overflow-y:auto}
+.laser-body .diff{display:flex;gap:12px;margin-bottom:16px}
+.laser-body .dp{flex:1;background:rgba(3,7,18,0.4);border-radius:8px;padding:12px;border:1px solid var(--border)}
+.laser-body .dp .dl{font-size:8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;font-family:var(--mono)}
+.laser-body .dp .dc{font-size:10px;color:var(--text-dim);font-family:var(--mono);line-height:1.5;max-height:100px;overflow-y:auto}
+.laser-foot{display:flex;gap:8px;padding:12px 20px;border-top:1px solid var(--border);justify-content:flex-end}
+.lb{padding:8px 20px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--mono);border:none;transition:all 0.15s}
+.lb.cancel{background:rgba(255,255,255,0.03);color:var(--text-dim);border:1px solid var(--border)}
+.lb.cancel:hover{background:rgba(255,255,255,0.06)}
+.lb.ok{background:var(--crimson);color:white}
+.lb.ok:hover{box-shadow:0 4px 24px rgba(239,68,68,0.3)}
+.lb.ok:disabled{opacity:0.3;cursor:default}
+.lhold{display:flex;align-items:center;gap:8px;font-size:9px;color:var(--text-muted);font-family:var(--mono)}
+.lprog{width:100px;height:3px;background:rgba(239,68,68,0.15);border-radius:2px;overflow:hidden}
+.lprog-fill{height:100%;background:var(--crimson);width:0%;border-radius:2px;transition:width 0.05s linear}
+
+
+
+.hud-overlay{display:none;position:fixed;inset:0;z-index:8000;background:rgba(3,7,18,0.7);backdrop-filter:blur(12px);align-items:center;justify-content:center}
+.hud-overlay.show{display:flex}
+.hud-bar{width:580px;max-width:90vw;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:12px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 16px 48px rgba(0,0,0,0.5);animation:lin 0.2s cubic-bezier(0.16,1,0.3,1)}
+.hud-bar input{flex:1;background:rgba(3,7,18,0.6);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:var(--font)}
+.hud-bar input:focus{border-color:rgba(0,255,102,0.2)}
+.hud-bar input::placeholder{color:var(--text-muted)}
+.hud-btn{background:var(--green);color:#030712;border:none;border-radius:10px;padding:10px 16px;font-weight:600;font-size:11px;cursor:pointer;font-family:var(--mono)}
+.hud-btn:disabled{opacity:0.3}
+.hud-vis{background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.2);color:var(--cyan);border-radius:10px;padding:10px 12px;cursor:pointer;font-size:11px;transition:all 0.15s}
+.hud-vis:hover{background:rgba(6,182,212,0.2)}
+
+/* ═══ Domain-Specific Result Templates ═══ */
+.result-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:8px 0;animation:fadeUp 0.3s cubic-bezier(0.16,1,0.3,1)}
+.result-card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)}
+.result-card-title{font-size:13px;font-weight:600;color:var(--text);font-family:var(--mono)}
+.result-card-badge{font-size:9px;padding:3px 8px;border-radius:6px;font-family:var(--mono);font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
+.result-card-body{padding:16px}
+
+/* Travel Template */
+.travel-hero{background:linear-gradient(135deg,rgba(6,182,212,0.1),rgba(0,255,102,0.05));padding:20px;border-bottom:1px solid var(--border);position:relative;overflow:hidden}
+.travel-hero::before{content:'';position:absolute;top:-50%;right:-20%;width:300px;height:300px;background:radial-gradient(circle,rgba(6,182,212,0.08),transparent 70%);pointer-events:none}
+.travel-dest{font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px}
+.travel-meta{display:flex;gap:12px;font-size:11px;color:var(--text-dim);font-family:var(--mono)}
+.travel-meta span{display:flex;align-items:center;gap:4px}
+
+.travel-tabs{display:flex;gap:2px;padding:0 16px;background:rgba(3,7,18,0.3);border-bottom:1px solid var(--border)}
+.travel-tab{padding:10px 16px;font-size:11px;font-family:var(--mono);color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s}
+.travel-tab:hover{color:var(--text-dim)}
+.travel-tab.active{color:var(--cyan);border-bottom-color:var(--cyan)}
+
+.travel-panel{display:none;padding:16px}
+.travel-panel.active{display:block}
+
+/* Timeline */
+.timeline{position:relative;padding-left:24px}
+.timeline::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;background:linear-gradient(to bottom,var(--cyan),var(--green),var(--cyan));opacity:0.3}
+.timeline-day{position:relative;margin-bottom:16px;padding:12px;background:rgba(3,7,18,0.3);border-radius:8px;border:1px solid var(--border)}
+.timeline-day::before{content:'';position:absolute;left:-21px;top:16px;width:10px;height:10px;border-radius:50%;background:var(--cyan);border:2px solid var(--bg);z-index:1}
+.timeline-day-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.timeline-day-num{font-size:10px;color:var(--cyan);font-family:var(--mono);font-weight:600}
+.timeline-day-title{font-size:12px;font-weight:600;color:var(--text)}
+.timeline-day-loc{font-size:10px;color:var(--text-muted);font-family:var(--mono)}
+.timeline-activity{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,255,102,0.03);border-radius:6px;margin-bottom:4px;font-size:11px;color:var(--text-dim)}
+.timeline-activity .act-dot{width:4px;height:4px;border-radius:50%;background:var(--green);flex-shrink:0}
+
+/* Budget Card */
+.budget-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px}
+.budget-item{background:rgba(3,7,18,0.3);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.budget-label{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-family:var(--mono);margin-bottom:4px}
+.budget-value{font-size:16px;font-weight:700;color:var(--green);font-family:var(--mono)}
+.budget-bar{height:4px;background:rgba(0,255,102,0.1);border-radius:2px;margin-top:6px;overflow:hidden}
+.budget-bar-fill{height:100%;background:var(--green);border-radius:2px;transition:width 0.5s ease}
+
+/* Hotel/Flight Cards */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.hotel-card,.flight-card{background:rgba(3,7,18,0.3);border:1px solid var(--border);border-radius:8px;padding:12px;transition:border-color 0.15s}
+.hotel-card:hover,.flight-card:hover{border-color:rgba(0,255,102,0.2)}
+.hotel-name{font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px}
+.hotel-stars{color:var(--yellow);font-size:10px;margin-bottom:4px}
+.hotel-detail{font-size:10px;color:var(--text-dim);font-family:var(--mono);margin-bottom:2px}
+.hotel-price{font-size:14px;font-weight:700;color:var(--green);font-family:var(--mono);margin-top:8px}
+.flight-route{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px}
+.flight-route .arrow{color:var(--cyan);margin:0 6px}
+.flight-detail{font-size:10px;color:var(--text-dim);font-family:var(--mono);margin-bottom:2px}
+.flight-price{font-size:14px;font-weight:700;color:var(--green);font-family:var(--mono);margin-top:8px}
+
+/* Action Button */
+.action-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--mono);border:none;transition:all 0.15s}
+.action-btn.primary{background:var(--green);color:#030712}
+.action-btn.primary:hover{box-shadow:0 4px 20px rgba(0,255,102,0.3);opacity:0.9}
+.action-btn.secondary{background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.2);color:var(--cyan)}
+.action-btn.secondary:hover{background:rgba(6,182,212,0.2)}
+.action-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+
+/* VDI Transfer */
+.vdi-transfer{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(6,182,212,0.05);border:1px solid rgba(6,182,212,0.1);border-radius:8px;margin-top:12px}
+.vdi-thumb{width:80px;height:45px;background:#000;border-radius:4px;overflow:hidden;flex-shrink:0}
+.vdi-thumb img{width:100%;height:100%;object-fit:contain}
+.vdi-label{font-size:10px;color:var(--text-muted);font-family:var(--mono);flex:1}
+.vdi-transfer-btn{padding:6px 12px;background:var(--cyan);color:#030712;border:none;border-radius:6px;font-size:10px;font-weight:600;cursor:pointer;font-family:var(--mono)}
+
+/* Trading Template */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:16px}
+.kpi-card{background:rgba(3,7,18,0.3);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center}
+.kpi-label{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-family:var(--mono);margin-bottom:6px}
+.kpi-value{font-size:18px;font-weight:700;font-family:var(--mono)}
+.kpi-value.up{color:var(--green)}
+.kpi-value.down{color:var(--crimson)}
+.kpi-value.neutral{color:var(--text)}
+
+.recommendation-badge{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;font-family:var(--mono)}
+.recommendation-badge.buy{background:rgba(0,255,102,0.1);border:1px solid rgba(0,255,102,0.2);color:var(--green)}
+.recommendation-badge.sell{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:var(--crimson)}
+.recommendation-badge.hold{background:rgba(255,179,0,0.1);border:1px solid rgba(255,179,0,0.2);color:var(--yellow)}
+
+/* Research Template */
+.exec-summary{background:rgba(6,182,212,0.05);border:1px solid rgba(6,182,212,0.1);border-radius:8px;padding:16px;margin-bottom:16px}
+.exec-summary h4{font-size:10px;color:var(--cyan);text-transform:uppercase;letter-spacing:0.1em;font-family:var(--mono);margin-bottom:8px}
+.exec-summary p{font-size:12px;color:var(--text-dim);line-height:1.6}
+
+.findings-list{list-style:none;padding:0}
+.findings-list li{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:rgba(3,7,18,0.3);border:1px solid var(--border);border-radius:6px;margin-bottom:4px;font-size:11px;color:var(--text-dim)}
+.findings-list li::before{content:'▸';color:var(--green);font-weight:bold;flex-shrink:0}
+
+.data-table{width:100%;border-collapse:collapse;font-size:11px;font-family:var(--mono)}
+.data-table th{text-align:left;padding:8px 12px;background:rgba(3,7,18,0.4);color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-size:9px;border-bottom:1px solid var(--border)}
+.data-table td{padding:8px 12px;color:var(--text-dim);border-bottom:1px solid rgba(255,255,255,0.02)}
+.data-table tr:hover td{background:rgba(0,255,102,0.02)}
+
+/* Task Tabs */
+.task-tabs{display:flex;gap:2px;padding:0 12px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;flex-shrink:0}
+.task-tab{display:flex;align-items:center;gap:6px;padding:10px 14px;font-size:11px;font-family:var(--mono);color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;white-space:nowrap}
+.task-tab:hover{color:var(--text-dim);background:rgba(255,255,255,0.02)}
+.task-tab.active{color:var(--green);border-bottom-color:var(--green)}
+.task-tab .tab-close{width:14px;height:14px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:8px;opacity:0;transition:opacity 0.1s}
+.task-tab:hover .tab-close{opacity:1}
+.task-tab .tab-close:hover{background:rgba(239,68,68,0.2);color:var(--crimson)}
+
+@keyframes cardSlide{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.card-animate{animation:cardSlide 0.3s cubic-bezier(0.16,1,0.3,1)}
+
+@media(max-width:900px){.sidebar{width:36px}.cmd{width:100%;max-width:none;border-right:none}.canvas{display:none}}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div class="titlebar-left">
+    <span class="dot"></span>
+    <span class="title">JARVIS // OMNISPHERE</span>
+    <span class="meta" id="meta">v5.0 &middot; ambient</span>
+  </div>
+  <div class="controls">
+    <button class="tb" onclick="window.jarvis?.window.minimize()">─</button>
+    <button class="tb" onclick="window.jarvis?.window.maximize()">□</button>
+    <button class="tb x" onclick="window.jarvis?.window.close()">✕</button>
+  </div>
+</div>
+
+<div class="app">
+  <div class="sidebar">
+    <button class="sb on" title="Chat" onclick="switchView('chat')">💬</button>
+    <button class="sb" title="Agents" onclick="switchView('agents')">⚙</button>
+    <button class="sb" title="Devices" onclick="switchView('devices')">🔌</button>
+    <button class="sb" title="System" onclick="switchView('system')">📊</button>
+    <button class="sb" title="VDI Desktop" onclick="switchView('vdi')">🖥</button>
+    <button class="sb" title="Learning" onclick="switchView('learning')">🧠</button>
+    <div class="spacer"></div>
+    <div class="status-dot ok" id="sbDot" title="Backend"></div>
+  </div>
+
+  <div class="main">
+    <div class="cmd">
+      <div class="cmd-head">
+        <span class="lbl">Command Stream</span>
+        <span class="cnt" id="msgCnt">0 messages</span>
+      </div>
+      <div class="cmd-msgs" id="msgs">
+        <div class="welcome" id="welcome">
+          <div class="orb-m"><div class="orb-mi"></div></div>
+          <h2>JARVIS OmniSphere</h2>
+          <p>Your ambient operating layer. I control your computer, browse the web, manage files, and orchestrate your devices.</p>
+          <div class="chips">
+            <span onclick="sendText('hi')">hi</span>
+            <span onclick="sendText('system status')">status</span>
+            <span onclick="sendText('open chrome')">open chrome</span>
+            <span onclick="sendText('screenshot')">screenshot</span>
+            <span onclick="sendText('clipboard')">clipboard</span>
+            <span onclick="sendText('what time is it')">time</span>
+          </div>
+        </div>
+      </div>
+      <div class="input-bar">
+        <div class="input-row">
+          <input type="text" id="inp" placeholder="Type a command or question..." spellcheck="false" onkeydown="if(event.key==='Enter')send()">
+          <button id="sendBtn" onclick="send()">▶</button>
+        </div>
+        <div class="hints">
+          <span onclick="sendText('system status')">status</span>
+          <span onclick="sendText('disk usage')">disk</span>
+          <span onclick="sendText('list windows')">windows</span>
+          <span onclick="sendText('screenshot')">screenshot</span>
+          <span onclick="sendText('clipboard')">clipboard</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas" id="canvasPane">
+      <canvas id="orbCanvas"></canvas>
+
+      <div class="telemetry">
+        <div>P95 <span class="v" id="tP95">--</span></div>
+        <div>CPU <span class="v" id="tCPU">--</span></div>
+        <div>RAM <span class="v" id="tRAM">--</span></div>
+        <div>DISK <span class="v" id="tDISK">--</span></div>
+        <div>NODES <span class="v" id="tNODES">--</span></div>
+      </div>
+
+      <div class="view-panel" id="view-agents">
+        <h2 style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:12px;font-family:var(--mono)">ACTIVE AGENTS</h2>
+        <div id="agentsList"></div>
+      </div>
+      <div class="view-panel" id="view-devices">
+        <h2 style="font-size:14px;font-weight:600;color:var(--cyan);margin-bottom:12px;font-family:var(--mono)">CONNECTED DEVICES</h2>
+        <div id="devicesList"></div>
+      </div>
+      <div class="view-panel" id="view-system">
+        <h2 style="font-size:14px;font-weight:600;color:var(--yellow);margin-bottom:12px;font-family:var(--mono)">SYSTEM STATUS</h2>
+        <div id="systemInfo"></div>
+      </div>
+      <div class="view-panel" id="view-vdi">
+        <h2 style="font-size:14px;font-weight:600;color:var(--cyan);margin-bottom:12px;font-family:var(--mono)">VIRTUAL DESKTOP</h2>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button onclick="togglePip()" style="background:var(--green);color:#030712;border:none;border-radius:8px;padding:8px 16px;font-weight:600;cursor:pointer;font-family:var(--mono);font-size:11px">Toggle PiP Window</button>
+          <button onclick="refreshVdi()" style="background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.2);color:var(--cyan);border-radius:8px;padding:8px 16px;cursor:pointer;font-family:var(--mono);font-size:11px">Refresh Status</button>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px">
+          <div style="padding:6px 12px;border-bottom:1px solid var(--border);font-size:9px;font-family:var(--mono);color:var(--text-muted)">LIVE VDI PREVIEW</div>
+          <div style="width:100%;height:200px;background:#000;display:flex;align-items:center;justify-content:center;position:relative">
+            <img id="vdiPreview" style="width:100%;height:100%;object-fit:contain;display:none" alt="">
+            <div id="vdiPreviewPh" style="color:var(--text-muted);font-size:11px;font-family:var(--mono)">Click "Toggle PiP Window" to start streaming</div>
+          </div>
+        </div>
+        <div id="vdiInfo" style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">Loading VDI status...</div>
+        <div style="margin-top:16px">
+          <h3 style="font-size:12px;color:var(--text-dim);margin-bottom:8px">Quick Actions</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <span onclick="sendText('open chrome')" style="font-size:9.5px;padding:5px 12px;border-radius:8px;background:rgba(15,23,42,0.6);color:var(--text-dim);cursor:pointer;border:1px solid var(--border)">Open Chrome</span>
+            <span onclick="sendText('open terminal')" style="font-size:9.5px;padding:5px 12px;border-radius:8px;background:rgba(15,23,42,0.6);color:var(--text-dim);cursor:pointer;border:1px solid var(--border)">Open Terminal</span>
+            <span onclick="sendText('go to youtube.com')" style="font-size:9.5px;padding:5px 12px;border-radius:8px;background:rgba(15,23,42,0.6);color:var(--text-dim);cursor:pointer;border:1px solid var(--border)">YouTube</span>
+            <span onclick="sendText('open file manager')" style="font-size:9.5px;padding:5px 12px;border-radius:8px;background:rgba(15,23,42,0.6);color:var(--text-dim);cursor:pointer;border:1px solid var(--border)">File Manager</span>
+          </div>
+        </div>
+      </div>
+      <div class="view-panel" id="view-learning">
+        <h2 style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:12px;font-family:var(--mono)">USER LEARNING</h2>
+        <div id="learningInfo" style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">Loading learning data...</div>
+        <div style="margin-top:16px">
+          <h3 style="font-size:12px;color:var(--text-dim);margin-bottom:8px">Detected Preferences</h3>
+          <div id="prefsList"></div>
+        </div>
+        <div style="margin-top:16px">
+          <h3 style="font-size:12px;color:var(--text-dim);margin-bottom:8px">Knowledge Graph</h3>
+          <div id="knowledgeList"></div>
+        </div>
+      </div>
+
+      <div class="agent-net" id="agentNet">
+        <div class="anode"><span class="adot idle"></span>OS</div>
+        <div class="anode"><span class="adot idle"></span>HAL</div>
+        <div class="anode"><span class="adot idle"></span>WEB</div>
+        <div class="anode"><span class="adot on"></span>CORE</div>
+        <div class="anode"><span class="adot idle"></span>MEM</div>
+        <div class="anode"><span class="adot idle"></span>SEC</div>
+      </div>
+
+      <div class="live-badge">
+        <span class="ldot on" id="ldot"></span>
+        <span id="lbl">ONLINE</span>
+      </div>
+
+      <div class="artifact" id="artBox">
+        <div class="art-toolbar"><span>📄 result</span><button class="art-close" onclick="closeArt()">✕</button></div>
+        <div class="art-body" id="artBody"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<div class="hud-overlay" id="hud">
+  <div class="hud-bar">
+    <span class="hud-vis" onclick="hudVision()">👁 Vision</span>
+    <input type="text" id="hudInp" placeholder="Type directive or speak..." onkeydown="if(event.key==='Enter'){hudSend()}">
+    <button class="hud-btn" id="hudRun" onclick="hudSend()">⚡ Run</button>
+  </div>
+</div>
+
+<div class="laser-overlay" id="laserModal">
+  <div class="laser-frame">
+    <div class="laser-border"></div>
+    <div class="laser-hdr"><span class="ic">⚠</span><span class="tt">SECURITY INTERCEPT: HIGH-RISK ACTION</span></div>
+    <div class="laser-body">
+      <div class="albl">Action Preview</div>
+      <div class="aprev" id="lPrev">Loading...</div>
+      <div class="diff">
+        <div class="dp"><div class="dl">Before</div><div class="dc" id="lBefore">—</div></div>
+        <div class="dp"><div class="dl">After</div><div class="dc" id="lAfter">—</div></div>
+      </div>
+    </div>
+    <div class="laser-foot">
+      <div class="lhold"><span>Hold Spacebar to authorize</span><div class="lprog"><div class="lprog-fill" id="lProg"></div></div></div>
+      <button class="lb cancel" onclick="cancelLaser()">Cancel</button>
+      <button class="lb ok" id="lOk" onclick="approveLaser()" disabled>Approve</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const B='http://127.0.0.1:8000';
+const inp=document.getElementById('inp'),msgs=document.getElementById('msgs'),sendBtn=document.getElementById('sendBtn');
+let busy=false,pendingGoal=null,pendingAnswers={},ansIdx=0,orbState='idle',currentView='chat';
+
+// ── Orb ──
+const canvas=document.getElementById('orbCanvas'),cx2d=canvas.getContext('2d');
+let oT=0,oParticles=[];
+function resizeOrb(){const p=document.getElementById('canvasPane');canvas.width=p.offsetWidth;canvas.height=p.offsetHeight}
+window.addEventListener('resize',resizeOrb);resizeOrb();
+for(let i=0;i<180;i++){const th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1),r=80+Math.random()*40;oParticles.push({th,ph,r,baseR:r,speed:0.002+Math.random()*0.004,phase:Math.random()*Math.PI*2})}
+
+function setOrb(s){orbState=s;const d=document.getElementById('ldot'),l=document.getElementById('lbl');d.className='ldot';
+if(s==='idle'){d.classList.add('on');l.textContent='ONLINE'}
+else if(s==='listening'){d.classList.add('listen');l.textContent='LISTENING'}
+else if(s==='working'){d.classList.add('work');l.textContent='PROCESSING'}
+else if(s==='action'){d.classList.add('work');l.textContent='EXECUTING'}}
+
+function drawOrb(){
+  if(!cx2d||!canvas.width)return;oT+=0.008;
+  const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2,sc=Math.min(W,H)/340;
+  cx2d.clearRect(0,0,W,H);
+  const a=orbState==='idle'?.04:orbState==='listening'?.06:orbState==='working'?.1:.08;
+  const g=cx2d.createRadialGradient(cx,cy,0,cx,cy,130*sc);
+  g.addColorStop(0,`rgba(0,255,102,${a})`);g.addColorStop(.5,`rgba(6,182,212,${a*.5})`);g.addColorStop(1,'transparent');
+  cx2d.fillStyle=g;cx2d.fillRect(0,0,W,H);
+
+  // wireframe
+  const verts=[];const vc=orbState==='action'?80:60;
+  for(let i=0;i<vc;i++){const th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
+  const w=orbState==='working'?Math.sin(oT*4+i*.5)*12:orbState==='listening'?Math.sin(oT*2+i*.3)*8:orbState==='action'?Math.sin(oT*6+i*.7)*16:0;
+  const r=(100+w)*sc;verts.push({x:cx+r*Math.sin(ph)*Math.cos(th),y:cy+r*Math.cos(ph)})}
+
+  const lc=orbState==='action'?'rgba(6,182,212,0.15)':orbState==='working'?'rgba(0,255,102,0.12)':'rgba(0,255,102,0.04)';
+  cx2d.strokeStyle=lc;cx2d.lineWidth=.5;
+  for(let i=0;i<verts.length;i++)for(let j=i+1;j<verts.length;j++){const dx=verts[i].x-verts[j].x,dy=verts[i].y-verts[j].y;
+  if(Math.sqrt(dx*dx+dy*dy)<60*sc){cx2d.beginPath();cx2d.moveTo(verts[i].x,verts[i].y);cx2d.lineTo(verts[j].x,verts[j].y);cx2d.stroke()}}
+
+  // action beams
+  if(orbState==='action'){cx2d.strokeStyle='rgba(6,182,212,0.2)';cx2d.lineWidth=1;
+  for(let i=0;i<8;i++){const th=i*Math.PI/4+oT*2;cx2d.beginPath();cx2d.moveTo(cx,cy);
+  cx2d.lineTo(cx+Math.cos(th)*200*sc,cy+Math.sin(th)*200*sc);cx2d.stroke()}}
+
+  // particles
+  const rot=oT*.3;
+  for(const p of oParticles){const w=orbState==='working'?Math.sin(oT*5+p.phase)*15:orbState==='listening'?Math.sin(oT*3+p.phase)*8:orbState==='action'?Math.sin(oT*7+p.phase)*20:0;
+  const r=(p.baseR+w)*sc,th=p.th+rot,ph2=p.ph+oT*p.speed;
+  const x=cx+r*Math.sin(ph2)*Math.cos(th),y=cy+r*Math.cos(ph2);
+  const zd=.5+.5*Math.cos(ph2),sz=(1+zd)*(orbState==='working'||orbState==='action'?2:1.5),br=.3+.7*zd;
+  const col=orbState==='working'?`rgba(0,255,102,${br*.5})`:orbState==='listening'?`rgba(6,182,212,${br*.4})`:orbState==='action'?`rgba(6,182,212,${br*.6})`:`rgba(255,255,255,${br*.15})`;
+  cx2d.beginPath();cx2d.arc(x,y,sz,0,Math.PI*2);cx2d.fillStyle=col;cx2d.fill()}
+
+  // center glow
+  const gs=(20+Math.sin(oT*2)*5)*sc,cg=cx2d.createRadialGradient(cx,cy,0,cx,cy,gs);
+  const ga=orbState==='working'?.15:orbState==='listening'?.1:orbState==='action'?.2:.06;
+  cg.addColorStop(0,`rgba(0,255,102,${ga})`);cg.addColorStop(1,'transparent');
+  cx2d.fillStyle=cg;cx2d.beginPath();cx2d.arc(cx,cy,gs,0,Math.PI*2);cx2d.fill();
+
+  requestAnimationFrame(drawOrb)}
+drawOrb();
+
+// ── Health ──
+async function checkHealth(){try{const r=await fetch(B+'/api/health',{signal:AbortSignal.timeout(2000)});
+if(r.ok){document.getElementById('sbDot').className='status-dot ok';setOrb('idle');return true}}catch{}
+document.getElementById('sbDot').className='status-dot off';setOrb('idle');return false}
+checkHealth();setInterval(checkHealth,5000);
+
+// ── Telemetry ──
+async function refreshStats(){try{const r=await fetch(B+'/api/system/stats',{signal:AbortSignal.timeout(2000)});
+if(r.ok){const d=await r.json();
+document.getElementById('tCPU').textContent=(d.cpu?.percent??d.cpu_percent??'--')+'%';
+document.getElementById('tRAM').textContent=(d.memory?.percent??d.memory_percent??'--')+'%';
+document.getElementById('tDISK').textContent=(d.disk?.percent??d.disk_percent??'--')+'%';
+document.getElementById('tP95').textContent=(d.cpu?.count??'-')+' cores';
+document.getElementById('tNODES').textContent=d.network?2:1}}catch{}}
+refreshStats();setInterval(refreshStats,5000);
+
+// ── Chat ──
+function send(){const t=inp.value.trim();if(!t||busy)return;sendText(t)}
+function sendText(t){if(!t||busy)return;inp.value='';busy=true;sendBtn.disabled=true;setOrb('working');
+const ws=document.getElementById('welcome');if(ws)ws.remove();
+addMsg('user',t);const tid=addMsg('jarvis','<div class="typing"><div class="dot-anim"></div><div class="dot-anim"></div><div class="dot-anim"></div></div>',true);
+updateCnt();
+execute(t,pendingGoal===t?pendingAnswers:null).then(r=>{setOrb('idle');const el=document.getElementById(tid);if(!el)return;
+if((r.action==='clarify'||r.action==='ask_clarify')&&r.questions){pendingGoal=t;const qh=r.questions.map((q,i)=>{const idx=ansIdx+i;
+return`<div class="q">${esc(q)}</div><input type="text" id="ans_${idx}" class="clarify" placeholder="Your answer..." autocomplete="off">`}).join('');
+ansIdx+=r.questions.length;const ex=el.querySelector('.clarify');
+if(ex){ex.insertAdjacentHTML('beforeend',qh)}else{el.querySelector('.b').innerHTML=`<div class="clarify"><div style="color:var(--yellow);font-weight:600;font-size:12px;margin-bottom:6px">${esc(r.text||'I need more details:')}</div>${qh}<button onclick="submitClarify()">Submit</button></div>`}
+busy=false;sendBtn.disabled=false;return}
+pendingGoal=null;pendingAnswers={};
+const msgText=r.text||r.output||r.response||'';const success=r.success!==false||r.action;
+if(success&&msgText){
+  // Check for structured result data — render with domain template
+  const structured=renderStructuredResult(r);
+  if(structured){
+    el.querySelector('.b').innerHTML=structured+`<span class="t">just now</span>`;
+  } else {
+    el.querySelector('.b').innerHTML=fmtOut(msgText)+`<span class="t">just now</span>`;
+  }
+}
+else{el.querySelector('.b').innerHTML=`<span style="color:var(--crimson)">${esc(r.error||msgText||'Something went wrong')}</span><span class="t">just now</span>`}})
+.catch(e=>{setOrb('idle');const el=document.getElementById(tid);
+if(el)el.querySelector('.b').innerHTML=`<span style="color:var(--crimson)">${esc(e.message||'Request failed')}</span><span class="t">just now</span>`})
+.finally(()=>{busy=false;sendBtn.disabled=false;inp.focus();updateCnt();scrollBot()})}
+
+function fmtOut(t){let s=esc(t);s=s.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');s=s.replace(/`(.*?)`/g,'<code>$1</code>');s=s.replace(/\n/g,'<br>');return s}
+function submitClarify(){const a={};document.querySelectorAll('.clarify input').forEach(i=>{if(i.value.trim())a[i.id.replace('ans_','answer_')]=i.value.trim()});pendingAnswers=a;if(pendingGoal)sendText(pendingGoal)}
+
+async function execute(text,answers){setOrb('working');
+// Always try entity/process first — it actually executes VDI actions
+try{const body={user_input:text,user_id:'local'};if(answers&&Object.keys(answers).length)body.answers=answers;const r=await fetch(B+'/api/entity/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(answers&&Object.keys(answers).length?60000:15000)});
+if(r.ok){const d=await r.json();if(d&&(d.action||d.output||d.text||d.success!==undefined||d.error)){setOrb('online');return d}}}catch{}
+// Fallback to AI chat for non-action queries
+try{const r=await fetch(B+'/api/text/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,user_id:'local'}),signal:AbortSignal.timeout(15000)});
+if(r.ok){const d=await r.json();setOrb('online');return d}}catch{}
+// Last resort — agent
+try{const body={goal:text,safety:'confirm_destructive'};if(answers)body.followup_answers=answers;
+const r=await fetch(B+'/api/do-anything',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(30000)});
+if(r.ok){setOrb('online');return await r.json()}}catch{}
+setOrb('online');return{success:false,error:'Backend not reachable. Start the server first.'}}
+
+function addMsg(role,content){const id='m_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+const d=document.createElement('div');d.id=id;d.className='msg '+(role==='user'?'mu':'mj');
+if(role==='jarvis'){const a=document.createElement('div');a.className='av';a.textContent='J';d.appendChild(a)}
+const b=document.createElement('div');b.className='b';b.innerHTML=content;d.appendChild(b);
+msgs.appendChild(d);scrollBot();return id}
+function updateCnt(){document.getElementById('msgCnt').textContent=msgs.querySelectorAll('.msg').length+' messages'}
+function scrollBot(){msgs.scrollTop=msgs.scrollHeight}
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+
+// ── Views ──
+function switchView(v){currentView=v;const btns=document.querySelectorAll('.sb');
+const views=['chat','agents','devices','system','vdi','learning'];const idx=views.indexOf(v);
+btns.forEach((b,i)=>b.classList.toggle('on',i===idx));
+document.querySelectorAll('.view-panel').forEach(p=>p.style.display='none');
+const p=document.getElementById('view-'+v);if(p){p.style.display='flex';
+if(v==='agents')refreshAgents();if(v==='devices')refreshDevices();if(v==='system')refreshSystem();
+if(v==='vdi')refreshVdi();if(v==='learning')refreshLearning()}}
+
+async function refreshAgents(){const el=document.getElementById('agentsList');
+el.innerHTML='<div style="color:var(--text-muted);font-size:12px">Loading...</div>';
+try{const r=await fetch(B+'/api/health',{signal:AbortSignal.timeout(3000)});const d=await r.json();
+const items=[{n:'Core Engine',s:'active',i:'🧠'},{n:'Device Manager',s:d.devices?'active':'idle',i:'🔌'},
+{n:'Vision System',s:'standby',i:'👁'},{n:'Voice Pipeline',s:'standby',i:'🎙'},
+{n:'Autonomous Agent',s:'idle',i:'🤖'},{n:'Context Relay',s:'active',i:'📡'}];
+el.innerHTML=items.map(a=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:8px">
+<span style="font-size:18px">${a.i}</span><div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--text)">${a.n}</div><div style="font-size:10px;color:var(--text-muted)">${a.s}</div></div>
+<div style="width:7px;height:7px;border-radius:50%;background:${a.s==='active'?'var(--green)':'var(--yellow)'};box-shadow:0 0 6px ${a.s==='active'?'var(--green-glow)':'rgba(255,179,0,0.4)'}"></div></div>`).join('')
+}catch{el.innerHTML='<div style="color:var(--crimson);font-size:12px">Backend not reachable</div>'}}
+
+async function refreshDevices(){const el=document.getElementById('devicesList');
+el.innerHTML='<div style="color:var(--text-muted);font-size:12px">Loading...</div>';
+try{const r=await fetch(B+'/api/relay/devices?user_id=local',{signal:AbortSignal.timeout(3000)});const d=await r.json();
+const devs=d.devices||[];if(!devs.length){el.innerHTML='<div style="color:var(--text-muted);font-size:12px;padding:12px">No devices connected.</div>';return}
+el.innerHTML=devs.map(dv=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:8px">
+<span style="font-size:18px">💻</span><div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--text)">${esc(dv.name||dv.type||'Unknown')}</div><div style="font-size:10px;color:var(--text-muted)">${esc(dv.ip||dv.status||'')}</div></div></div>`).join('')
+}catch{el.innerHTML='<div style="color:var(--crimson);font-size:12px">Backend not reachable</div>'}}
+
+async function refreshSystem(){const el=document.getElementById('systemInfo');
+el.innerHTML='<div style="color:var(--text-muted);font-size:12px">Loading...</div>';
+try{const[hr,sr]=await Promise.all([fetch(B+'/api/health',{signal:AbortSignal.timeout(3000)}).then(r=>r.json()),
+fetch(B+'/api/system/stats',{signal:AbortSignal.timeout(3000)}).then(r=>r.json()).catch(()=>null)]);
+const rows=[{l:'Status',v:hr.status||'unknown',c:'var(--green)'},{l:'Model',v:hr.models?.llm||'N/A'},
+{l:'Tier',v:hr.tier||'free'},{l:'Relay',v:hr.relay?'Online':'Offline',c:hr.relay?'var(--green)':'var(--crimson)'},
+{l:'LiveKit',v:hr.livekit?'Connected':'Disconnected',c:hr.livekit?'var(--green)':'var(--yellow)'}];
+if(sr)rows.push({l:'CPU',v:(sr.cpu?.percent??sr.cpu_percent??'--')+'%'},{l:'RAM',v:(sr.memory?.percent??sr.memory_percent??'--')+'%'},
+{l:'Disk',v:(sr.disk?.percent??sr.disk_percent??'--')+'%'},{l:'Cores',v:sr.cpu?.count??'--'},{l:'Uptime',v:sr.uptime||'--'});
+el.innerHTML=rows.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:8px">
+<span style="font-size:11px;color:var(--text-muted);font-family:var(--mono)">${r.l}</span>
+<span style="font-size:12px;font-weight:600;color:${r.c||'var(--text)'};font-family:var(--mono)">${r.v}</span></div>`).join('')
+}catch{el.innerHTML='<div style="color:var(--crimson);font-size:12px">Backend not reachable</div>'}}
+
+// ── Artifact ──
+function showArt(c){document.getElementById('artBody').innerHTML='<pre>'+esc(c)+'</pre>';document.getElementById('artBox').classList.add('show')}
+function closeArt(){document.getElementById('artBox').classList.remove('show')}
+
+// ── Laser Gate ──
+let laserResolve=null,laserInterval=null,laserProg=0;
+function showLaser(p,b,a){return new Promise(r=>{laserResolve=r;document.getElementById('lPrev').textContent=p||'Unknown';
+document.getElementById('lBefore').textContent=b||'—';document.getElementById('lAfter').textContent=a||'—';
+document.getElementById('laserModal').classList.add('show');document.getElementById('lOk').disabled=true;
+document.getElementById('lProg').style.width='0%';laserProg=0})}
+document.addEventListener('keydown',e=>{if(e.key===' '&&document.getElementById('laserModal').classList.contains('show')){
+e.preventDefault();if(!laserInterval){laserInterval=setInterval(()=>{laserProg+=2;
+document.getElementById('lProg').style.width=Math.min(laserProg,100)+'%';
+if(laserProg>=100){clearInterval(laserInterval);laserInterval=null;document.getElementById('lOk').disabled=false}},30)}}
+if(e.key==='Escape')cancelLaser()});
+document.addEventListener('keyup',e=>{if(e.key===' '){if(laserInterval){clearInterval(laserInterval);laserInterval=null}
+if(laserProg<100){document.getElementById('lProg').style.width='0%';laserProg=0}}});
+function approveLaser(){if(laserResolve)laserResolve(true);document.getElementById('laserModal').classList.remove('show');laserResolve=null;laserProg=0;document.getElementById('lProg').style.width='0%'}
+function cancelLaser(){if(laserResolve)laserResolve(false);document.getElementById('laserModal').classList.remove('show');laserResolve=null;laserProg=0;document.getElementById('lProg').style.width='0%';if(laserInterval){clearInterval(laserInterval);laserInterval=null}}
+
+// ── HUD (Ctrl+Shift+J) ──
+document.addEventListener('keydown',e=>{if(e.ctrlKey&&e.shiftKey&&e.key==='J'){e.preventDefault();toggleHUD()}});
+function toggleHUD(){const h=document.getElementById('hud');h.classList.toggle('show');if(h.classList.contains('show'))setTimeout(()=>document.getElementById('hudInp').focus(),100)}
+function hudSend(){const t=document.getElementById('hudInp').value.trim();if(!t)return;document.getElementById('hud').classList.remove('show');sendText(t)}
+function hudVision(){document.getElementById('hud').classList.remove('show');sendText('screenshot')}
+
+// ── PIP (Standalone Window) ──
+function togglePip(){
+  // Send IPC to main process to create/toggle the standalone PiP window
+  if(window.jarvis && window.jarvis.pip){
+    window.jarvis.pip.toggle();
+  } else {
+    // Fallback: open via window.open
+    window.open('pip_overlay.html', 'jarvis-pip', 'width=480,height=270,alwaysOnTop=yes,frame=no');
+  }
+}
+
+// ── VDI View ──
+let vdiPreviewWs=null;
+async function refreshVdi(){
+  const el=document.getElementById('vdiInfo');
+  el.innerHTML='Loading VDI status...';
+  try{
+    const[hr,vr]=await Promise.all([
+      fetch(B+'/api/health',{signal:AbortSignal.timeout(3000)}).then(r=>r.json()),
+      fetch(B+'/api/wsl/status',{signal:AbortSignal.timeout(3000)}).then(r=>r.json()).catch(()=>null)
+    ]);
+    const rows=[
+      {l:'Backend',v:hr.status||'unknown',c:'var(--green)'},
+      {l:'VDI Display',v:':99 (WSL2)'},
+      {l:'Desktop',v:'XFCE4'},
+      {l:'Stream',v:'WebSocket :8766'},
+    ];
+    if(vr){
+      if(vr.blender)rows.push({l:'Blender',v:vr.blender,c:'var(--green)'});
+      if(vr.apps)rows.push({l:'Apps',v:vr.apps.join(', ')});
+    }
+    el.innerHTML=rows.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:8px">
+    <span style="font-size:11px;color:var(--text-muted);font-family:var(--mono)">${r.l}</span>
+    <span style="font-size:12px;font-weight:600;color:${r.c||'var(--text)'};font-family:var(--mono)">${r.v}</span></div>`).join('');
+
+    // Start live preview if not already streaming
+    startVdiPreview();
+  }catch{el.innerHTML='<div style="color:var(--crimson);font-size:12px">Backend not reachable</div>'}
+}
+
+function startVdiPreview(){
+  const img=document.getElementById('vdiPreview');
+  const ph=document.getElementById('vdiPreviewPh');
+  if(!img||!ph)return;
+  if(vdiPreviewWs&&vdiPreviewWs.readyState===1)return; // already connected
+
+  const urls=['ws://127.0.0.1:8766/ws','ws://127.0.0.1:8000/api/vdi/stream'];
+  let urlIdx=0;
+  function tryConnect(){
+    if(urlIdx>=urls.length){ph.textContent='No VDI stream available';return}
+    try{
+      vdiPreviewWs=new WebSocket(urls[urlIdx]);
+      vdiPreviewWs.onopen=()=>{ph.style.display='none';img.style.display='block'};
+      vdiPreviewWs.onmessage=(ev)=>{
+        try{const d=JSON.parse(ev.data);
+        if(d.type==='frame'&&d.data){img.src='data:image/jpeg;base64,'+d.data}
+        }catch(e){}
+      };
+      vdiPreviewWs.onclose=()=>{setTimeout(()=>{urlIdx++;tryConnect()},2000)};
+      vdiPreviewWs.onerror=()=>{urlIdx++;tryConnect()};
+    }catch(e){urlIdx++;tryConnect()}
+  }
+  tryConnect();
+}
+
+// ── Learning View ──
+async function refreshLearning(){
+  const infoEl=document.getElementById('learningInfo');
+  const prefsEl=document.getElementById('prefsList');
+  const knowEl=document.getElementById('knowledgeList');
+  infoEl.innerHTML='Loading...';
+  try{
+    const[learn,prefs,know]=await Promise.all([
+      fetch(B+'/api/user/learn',{signal:AbortSignal.timeout(3000)}).then(r=>r.json()),
+      fetch(B+'/api/user/preferences',{signal:AbortSignal.timeout(3000)}).then(r=>r.json()),
+      fetch(B+'/api/user/knowledge',{signal:AbortSignal.timeout(3000)}).then(r=>r.json())
+    ]);
+    const stats=[
+      {l:'Conversations',v:learn.conversations_learned||0},
+      {l:'Preferences',v:learn.preferences_tracked||0},
+      {l:'Routines',v:learn.routines_detected||0},
+      {l:'Corrections',v:learn.corrections_analyzed||0},
+      {l:'Knowledge',v:learn.knowledge_entries||0},
+    ];
+    infoEl.innerHTML=stats.map(r=>`<div style="display:flex;justify-content:space-between;padding:6px 12px;background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
+    <span style="color:var(--text-muted)">${r.l}</span><span style="color:var(--green)">${r.v}</span></div>`).join('');
+
+    const prefsArr=Object.entries(prefs.preferences||{});
+    if(prefsArr.length){
+      prefsEl.innerHTML=prefsArr.map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:6px 12px;background:rgba(15,23,42,0.3);border:1px solid var(--border);border-radius:6px;margin-bottom:3px;font-size:11px">
+      <span style="color:var(--text-dim);font-family:var(--mono)">${k}</span>
+      <span style="color:var(--cyan)">${v.value} <span style="color:var(--text-muted)">(${Math.round(v.confidence*100)}%)</span></span></div>`).join('');
+    }else{prefsEl.innerHTML='<div style="color:var(--text-muted);font-size:11px">No preferences learned yet</div>'}
+
+    const knowArr=know.knowledge||[];
+    if(knowArr.length){
+      knowEl.innerHTML=knowArr.slice(0,10).map(k=>`<div style="padding:6px 12px;background:rgba(15,23,42,0.3);border:1px solid var(--border);border-radius:6px;margin-bottom:3px;font-size:11px">
+      <span style="color:var(--green)">${k.entity}</span> <span style="color:var(--text-muted)">→</span> <span style="color:var(--cyan)">${k.value}</span></div>`).join('');
+    }else{knowEl.innerHTML='<div style="color:var(--text-muted);font-size:11px">No knowledge yet</div>'}
+  }catch{infoEl.innerHTML='<div style="color:var(--crimson);font-size:12px">Backend not reachable</div>'}
+}
+
+// ═══ Domain-Specific Template Rendering ═══
+let taskTabs = [];
+let activeTaskId = null;
+
+function renderStructuredResult(data) {
+  const type = data.result_type || data.result_data?.result_type;
+  if (!type) return null;
+  const rd = data.result_data || data;
+  if (type === 'travel') return renderTravelTemplate(rd, data.text);
+  if (type === 'trading') return renderTradingTemplate(rd, data.text);
+  if (type === 'research') return renderResearchTemplate(rd, data.text);
+  return null;
+}
+
+function renderTravelTemplate(rd, fallbackText) {
+  const dest = rd.destination || 'Destination';
+  const dur = rd.duration || '';
+  const group = rd.group_size || '';
+  const budget = rd.budget_per_person || '';
+  const total = rd.total_estimated || '';
+  const highlights = rd.highlights || [];
+  const itinerary = rd.itinerary || [];
+  const hotels = rd.hotels || [];
+  const flights = rd.flights || [];
+  const activities = rd.activities || [];
+  const costs = rd.cost_breakdown || {};
+  const tips = rd.tips || [];
+
+  return `
+  <div class="result-card card-animate">
+    <div class="travel-hero">
+      <div class="travel-dest">${esc(dest)}</div>
+      <div class="travel-meta">
+        <span>📅 ${esc(dur)}</span>
+        <span>👥 ${group} people</span>
+        <span>💰 ${esc(budget)}/person</span>
+        ${total ? `<span>💎 Total: ${esc(total)}</span>` : ''}
+      </div>
+    </div>
+    <div class="travel-tabs" id="travelTabs_${Date.now()}">
+      <div class="travel-tab active" onclick="switchTravelTab(this,'itinerary')">📅 Itinerary</div>
+      <div class="travel-tab" onclick="switchTravelTab(this,'hotels')">🏨 Hotels</div>
+      <div class="travel-tab" onclick="switchTravelTab(this,'flights')">✈️ Flights</div>
+      <div class="travel-tab" onclick="switchTravelTab(this,'activities')">🎯 Activities</div>
+      <div class="travel-tab" onclick="switchTravelTab(this,'budget')">💰 Budget</div>
+    </div>
+    <div class="result-card-body">
+      <div class="travel-panel active" data-panel="itinerary">
+        ${itinerary.length ? `<div class="timeline">${itinerary.map(d => `
+          <div class="timeline-day">
+            <div class="timeline-day-header">
+              <div><span class="timeline-day-num">Day ${d.day}</span> <span class="timeline-day-title">${esc(d.title||'')}</span></div>
+              <span class="timeline-day-loc">${esc(d.location||'')}</span>
+            </div>
+            ${(d.activities||[]).map(a => `<div class="timeline-activity"><span class="act-dot"></span>${esc(a)}</div>`).join('')}
+            ${d.accommodation ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px;font-family:var(--mono)">🛏 ${esc(d.accommodation)}</div>` : ''}
+          </div>`).join('')}</div>` : '<div style="color:var(--text-muted);font-size:11px">No itinerary available</div>'}
+        ${highlights.length ? `<div style="margin-top:12px"><div style="font-size:10px;color:var(--cyan);font-family:var(--mono);margin-bottom:6px">HIGHLIGHTS</div>${highlights.map(h => `<div class="timeline-activity"><span class="act-dot"></span>${esc(h)}</div>`).join('')}</div>` : ''}
+      </div>
+      <div class="travel-panel" data-panel="hotels">
+        <div class="card-grid">${hotels.map(h => `
+          <div class="hotel-card">
+            <div class="hotel-name">${esc(h.name||'')}</div>
+            <div class="hotel-stars">${'★'.repeat(h.stars||5)}</div>
+            <div class="hotel-detail">📍 ${esc(h.location||'')}</div>
+            <div class="hotel-detail">Type: ${esc(h.type||'hotel')}</div>
+            ${(h.highlights||[]).forEach(hl => `<div class="hotel-detail">• ${esc(hl)}</div>`).join('')}
+            <div class="hotel-price">${esc(h.price_per_night||'')}/night</div>
+            <div class="action-row">
+              <button class="action-btn primary" onclick="sendText('open ${esc(h.name||'')} website')">Book Now</button>
+              <button class="action-btn secondary" onclick="sendText('search for ${esc(h.name||'')} reviews')">Reviews</button>
+            </div>
+          </div>`).join('')}</div>
+      </div>
+      <div class="travel-panel" data-panel="flights">
+        <div class="card-grid">${flights.map(f => `
+          <div class="flight-card">
+            <div class="flight-route">${esc(f.from||'')} <span class="arrow">→</span> ${esc(f.to||'')}</div>
+            <div class="flight-detail">✈️ ${esc(f.airline||'')}</div>
+            <div class="flight-detail">⏱ ${esc(f.duration||'')} · ${f.stops===0?'Direct':f.stops+' stop(s)'}</div>
+            <div class="flight-price">${esc(f.price||'')}</div>
+            <div class="action-row">
+              <button class="action-btn primary" onclick="sendText('search flights from ${esc(f.from||'')} to ${esc(f.to||'')}')">Search Flights</button>
+            </div>
+          </div>`).join('')}</div>
+      </div>
+      <div class="travel-panel" data-panel="activities">
+        <div class="card-grid">${activities.map(a => `
+          <div class="hotel-card">
+            <div class="hotel-name">${esc(a.name||'')}</div>
+            <div class="hotel-detail">📍 ${esc(a.location||'')}</div>
+            <div class="hotel-detail">⏱ ${esc(a.duration||'')} · ${esc(a.type||'')}</div>
+            <div class="hotel-price">${esc(a.price||'')}</div>
+            <div class="action-row">
+              <button class="action-btn primary" onclick="sendText('book ${esc(a.name||'')} in ${esc(a.location||'')}')">Book Activity</button>
+            </div>
+          </div>`).join('')}</div>
+      </div>
+      <div class="travel-panel" data-panel="budget">
+        ${Object.keys(costs).length ? `
+        <div class="budget-grid">
+          ${Object.entries(costs).filter(([k])=>k!=='total').map(([k,v]) => `
+          <div class="budget-item">
+            <div class="budget-label">${esc(k)}</div>
+            <div class="budget-value">${esc(v)}</div>
+          </div>`).join('')}
+        </div>
+        ${costs.total ? `<div style="text-align:center;padding:12px;background:rgba(0,255,102,0.05);border:1px solid rgba(0,255,102,0.1);border-radius:8px;margin-top:8px">
+          <div style="font-size:10px;color:var(--text-muted);font-family:var(--mono);margin-bottom:4px">TOTAL ESTIMATED</div>
+          <div style="font-size:24px;font-weight:700;color:var(--green);font-family:var(--mono)">${esc(costs.total)}</div>
+        </div>` : ''}` : '<div style="color:var(--text-muted);font-size:11px">Budget details pending</div>'}
+        ${tips.length ? `<div style="margin-top:16px"><div style="font-size:10px;color:var(--cyan);font-family:var(--mono);margin-bottom:8px">TIPS</div>${tips.map(t => `<div class="timeline-activity"><span class="act-dot"></span>${esc(t)}</div>`).join('')}</div>` : ''}
+      </div>
+      <div class="vdi-transfer">
+        <div class="vdi-thumb"><img id="vdiThumbTravel" src="" alt="" onerror="this.style.display='none'"></div>
+        <div class="vdi-label">VDI: Searching for bookings...</div>
+        <button class="vdi-transfer-btn" onclick="sendText('transfer app to my desktop')">Pop to Desktop</button>
+      </div>
+      <div class="action-row">
+        <button class="action-btn primary" onclick="sendText('book this holiday to ${esc(dest)}')">📦 Book Entire Trip</button>
+        <button class="action-btn secondary" onclick="sendText('compare prices for ${esc(dest)} holiday')">🔍 Compare Prices</button>
+        <button class="action-btn secondary" onclick="sendText('export this itinerary')">📄 Export PDF</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function switchTravelTab(el, panel) {
+  const tabs = el.parentElement;
+  const card = tabs.parentElement;
+  tabs.querySelectorAll('.travel-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  card.querySelectorAll('.travel-panel').forEach(p => p.classList.remove('active'));
+  const target = card.querySelector(`[data-panel="${panel}"]`);
+  if (target) target.classList.add('active');
+}
+
+function renderTradingTemplate(rd, fallbackText) {
+  const name = rd.name || rd.ticker || 'Asset';
+  const price = rd.current_price || '';
+  const change = rd.change_24h || '';
+  const dir = rd.change_direction || 'neutral';
+  const rec = rd.recommendation || 'HOLD';
+  const conf = rd.confidence || 0;
+  const metrics = rd.key_metrics || [];
+  const news = rd.news || [];
+  const targets = rd.price_targets || {};
+
+  return `
+  <div class="result-card card-animate">
+    <div class="result-card-header">
+      <div class="result-card-title">📈 ${esc(name)}</div>
+      <div class="result-card-badge" style="background:rgba(6,182,212,0.1);color:var(--cyan)">TRADING</div>
+    </div>
+    <div class="result-card-body">
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Current Price</div>
+          <div class="kpi-value ${dir==='up'?'up':dir==='down'?'down':'neutral'}">${esc(price)}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">24h Change</div>
+          <div class="kpi-value ${dir==='up'?'up':'down'}">${esc(change)}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Recommendation</div>
+          <div class="recommendation-badge ${rec.toLowerCase()}">${rec}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Confidence</div>
+          <div class="kpi-value neutral">${Math.round(conf*100)}%</div>
+        </div>
+      </div>
+      ${metrics.length ? `<div style="margin-bottom:16px"><div style="font-size:10px;color:var(--cyan);font-family:var(--mono);margin-bottom:8px">KEY METRICS</div>
+      <div class="kpi-grid">${metrics.map(m => `<div class="kpi-card"><div class="kpi-label">${esc(m.label)}</div><div class="kpi-value neutral">${esc(m.value)}</div></div>`).join('')}</div></div>` : ''}
+      ${targets.low ? `<div style="margin-bottom:16px"><div style="font-size:10px;color:var(--cyan);font-family:var(--mono);margin-bottom:8px">PRICE TARGETS</div>
+      <div class="budget-grid">
+        <div class="budget-item"><div class="budget-label">Low</div><div class="budget-value" style="color:var(--crimson)">${esc(targets.low)}</div></div>
+        <div class="budget-item"><div class="budget-label">Mid</div><div class="budget-value">${esc(targets.mid)}</div></div>
+        <div class="budget-item"><div class="budget-label">High</div><div class="budget-value" style="color:var(--green)">${esc(targets.high)}</div></div>
+      </div></div>` : ''}
+      <div class="vdi-transfer">
+        <div class="vdi-thumb"><img id="vdiThumbTrading" src="" alt="" onerror="this.style.display='none'"></div>
+        <div class="vdi-label">VDI: Market analysis running...</div>
+        <button class="vdi-transfer-btn" onclick="sendText('transfer app to my desktop')">Pop to Desktop</button>
+      </div>
+      <div class="action-row">
+        <button class="action-btn primary" onclick="sendText('buy ${esc(name)}')">💰 Buy Now</button>
+        <button class="action-btn secondary" onclick="sendText('set price alert for ${esc(name)}')">🔔 Set Alert</button>
+        <button class="action-btn secondary" onclick="sendText('view ${esc(name)} chart')">📊 View Chart</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderResearchTemplate(rd, fallbackText) {
+  const topic = rd.topic || 'Research';
+  const summary = rd.executive_summary || '';
+  const findings = rd.key_findings || [];
+  const sections = rd.sections || [];
+  const recs = rd.recommendations || [];
+  const sources = rd.sources || [];
+
+  return `
+  <div class="result-card card-animate">
+    <div class="result-card-header">
+      <div class="result-card-title">📋 ${esc(topic)}</div>
+      <div class="result-card-badge" style="background:rgba(255,179,0,0.1);color:var(--yellow)">RESEARCH</div>
+    </div>
+    <div class="result-card-body">
+      ${summary ? `<div class="exec-summary"><h4>Executive Summary</h4><p>${esc(summary)}</p></div>` : ''}
+      ${findings.length ? `<div style="margin-bottom:16px"><div style="font-size:10px;color:var(--cyan);font-family:var(--mono);margin-bottom:8px">KEY FINDINGS</div>
+      <ul class="findings-list">${findings.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : ''}
+      ${sections.length ? sections.map(s => `
+        <div style="margin-bottom:16px">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">${esc(s.title)}</div>
+          <div style="font-size:11px;color:var(--text-dim);line-height:1.6;margin-bottom:8px">${esc(s.content||'')}</div>
+          ${(s.key_points||[]).length ? `<ul class="findings-list">${s.key_points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+        </div>`).join('') : ''}
+      ${recs.length ? `<div style="margin-bottom:16px"><div style="font-size:10px;color:var(--cyan);font-family:var(--mono);margin-bottom:8px">RECOMMENDATIONS</div>
+      <ul class="findings-list">${recs.map(r => `<li>${esc(r)}</li>`).join('')}</ul></div>` : ''}
+      <div class="vdi-transfer">
+        <div class="vdi-thumb"><img id="vdiThumbResearch" src="" alt="" onerror="this.style.display='none'"></div>
+        <div class="vdi-label">VDI: Research in progress...</div>
+        <button class="vdi-transfer-btn" onclick="sendText('transfer app to my desktop')">Pop to Desktop</button>
+      </div>
+      <div class="action-row">
+        <button class="action-btn primary" onclick="sendText('deep dive on ${esc(topic)}')">🔍 Deep Dive</button>
+        <button class="action-btn secondary" onclick="sendText('export ${esc(topic)} report')">📄 Export Report</button>
+        <button class="action-btn secondary" onclick="sendText('find more sources on ${esc(topic)}')">📚 More Sources</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Auto-focus
+setTimeout(()=>inp?.focus(),200);
+</script>
+</body>
+</html>

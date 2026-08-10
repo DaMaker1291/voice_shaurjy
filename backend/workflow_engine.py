@@ -7,7 +7,7 @@ import time
 import threading
 from datetime import datetime
 from collections import defaultdict
-from groq_agent import generate as groq_generate
+from hyperlocal_ai import get_hyperlocal
 
 _WORKFLOW_DIR = os.path.join(os.path.dirname(__file__), ".workflow_data")
 os.makedirs(_WORKFLOW_DIR, exist_ok=True)
@@ -158,7 +158,7 @@ Format:
   ]
 }}"""
 
-    raw = groq_generate(prompt + "\n\nONLY return valid JSON. No markdown, no code fences, no explanation.", max_tokens=1000)
+    raw = get_hyperlocal("workflow")._generator.generate(prompt + "\n\nONLY return valid JSON. No markdown, no code fences, no explanation.", max_tokens=1000)
     raw = raw.strip()
     # Strip markdown code fences if present
     raw = re.sub(r'^```(?:json)?\s*', '', raw)
@@ -166,7 +166,7 @@ Format:
     m = re.search(r'\{.*\}', raw, re.DOTALL)
     if not m:
         # Retry once with simpler prompt
-        raw2 = groq_generate(f"Return ONLY a JSON workflow for: {user_input}\n\nFormat: {{\"workflow_name\":\"...\",\"description\":\"...\",\"steps\":[{{\"id\":\"step_1\",\"action\":\"ask\",\"params\":{{\"question\":\"...\",\"field\":\"info\"}},\"depends_on\":[],\"label\":\"...\",\"retry_count\":2}}]}}", max_tokens=1000)
+        raw2 = get_hyperlocal("workflow")._generator.generate(f"Return ONLY a JSON workflow for: {user_input}\n\nFormat: {{\"workflow_name\":\"...\",\"description\":\"...\",\"steps\":[{{\"id\":\"step_1\",\"action\":\"ask\",\"params\":{{\"question\":\"...\",\"field\":\"info\"}},\"depends_on\":[],\"label\":\"...\",\"retry_count\":2}}]}}", max_tokens=1000)
         raw2 = raw2.strip()
         raw2 = re.sub(r'^```(?:json)?\s*', '', raw2)
         raw2 = re.sub(r'\s*```$', '', raw2)
@@ -318,7 +318,7 @@ class WorkflowEngine:
             elif action == "groq_generate":
                 prompt_template = resolved_params.get("prompt_template", "Generate: {query}")
                 prompt = prompt_template.format(**state)
-                result = groq_generate(prompt, max_tokens=300)
+                result = get_hyperlocal("workflow")._generator.generate(prompt, max_tokens=300)
             elif action == "open_url":
                 from actions import _ps
                 url = resolved_params.get("url", "https://google.com")

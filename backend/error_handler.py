@@ -20,6 +20,10 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
         correlation_id = str(uuid.uuid4())[:8]
         start_time = time.time()
 
+        # WebSocket upgrade requests must not be intercepted by BaseHTTPMiddleware
+        if request.headers.get("upgrade", "").lower() == "websocket":
+            return await call_next(request)
+
         try:
             response = await call_next(request)
             return response

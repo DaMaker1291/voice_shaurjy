@@ -20,6 +20,14 @@ os.makedirs(BROWSER_DATA_DIR, exist_ok=True)
 
 PAGE_TIMEOUT = 20000
 
+# Web app URL/label mappings loaded from web_apps.json at runtime
+_WEB_APPS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web_apps.json")
+try:
+    with open(_WEB_APPS_PATH, "r", encoding="utf-8") as _f:
+        WEB_APPS = {k.lower(): v for k, v in json.load(_f).get("apps", {}).items()}
+except (FileNotFoundError, json.JSONDecodeError):
+    WEB_APPS = {}
+
 _browser = None
 _context = None
 _page = None
@@ -398,27 +406,14 @@ def app_open(name: str) -> str:
     global _current_app
     name = name.lower().strip()
 
-    # Web apps only (no native apps on HF Space)
-    WEB_APPS = {
-        "whatsapp": ("https://web.whatsapp.com", "WhatsApp Web"),
-        "teams": ("https://teams.microsoft.com", "Microsoft Teams"),
-        "gmail": ("https://mail.google.com", "Gmail"),
-        "outlook": ("https://outlook.live.com", "Outlook"),
-        "calendar": ("https://calendar.google.com", "Google Calendar"),
-        "maps": ("https://maps.google.com", "Google Maps"),
-        "youtube": ("https://youtube.com", "YouTube"),
-        "chatgpt": ("https://chat.openai.com", "ChatGPT"),
-        "claude": ("https://claude.ai", "Claude"),
-        "github": ("https://github.com", "GitHub"),
-        "notion": ("https://notion.so", "Notion"),
-        "drive": ("https://drive.google.com", "Google Drive"),
-        "docs": ("https://docs.google.com", "Google Docs"),
-    }
-    url, label = WEB_APPS.get(name, (None, None))
+    # Web apps loaded from web_apps.json at runtime (no hardcoded values)
+    entry = WEB_APPS.get(name)
+    url = entry.get("url") if isinstance(entry, dict) else None
+    label = entry.get("label") if isinstance(entry, dict) else None
     if url:
         navigate(url)
         _current_app = name
-        result = label + " opened"
+        result = (label or name) + " opened"
         # Check for WhatsApp QR
         if name == "whatsapp":
             qr_b64 = check_qr_on_screen()

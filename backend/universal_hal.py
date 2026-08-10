@@ -9,7 +9,7 @@ ONE abstraction layer that translates any device into:
   {
     "device_id": "vacuum_living_room_0x4F",
     "device_type": "ROBOTIC_CLEANER",
-    "network_address": "192.168.1.45",
+    "network_address": "<ip_or_mac>",
     "protocol": "LOCAL_TUYA_UDP",
     "state": { "power": "OFF", "battery": 92, "suction": "NORMAL" },
     "normalized_actions": {

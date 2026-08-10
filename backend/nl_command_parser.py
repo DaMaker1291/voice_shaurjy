@@ -28,77 +28,24 @@ class ParsedCommand:
 
 
 # ── Intent Patterns (ML-like regex with context awareness) ────
+# All vocabulary loaded from nl_intents.json at runtime — no hardcoded values.
 
-DEVICE_TYPES = {
-    "light": ["light", "lamp", "bulb", "led", "strip", "hue", "lifx", "wled"],
-    "switch": ["switch", "plug", "outlet", "relay", "power strip"],
-    "thermostat": ["thermostat", "temperature", "heating", "cooling", "hvac", "ac", "air conditioner", "heater"],
-    "lock": ["lock", "deadbolt", "door lock", "smart lock", "august", "yale"],
-    "camera": ["camera", "cam", "doorbell", "ring", "nest cam", "security cam", "webcam"],
-    "vacuum": ["vacuum", "roborock", "roomba", "sweep", "mop", "cleaning robot"],
-    "speaker": ["speaker", "echo", "alexa", "google home", "sonos", "play speaker", "music speaker"],
-    "media_player": ["tv", "television", "apple tv", "roku", "chromecast", "fire tv", "nvidia shield"],
-    "fan": ["fan", "ceiling fan", "desk fan", "exhaust fan"],
-    "sensor": ["sensor", "temperature sensor", "humidity sensor", "motion sensor", "door sensor"],
-    "blind": ["blind", "shades", "curtain", "shutter", "roller", "towel"],
-    "garage": ["garage", "garage door", "gate"],
-    "hub": ["hub", "bridge", "gateway", "coordinator"],
-}
+_INTENT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nl_intents.json")
 
-ACTIONS = {
-    "turn_on": ["turn on", "switch on", "enable", "activate", "start", "power on", "lights on"],
-    "turn_off": ["turn off", "switch off", "disable", "deactivate", "stop", "power off", "lights off"],
-    "toggle": ["toggle", "flip", "switch"],
-    "set_brightness": ["brighten", "dim", "set brightness", "brightness to", "make it brighter", "make it darker", "set to percent"],
-    "set_color": ["set color", "change color to", "make it", "color to", "change to red", "change to blue", "set to green"],
-    "set_temperature": ["set temperature", "set temp to", "set to degrees", "set to ", "set heating to", "set cooling to", "temperature to"],
-    "lock": ["lock", "lock the", "engage lock"],
-    "unlock": ["unlock", "unlock the", "disengage lock"],
-    "open": ["open", "raise", "lift"],
-    "close": ["close", "lower", "shut"],
-    "status": ["status", "what is", "how is", "report", "check"],
-    "play": ["play", "start playing", "resume"],
-    "pause": ["pause", "stop playing", "halt"],
-    "next": ["next track", "skip", "next song"],
-    "prev": ["previous track", "previous song", "go back"],
-    "set_volume": ["set volume", "volume to", "volume up", "volume down", "mute", "unmute"],
-    "snapshot": ["take a picture", "snapshot", "capture", "take a photo"],
-    "start_clean": ["clean", "start cleaning", "vacuum", "start vacuuming"],
-    "dock": ["dock", "return to dock", "go home", "return home"],
-}
+def _load_intent_config() -> Dict[str, Any]:
+    """Load NL intent vocabulary from the JSON config file."""
+    try:
+        with open(_INTENT_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
-PARAM_PATTERNS = {
-    "brightness": [
-        (r'(?:to|at)\s+(\d{1,3})\s*%', 'percent'),
-        (r'(?:to|at)\s+(\d{1,3})', 'percent'),
-        (r'(\d{1,3})\s*percent', 'percent'),
-        (r'max(?:imum)?|full', 'max'),
-        (r'min(?:imum)?|low', 'min'),
-    ],
-    "color": [
-        (r'\b(red|blue|green|yellow|purple|pink|orange|white|warm white|cool white|cyan|magenta|lavender|teal|amber)\b', 'color_name'),
-    ],
-    "temperature": [
-        (r'(\d{2,3})\s*(?:degrees?|°)', 'value'),
-        (r'to\s+(\d{2,3})', 'value'),
-    ],
-    "volume": [
-        (r'(?:to|at)\s+(\d{1,3})\s*%', 'percent'),
-        (r'(\d{1,3})\s*percent', 'percent'),
-        (r'up', 'up'),
-        (r'down', 'down'),
-        (r'mute', 'mute'),
-        (r'unmute', 'unmute'),
-    ],
-}
+_intent_cfg = _load_intent_config()
 
-COLOR_MAP = {
-    "red": [255, 0, 0], "blue": [0, 0, 255], "green": [0, 255, 0],
-    "yellow": [255, 255, 0], "purple": [128, 0, 255], "pink": [255, 105, 180],
-    "orange": [255, 165, 0], "white": [255, 255, 255], "warm white": [255, 180, 100],
-    "cool white": [200, 220, 255], "cyan": [0, 255, 255], "magenta": [255, 0, 255],
-    "lavender": [230, 190, 255], "teal": [0, 128, 128], "amber": [255, 191, 0],
-}
+DEVICE_TYPES: Dict[str, List[str]] = _intent_cfg.get("device_types", {})
+ACTIONS: Dict[str, List[str]] = _intent_cfg.get("actions", {})
+PARAM_PATTERNS: Dict[str, List[Any]] = _intent_cfg.get("param_patterns", {})
+COLOR_MAP: Dict[str, List[int]] = _intent_cfg.get("color_map", {})
 
 
 def parse_command(text: str, devices: Optional[List[Dict]] = None) -> ParsedCommand:
@@ -129,14 +76,9 @@ def parse_command(text: str, devices: Optional[List[Dict]] = None) -> ParsedComm
 
 
 def _parse_with_llm(text: str) -> Optional[ParsedCommand]:
-    """Use Groq LLM for complex command parsing."""
+    """Use local LLM for complex command parsing."""
     try:
-        from groq import Groq
-        api_key = os.getenv("GROQ_API_KEY", "")
-        if not api_key:
-            return None
-
-        client = Groq(api_key=api_key)
+        from groq_agent import call as llm_call
         system = """You are a device command parser. Given a natural language command, extract:
 - intent: one of [turn_on, turn_off, toggle, set_brightness, set_color, set_temperature, lock, unlock, open, close, status, play, pause, next, prev, set_volume, snapshot, start_clean, dock]
 - device_type: one of [light, switch, thermostat, lock, camera, vacuum, speaker, media_player, fan, sensor, blind, garage]
@@ -145,18 +87,13 @@ def _parse_with_llm(text: str) -> Optional[ParsedCommand]:
 
 Return ONLY valid JSON. If the input is not a device command, return {"intent": "chat", "confidence": 0.0}."""
 
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": text}
-            ],
+        content = llm_call(
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": text}],
+            max_tokens=256,
             temperature=0.1,
-            max_tokens=200,
-            response_format={"type": "json_object"},
         )
-
-        content = response.choices[0].message.content
+        if not content:
+            return None
         data = json.loads(content)
 
         if data.get("intent") == "chat":

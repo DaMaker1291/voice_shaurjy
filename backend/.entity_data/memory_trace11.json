@@ -1,0 +1,68 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:42:10.362778"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:42:10.591666"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:42:10.253262"
+    },
+    "user_name": {
+      "value": "Shaurjesh Basu",
+      "updated": "2026-07-29T17:42:10.364292"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:42:10.251251"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "**Welcome, Shaurjesh Basu!**\n\n\u2713 web_search: Searching for \"Shaurjesh Basu information\"...",
+      "action": "",
+      "timestamp": "2026-07-29T17:42:16.642028"
+    },
+    {
+      "query": "whatsapp my name?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:42:21.381983"
+    },
+    {
+      "query": "whatsapp my name?",
+      "response": "Opening whatsapp_open in your browser...",
+      "action": "whatsapp_open",
+      "timestamp": "2026-07-29T17:42:21.500384"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:42:21.500384",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:42:10.238238"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T17:42:21.497547"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

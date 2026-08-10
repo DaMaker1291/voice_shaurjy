@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS — The Autonomous Computer</title>
+<style>
+  :root {
+    --bg-dark: #05070a;
+    --card-bg: rgba(13, 17, 23, 0.92);
+    --border: rgba(0, 255, 102, 0.2);
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --neon-green: #00FF66;
+    --neon-amber: #FFB300;
+    --neon-red: #FF3333;
+    --neon-blue: #00B4D8;
+    --text-main: #f0f6fc;
+    --text-muted: #8b949e;
+    --font-mono: 'JetBrains Mono', 'Segoe UI Mono', SFMono-Regular, Consolas, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+  
+  body {
+    background: var(--bg-dark);
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 255, 102, 0.15);
+    border-radius: 8px;
+  }
+
+  /* Header Bar */
+  .titlebar {
+    height: 32px;
+    background: linear-gradient(180deg, rgba(20, 26, 35, 0.95), rgba(10, 14, 20, 0.95));
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px;
+    -webkit-app-region: drag;
+    cursor: grab;
+    flex-shrink: 0;
+  }
+
+  .titlebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--text-main);
+  }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: rgba(0, 255, 102, 0.12);
+    border: 1px solid rgba(0, 255, 102, 0.3);
+    color: var(--neon-green);
+    letter-spacing: 0.08em;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--neon-green);
+    box-shadow: 0 0 8px var(--neon-green);
+    animation: pulse 1.5s infinite ease-in-out;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+  }
+
+  .window-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    -webkit-app-region: no-drag;
+  }
+
+  .btn-close {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    background: rgba(255, 51, 51, 0.15);
+    border: 1px solid rgba(255, 51, 51, 0.3);
+    color: var(--neon-red);
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+  .btn-close:hover { background: var(--neon-red); color: #000; }
+
+  /* Content Body */
+  .container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    gap: 8px;
+    overflow-y: auto;
+    background: radial-gradient(circle at top right, rgba(0, 255, 102, 0.03), transparent 60%);
+  }
+
+  /* Goal Input / Display Box */
+  .goal-box {
+    background: rgba(18, 24, 33, 0.8);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .goal-icon { color: var(--neon-green); font-size: 14px; }
+  
+  .goal-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .goal-input::placeholder { color: var(--text-muted); }
+
+  /* Live Computer Frame */
+  .computer-frame {
+    background: #000;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .computer-header {
+    background: rgba(15, 20, 28, 0.95);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--text-muted);
+  }
+
+  .app-sequence {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--neon-blue);
+    font-weight: 600;
+  }
+
+  .app-sequence .arrow { color: var(--text-muted); font-weight: normal; }
+
+  .canvas-wrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #020408;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #viewportCanvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .mode-indicator {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .mode-indicator.interactive {
+    background: rgba(255, 179, 0, 0.2);
+    border-color: rgba(255, 179, 0, 0.4);
+    color: var(--neon-amber);
+  }
+
+  /* Section Title */
+  .section-title {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-top: 2px;
+    margin-bottom: 2px;
+  }
+
+  /* Currently Section */
+  .currently-box {
+    background: rgba(18, 24, 33, 0.6);
+    border: 1px solid var(--border-subtle);
+    border-left: 2px solid var(--neon-green);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-main);
+  }
+
+  .active-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--neon-green);
+    box-shadow: 0 0 6px var(--neon-green);
+  }
+
+  /* Progress Checklist */
+  .progress-list {
+    background: rgba(18, 24, 33, 0.6);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 90px;
+    overflow-y: auto;
+  }
+
+  .step-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9px;
+    color: var(--text-muted);
+  }
+
+  .step-item.completed { color: var(--text-main); }
+  .step-item.active { color: var(--neon-green); font-weight: 600; }
+
+  .step-icon.done { color: var(--neon-green); }
+  .step-icon.active { color: var(--neon-green); animation: pulse 1.2s infinite; }
+  .step-icon.pending { color: var(--text-muted); }
+
+  /* Control Actions Bar */
+  .controls-bar {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 4px;
+  }
+
+  .btn-action {
+    flex: 1;
+    padding: 6px 0;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .btn-action:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .btn-pause { border-color: rgba(255, 179, 0, 0.3); color: var(--neon-amber); }
+  .btn-pause:hover { background: rgba(255, 179, 0, 0.15); }
+
+  .btn-control { border-color: rgba(0, 255, 102, 0.3); color: var(--neon-green); }
+  .btn-control:hover { background: rgba(0, 255, 102, 0.15); }
+
+  .btn-control.active {
+    background: rgba(255, 179, 0, 0.2);
+    border-color: rgba(255, 179, 0, 0.5);
+    color: var(--neon-amber);
+  }
+
+  .btn-stop { border-color: rgba(255, 51, 51, 0.3); color: var(--neon-red); }
+  .btn-stop:hover { background: rgba(255, 51, 51, 0.15); }
+</style>
+</head>
+<body>
+
+  <!-- Title Bar -->
+  <div class="titlebar">
+    <div class="titlebar-brand">
+      <span>JARVIS</span>
+      <div class="status-badge" id="statusBadge">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">WORKING</span>
+      </div>
+    </div>
+    <div class="window-controls">
+      <button class="btn-close" id="btnClose" title="Close PIP">&times;</button>
+    </div>
+  </div>
+
+  <!-- Content Container -->
+  <div class="container">
+    <!-- Goal Input / Objective -->
+    <div class="goal-box">
+      <span class="goal-icon">🎯</span>
+      <input type="text" class="goal-input" id="goalInput" value="Build a landing page for my new business." placeholder="Give JARVIS a goal..." />
+    </div>
+
+    <!-- Live Computer Frame -->
+    <div class="computer-frame">
+      <div class="computer-header">
+        <span>LIVE JARVIS COMPUTER</span>
+        <div class="app-sequence" id="appSequence">
+          <span>Chrome</span> <span class="arrow">→</span>
+          <span>VS Code</span> <span class="arrow">→</span>
+          <span>Terminal</span> <span class="arrow">→</span>
+          <span>Chrome</span>
+        </div>
+      </div>
+      <div class="canvas-wrapper">
+        <canvas id="viewportCanvas" width="640" height="360"></canvas>
+        <div class="mode-indicator" id="modeIndicator">LIVE WORKSPACE</div>
+      </div>
+    </div>
+
+    <!-- Currently Section -->
+    <div class="section-title">CURRENTLY</div>
+    <div class="currently-box">
+      <div class="active-dot"></div>
+      <span id="currentlyText">Creating website components</span>
+    </div>
+
+    <!-- Progress Section -->
+    <div class="section-title">PROGRESS</div>
+    <div class="progress-list" id="progressList">
+      <div class="step-item completed">
+        <span class="step-icon done">✓</span>
+        <span>Research</span>
+      </div>
+      <div class="step-item completed">
+        <span class="step-icon done">✓</span>
+        <span>Project setup</span>
+      </div>
+      <div class="step-item active">
+        <span class="step-icon active">●</span>
+        <span>Website development</span>
+      </div>
+      <div class="step-item">
+        <span class="step-icon pending">○</span>
+        <span>Testing</span>
+      </div>
+      <div class="step-item">
+        <span class="step-icon pending">○</span>
+        <span>Deployment</span>
+      </div>
+    </div>
+
+    <!-- Control Actions -->
+    <div class="controls-bar">
+      <button class="btn-action btn-pause" id="btnPause">PAUSE</button>
+      <button class="btn-action btn-control" id="btnControl">TAKE CONTROL</button>
+      <button class="btn-action btn-stop" id="btnStop">STOP</button>
+    </div>
+  </div>
+
+<script>
+  const canvas = document.getElementById('viewportCanvas');
+  const ctx = canvas.getContext('2d');
+  const goalInput = document.getElementById('goalInput');
+  const statusBadge = document.getElementById('statusBadge');
+  const statusText = document.getElementById('statusText');
+  const currentlyText = document.getElementById('currentlyText');
+  const progressList = document.getElementById('progressList');
+  const appSequence = document.getElementById('appSequence');
+  const btnPause = document.getElementById('btnPause');
+  const btnControl = document.getElementById('btnControl');
+  const btnStop = document.getElementById('btnStop');
+  const modeIndicator = document.getElementById('modeIndicator');
+  const btnClose = document.getElementById('btnClose');
+
+  let ws = null;
+  let isPaused = false;
+  let isInteractive = false;
+  let activeMissionId = null;
+
+  const STREAM_URLS = [
+    'ws://127.0.0.1:8000/api/workspace/ws/stream?workspace_id=default&fps=15&quality=70',
+    'ws://127.0.0.1:8766/ws',
+    'ws://127.0.0.1:8000/api/pip/ws/stream?session_id=pip_main'
+  ];
+  let urlIndex = 0;
+
+  function connectStream() {
+    if (urlIndex >= STREAM_URLS.length) {
+      urlIndex = 0;
+    }
+    const url = STREAM_URLS[urlIndex];
+    try {
+      ws = new WebSocket(url);
+      ws.binaryType = 'blob';
+
+      ws.onopen = () => {
+        statusText.textContent = 'WORKING';
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          if (e.data instanceof Blob) {
+            createImageBitmap(e.data).then(bmp => {
+              ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+              bmp.close();
+            }).catch(() => {});
+          } else {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'frame' && msg.data) {
+              const img = new Image();
+              img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              img.src = 'data:image/jpeg;base64,' + msg.data;
+            } else if (msg.type === 'status' || msg.type === 'mission_event') {
+              updateMissionUI(msg);
+            }
+          }
+        } catch(err) {}
+      };
+
+      ws.onerror = () => {
+        urlIndex++;
+        setTimeout(connectStream, 2000);
+      };
+
+      ws.onclose = () => {
+        urlIndex = (urlIndex + 1) % STREAM_URLS.length;
+        setTimeout(connectStream, 3000);
+      };
+    } catch(err) {
+      setTimeout(connectStream, 3000);
+    }
+  }
+
+  function updateMissionUI(msg) {
+    if (msg.missions && msg.missions.length > 0) {
+      const m = msg.missions[msg.missions.length - 1];
+      activeMissionId = m.id;
+      if (m.objective) goalInput.value = m.objective;
+      if (m.current_action) currentlyText.textContent = m.current_action;
+
+      if (m.status === 'paused') {
+        statusText.textContent = 'PAUSED';
+        statusBadge.style.borderColor = 'rgba(255, 179, 0, 0.4)';
+        statusBadge.style.color = 'var(--neon-amber)';
+        btnPause.textContent = 'RESUME';
+      } else {
+        statusText.textContent = 'WORKING';
+        statusBadge.style.borderColor = 'rgba(0, 255, 102, 0.3)';
+        statusBadge.style.color = 'var(--neon-green)';
+        btnPause.textContent = 'PAUSE';
+      }
+
+      if (m.steps && m.steps.length > 0) {
+        renderSteps(m.steps);
+      }
+    }
+  }
+
+  function renderSteps(steps) {
+    progressList.innerHTML = '';
+    steps.forEach(s => {
+      const div = document.createElement('div');
+      const isCompleted = s.status === 'completed';
+      const isActive = s.status === 'running' || s.status === 'executing';
+      
+      div.className = `step-item ${isCompleted ? 'completed' : ''} ${isActive ? 'active' : ''}`;
+      div.innerHTML = `
+        <span class="step-icon ${isCompleted ? 'done' : isActive ? 'active' : 'pending'}">
+          ${isCompleted ? '✓' : isActive ? '●' : '○'}
+        </span>
+        <span>${s.description || s.action}</span>
+      `;
+      progressList.appendChild(div);
+    });
+  }
+
+  // Interactive Control Override
+  btnControl.addEventListener('click', () => {
+    isInteractive = !isInteractive;
+    if (isInteractive) {
+      btnControl.textContent = 'RETURN TO JARVIS';
+      btnControl.classList.add('active');
+      modeIndicator.textContent = 'HUMAN TAKEOVER';
+      modeIndicator.classList.add('interactive');
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'pause' }));
+      }
+    } else {
+      btnControl.textContent = 'TAKE CONTROL';
+      btnControl.classList.remove('active');
+      modeIndicator.textContent = 'LIVE WORKSPACE';
+      modeIndicator.classList.remove('interactive');
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'resume' }));
+      }
+    }
+  });
+
+  // Canvas Click & Keyboard Transmission when in Manual Control
+  canvas.addEventListener('click', (e) => {
+    if (!isInteractive || !ws || ws.readyState !== WebSocket.OPEN) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 1920);
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 1080);
+    ws.send(JSON.stringify({ cmd: 'click', x, y, button: e.button === 2 ? 3 : 1 }));
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (!isInteractive || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (e.key === 'Enter') ws.send(JSON.stringify({ cmd: 'key', key: 'Return' }));
+    else if (e.key.length === 1) ws.send(JSON.stringify({ cmd: 'type', text: e.key }));
+  });
+
+  // Pause / Resume
+  btnPause.addEventListener('click', async () => {
+    isPaused = !isPaused;
+    const endpoint = isPaused ? '/api/workspace/mission/pause' : '/api/workspace/mission/resume';
+    if (activeMissionId) {
+      try {
+        await fetch(`http://127.0.0.1:8000${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mission_id: activeMissionId })
+        });
+      } catch(err) {}
+    }
+    btnPause.textContent = isPaused ? 'RESUME' : 'PAUSE';
+  });
+
+  // Stop
+  btnStop.addEventListener('click', async () => {
+    if (activeMissionId) {
+      try {
+        await fetch('http://127.0.0.1:8000/api/workspace/mission/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mission_id: activeMissionId })
+        });
+      } catch(err) {}
+    }
+    statusText.textContent = 'STOPPED';
+  });
+
+  // Goal Submit
+  goalInput.addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter' && goalInput.value.trim()) {
+      const obj = goalInput.value.trim();
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/workspace/mission/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ objective: obj, workspace_id: 'default' })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          activeMissionId = data.mission.id;
+          await fetch('http://127.0.0.1:8000/api/workspace/mission/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mission_id: data.mission.id })
+          });
+        }
+      } catch(err) {}
+    }
+  });
+
+  btnClose.addEventListener('click', () => {
+    if (window.electronAPI && window.electronAPI.send) {
+      window.electronAPI.send('pip-show');
+    } else {
+      window.close();
+    }
+  });
+
+  connectStream();
+</script>
+</body>
+</html>

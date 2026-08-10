@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { BASE } from "@/lib/api";
+import dynamic from "next/dynamic";
+
+const WakeWordIndicator = dynamic(() => import("./WakeWordIndicator"), { ssr: false });
 
 async function safeJson(res: Response): Promise<any> {
   if (!res.ok) return null;
@@ -91,6 +94,7 @@ export default function StatusBar() {
       color: "var(--text-muted)", flexShrink: 0, letterSpacing: "0.04em",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 12 }}>
+        {!isMobile && <WakeWordIndicator />}
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <div style={{ width: 4, height: 4, borderRadius: "50%", background: showRelayOnline ? "#00FF66" : "#FF3333", boxShadow: `0 0 4px ${showRelayOnline ? "rgba(0,255,102,0.4)" : "rgba(255,51,51,0.4)"}` }} />
           <span style={{ color: showRelayOnline ? "#00FF66" : "#FF3333" }}>

@@ -1,12 +1,20 @@
 function getBaseURL(): string {
-  if (typeof window === "undefined") return "http://localhost:8000";
-  const custom = localStorage.getItem("backend_url");
-  if (custom) return custom;
+  if (typeof window === "undefined") return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   if ((window as any).electronAPI?.backendURL) return (window as any).electronAPI.backendURL;
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const custom = localStorage.getItem("backend_url");
+  if (custom) {
+    // Validate: only allow http/https on localhost or trusted origins
+    try {
+      const u = new URL(custom);
+      const isLocal = u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname.endsWith(".local");
+      const isTrusted = (process.env.NEXT_PUBLIC_TRUSTED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean).includes(u.hostname);
+      if (u.protocol === "http:" || u.protocol === "https:") {
+        if (isLocal || isTrusted) return custom;
+        // Fallback to safe default for non-local origins
+      }
+    } catch { /* invalid URL → ignore */ }
   }
-  return "https://dgfhgjhj-jarvis-ai-brain.hf.space";
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 }
 
 export const BASE = getBaseURL();
@@ -570,3 +578,207 @@ export async function getMCPCompliance() { const res = await fetch(`${BASE}/api/
 
 export async function getLiveKitHealth() { const res = await fetch(`${BASE}/health`);   const h = await safeJson(res); return h?.livekit || false;
 }
+
+// ═══════════════════════════════════════════════════════
+//  SMART CLIPBOARD API
+// ═══════════════════════════════════════════════════════
+export async function processClipboard(content: string, sourceApp = "") {
+  const res = await fetch(`${BASE}/api/clipboard/process`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, source_app: sourceApp }) });
+  return safeJson(res);
+}
+export async function getClipboardHistory(limit = 50, search = "") {
+  const res = await fetch(`${BASE}/api/clipboard/history?limit=${limit}&search=${encodeURIComponent(search)}`);
+  return safeJson(res);
+}
+export async function getClipboardStats() { const res = await fetch(`${BASE}/api/clipboard/stats`); return safeJson(res); }
+
+// ═══════════════════════════════════════════════════════
+//  ENVIRONMENT SYNC API
+// ═══════════════════════════════════════════════════════
+export async function getEnvironmentStatus() { const res = await fetch(`${BASE}/api/environment/status`); return safeJson(res); }
+export async function checkEnvironmentTriggers() { const res = await fetch(`${BASE}/api/environment/check`, { method: "POST" }); return safeJson(res); }
+export async function executeEnvironmentAction(actionType: string, value: string) {
+  const res = await fetch(`${BASE}/api/environment/execute`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action_type: actionType, value }) });
+  return safeJson(res);
+}
+
+// ═══════════════════════════════════════════════════════
+//  SECURE ENCLAVE API
+// ═══════════════════════════════════════════════════════
+export async function getEnclaveStatus() { const res = await fetch(`${BASE}/api/enclave/status`); return safeJson(res); }
+export async function sealEnclaveItem(itemId: string, itemType: string, data: string) {
+  const res = await fetch(`${BASE}/api/enclave/seal`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: itemId, item_type: itemType, data }) });
+  return safeJson(res);
+}
+export async function unsealEnclaveItem(itemId: string) {
+  const res = await fetch(`${BASE}/api/enclave/unseal`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: itemId }) });
+  return safeJson(res);
+}
+export async function verifyEnclave() { const res = await fetch(`${BASE}/api/enclave/verify`); return safeJson(res); }
+
+// ═══════════════════════════════════════════════════════
+//  LASER GATE API
+// ═══════════════════════════════════════════════════════
+export async function getLaserGatePending() { const res = await fetch(`${BASE}/api/laser-gate/pending`); return safeJson(res); }
+export async function submitLaserGateAction(actionType: string, payload: object, description = "") {
+  const res = await fetch(`${BASE}/api/laser-gate/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action_type: actionType, payload, description }) });
+  return safeJson(res);
+}
+export async function approveLaserGate(actionId: string) {
+  const res = await fetch(`${BASE}/api/laser-gate/approve/${actionId}`, { method: "POST" });
+  return safeJson(res);
+}
+export async function denyLaserGate(actionId: string) {
+  const res = await fetch(`${BASE}/api/laser-gate/deny/${actionId}`, { method: "POST" });
+  return safeJson(res);
+}
+export async function getLaserGateStats() { const res = await fetch(`${BASE}/api/laser-gate/stats`); return safeJson(res); }
+
+// ═══════════════════════════════════════════════════════
+//  PIP COCKPIT API
+// ═══════════════════════════════════════════════════════
+export async function getPIPStatus() { const res = await fetch(`${BASE}/api/pip/status`); return safeJson(res); }
+export async function startPIPSession(sessionId = "default", displayId = 1) {
+  const res = await fetch(`${BASE}/api/pip/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId, display_id: displayId }) });
+  return safeJson(res);
+}
+export async function stopPIPSession(sessionId = "default") {
+  const res = await fetch(`${BASE}/api/pip/stop`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId }) });
+  return safeJson(res);
+}
+
+// ═══════════════════════════════════════════════════════
+//  WAKE WORD API
+// ═══════════════════════════════════════════════════════
+export async function getWakeWordStatus() { const res = await fetch(`${BASE}/api/wakeword/status`); return safeJson(res); }
+export async function enableWakeWord() { const res = await fetch(`${BASE}/api/wakeword/enable`, { method: "POST" }); return safeJson(res); }
+export async function disableWakeWord() { const res = await fetch(`${BASE}/api/wakeword/disable`, { method: "POST" }); return safeJson(res); }
+
+// ═══════════════════════════════════════════════════════
+//  ACOUSTIC GUARDIAN API
+// ═══════════════════════════════════════════════════════
+export async function getAcousticStatus() { const res = await fetch(`${BASE}/api/acoustic/status`); return safeJson(res); }
+export async function getAcousticEvents(limit = 20) { const res = await fetch(`${BASE}/api/acoustic/events?limit=${limit}`); return safeJson(res); }
+
+// ═══════════════════════════════════════════════════════
+//  INJECTION SANDBOX API
+// ═══════════════════════════════════════════════════════
+export async function scanForInjections(content: string, source = "unknown") {
+  const res = await fetch(`${BASE}/api/sandbox/scan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, source }) });
+  return safeJson(res);
+}
+export async function getSandboxStats() { const res = await fetch(`${BASE}/api/sandbox/stats`); return safeJson(res); }
+
+// ═══════════════════════════════════════════════════════
+//  IDENTITY / SSO API
+// ═══════════════════════════════════════════════════════
+export async function getIdentityStatus() { const res = await fetch(`${BASE}/api/identity/status`); return safeJson(res); }
+
+// ═══════════════════════════════════════════════════════
+//  JARVIS WORKSPACE — Autonomous Computer Environment
+// ═══════════════════════════════════════════════════════
+export async function listWorkspaces() { const res = await fetch(`${BASE}/api/workspace/list`); return safeJson(res); }
+export async function createWorkspace(name = "JARVIS Workspace", width = 1920, height = 1080) {
+  const res = await fetch(`${BASE}/api/workspace/create`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, width, height }) });
+  return safeJson(res);
+}
+export async function startWorkspace(workspace_id: string) {
+  const res = await fetch(`${BASE}/api/workspace/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id }) });
+  return safeJson(res);
+}
+export async function stopWorkspace(workspace_id: string) {
+  const res = await fetch(`${BASE}/api/workspace/stop`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id }) });
+  return safeJson(res);
+}
+export async function destroyWorkspace(workspace_id: string) {
+  const res = await fetch(`${BASE}/api/workspace/destroy`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id }) });
+  return safeJson(res);
+}
+export async function getWorkspaceStatus(workspace_id?: string) {
+  const url = workspace_id ? `${BASE}/api/workspace/status?workspace_id=${workspace_id}` : `${BASE}/api/workspace/status`;
+  const res = await fetch(url); return safeJson(res);
+}
+export async function launchWorkspaceApp(workspace_id: string, app_name: string, command: string[] = []) {
+  const res = await fetch(`${BASE}/api/workspace/launch`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id, app_name, command }) });
+  return safeJson(res);
+}
+export async function createWorkspaceMission(objective: string, workspace_id: string) {
+  const res = await fetch(`${BASE}/api/workspace/mission/create`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ objective, workspace_id }) });
+  return safeJson(res);
+}
+export async function startWorkspaceMission(mission_id: string) {
+  const res = await fetch(`${BASE}/api/workspace/mission/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mission_id }) });
+  return safeJson(res);
+}
+export async function pauseWorkspaceMission(mission_id: string) {
+  const res = await fetch(`${BASE}/api/workspace/mission/pause`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mission_id }) });
+  return safeJson(res);
+}
+export async function resumeWorkspaceMission(mission_id: string) {
+  const res = await fetch(`${BASE}/api/workspace/mission/resume`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mission_id }) });
+  return safeJson(res);
+}
+export async function stopWorkspaceMission(mission_id: string) {
+  const res = await fetch(`${BASE}/api/workspace/mission/stop`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mission_id }) });
+  return safeJson(res);
+}
+export async function getWorkspaceMissionStatus(mission_id?: string) {
+  const url = mission_id ? `${BASE}/api/workspace/mission/status?mission_id=${mission_id}` : `${BASE}/api/workspace/mission/status`;
+  const res = await fetch(url); return safeJson(res);
+}
+export async function getPendingApprovals() { const res = await fetch(`${BASE}/api/workspace/approvals/pending`); return safeJson(res); }
+export async function approveWorkspaceAction(mission_id: string, step_number: number) {
+  const res = await fetch(`${BASE}/api/workspace/approvals/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mission_id, step_number }) });
+  return safeJson(res);
+}
+export async function denyWorkspaceAction(mission_id: string, step_number: number) {
+  const res = await fetch(`${BASE}/api/workspace/approvals/deny`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mission_id, step_number }) });
+  return safeJson(res);
+}
+export function getWorkspaceWSUrl(workspace_id: string, fps = 10, quality = 60) {
+  const wsBase = BASE.replace("http", "ws");
+  return `${wsBase}/api/workspace/ws/stream?workspace_id=${workspace_id}&fps=${fps}&quality=${quality}`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  WORKSPACE REPLICATOR — System Scan & Sync
+// ═══════════════════════════════════════════════════════
+export async function getReplicatorProfile() { const res = await fetch(`${BASE}/api/workspace/replicator/profile`); return safeJson(res); }
+export async function scanReplicator(force = false) {
+  const res = await fetch(`${BASE}/api/workspace/replicator/scan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ force }) });
+  return safeJson(res);
+}
+export async function getAuthNeedingApps() { const res = await fetch(`${BASE}/api/workspace/replicator/auth-needing-apps`); return safeJson(res); }
+export async function getAppManifest() { const res = await fetch(`${BASE}/api/workspace/replicator/app-manifest`); return safeJson(res); }
+
+// ═══════════════════════════════════════════════════════
+//  WORKSPACE VERIFICATION — Screenshot OCR Check
+// ═══════════════════════════════════════════════════════
+export async function verifyWorkspaceStep(workspace_id: string, action: string, params: any = {}, expected_text = "") {
+  const res = await fetch(`${BASE}/api/workspace/verify/screenshot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id, action, params, expected_text }) });
+  return safeJson(res);
+}
+
+// ═══════════════════════════════════════════════════════
+//  MISSION STATE — Crash Recovery & Persistence
+// ═══════════════════════════════════════════════════════
+export async function getMissionState(missionId?: string) {
+  const qs = missionId ? `?mission_id=${missionId}` : "";
+  const res = await fetch(`${BASE}/api/workspace/mission/state${qs}`);
+  return safeJson(res);
+}
+export async function getResumableMissions() {
+  const res = await fetch(`${BASE}/api/workspace/mission/state/resumable`);
+  return safeJson(res);
+}
+export async function recoverMissions() {
+  const res = await fetch(`${BASE}/api/workspace/mission/recover`, { method: "POST" });
+  return safeJson(res);
+}
+
+// ═══════════════════════════════════════════════════════
+//  CAPABILITIES & SETUP API
+// ═══════════════════════════════════════════════════════
+export async function getCapabilities() { const res = await fetch(`${BASE}/api/workspace/capabilities`); return safeJson(res); }
+export async function refreshCapabilities() { const res = await fetch(`${BASE}/api/workspace/capabilities/refresh`, { method: "POST" }); return safeJson(res); }
+export async function getSetupStatus() { const res = await fetch(`${BASE}/api/workspace/setup/status`); return safeJson(res); }

@@ -15,7 +15,11 @@ desktop/assets/*.bmp
 
 # Node
 node_modules/
+desktop/node_modules/
 .next/
+
+# Electron build output
+desktop/dist/
 
 # Env
 .env
@@ -70,5 +74,4 @@ hf-temp/
 backend/.browser_profiles/
 .scheduled_messages.json
 backend/.entity_data/memory_test.json
-desktop/package-lock.json
 backend/.env

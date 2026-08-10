@@ -411,8 +411,21 @@ class ExecutionVault:
         """Execute with restricted subprocess (fallback — no namespace isolation)."""
         result = VaultResult()
         
-        # Build resource-limited command
-        limited_cmd = f"ulimit -t {policy.timeout} 2>/dev/null; {command}"
+        # Double-check command screening passes again at execution layer
+        violations = self._screen_command(command)
+        if violations:
+            result.blocked = True
+            result.block_reason = "; ".join(violations)
+            result.security_violations = violations
+            self._log_violation(command, violations)
+            return result
+
+        # Build resource-limited command with network egress control
+        net_prefix = "" if policy.network_allowed else "export http_proxy=http://127.0.0.1:9; export https_proxy=http://127.0.0.1:9; "
+        limited_cmd = (
+            f"ulimit -t {policy.timeout} -f {MAX_OUTPUT_SIZE} -v {policy.max_memory_mb * 1024} 2>/dev/null; "
+            f"{net_prefix}{command}"
+        )
         
         try:
             proc = subprocess.run(

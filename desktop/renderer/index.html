@@ -488,7 +488,7 @@
       const webBtn = el("button", "sidebar-btn");
       webBtn.textContent = "\uD83C\uDF10";
       webBtn.title = "Open Web UI";
-      webBtn.onclick = () => j?.shell.openExternal("https://dgfhgjhj-jarvis-ai-brain.hf.space");
+      webBtn.onclick = () => { const u = j?.deploymentUrl ? j.deploymentUrl() : "http://localhost:8000"; j?.shell.openExternal(u); };
       sb.appendChild(webBtn);
       return sb;
     }

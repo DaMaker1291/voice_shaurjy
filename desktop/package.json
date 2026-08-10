@@ -1,7 +1,7 @@
 {
   "name": "jarvis-ai",
-  "version": "4.0.0",
-  "description": "JARVIS \u2014 Sovereign Network Orchestrator",
+  "version": "5.0.0",
+  "description": "JARVIS — Ambient Operating Layer. Autonomous AI ecosystem orchestrator combining WhatsApp-level distribution, Perplexity-level search, and OS-level execution.",
   "author": "JARVIS AI",
   "license": "MIT",
   "repository": {
@@ -13,18 +13,20 @@
   "scripts": {
     "start": "electron .",
     "dev": "NODE_ENV=development electron .",
-    "build": "electron-builder --win",
+    "build": "electron-builder --win --x64",
     "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux"
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder --win --mac --linux --x64",
+    "dist": "electron-builder --win --x64 --publish never"
   },
   "devDependencies": {
     "electron": "28.3.3",
     "electron-builder": "25.1.8"
   },
   "build": {
-    "appId": "com.jarvis.sovereign",
+    "appId": "com.jarvis.ambient",
     "productName": "JARVIS",
-    "copyright": "Copyright \u00a9 2024 JARVIS AI",
+    "copyright": "Copyright © 2026 JARVIS AI",
     "publish": null,
     "directories": {
       "output": "dist"
@@ -36,6 +38,9 @@
       "assets/**/*",
       "package.json"
     ],
+    "extraMetadata": {
+      "description": "JARVIS — Ambient Operating Layer. An autonomous AI ecosystem orchestrator combining WhatsApp-level distribution, Perplexity-level search, and OS-level execution."
+    },
     "extraResources": [
       {
         "from": "../backend",
@@ -104,5 +109,8 @@
       "icon": "assets/icon.png",
       "category": "Utility"
     }
+  },
+  "dependencies": {
+    "ws": "^8.21.2"
   }
 }

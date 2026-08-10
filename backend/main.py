@@ -6,7 +6,11 @@ system control, smart home, and web automation.
 
 import os
 import sys
+import json
 import asyncio
+import subprocess
+import base64
+from contextlib import asynccontextmanager
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -42,8 +46,18 @@ get_autonomous_engine = _lazy_import("autonomous_engine", "get_autonomous_engine
 get_enterprise_engine = _lazy_import("enterprise", "get_enterprise_engine")
 get_skill_marketplace = _lazy_import("skill_marketplace", "get_skill_marketplace")
 
-from auth import authenticate, AuthContext, create_jwt_token
+from auth import authenticate, AuthContext, create_jwt_token, require_write
 from rate_limiter import RateLimitMiddleware, get_rate_limiter
+
+# JARVIS Core Modules
+from artifact_engine import get_artifact_engine
+from model_orchestrator import get_orchestrator
+from explainability import get_explainability_engine
+from automation import get_automation_scheduler
+from policies import get_permission_manager
+from memory import get_work_graph
+from skills import get_skill_registry
+from streaming import get_streamer
 from error_handler import ErrorHandlerMiddleware
 
 load_dotenv()
@@ -72,7 +86,118 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(ErrorHandlerMiddleware)
 
 
-@app.on_event("startup")
+# Device identification patterns loaded from device_patterns.json at startup
+_DEVICE_PATTERNS: list[dict] = []
+
+def _load_device_patterns() -> list[dict]:
+    """Load device identification patterns from the JSON config file."""
+    patterns_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "device_patterns.json")
+    try:
+        with open(patterns_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("patterns", [])
+    except FileNotFoundError:
+        print("[SOVEREIGN] device_patterns.json not found — device auto-detection disabled")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"[SOVEREIGN] Failed to parse device_patterns.json: {e}")
+        return []
+
+def _identify_device(hostname: str, ip: str, mac: str = "") -> tuple[str, str, str, str, str]:
+    """Identify device type, protocol, manufacturer, model from hostname/IP/MAC dynamically.
+
+    First tries loaded patterns from device_patterns.json, then falls back to
+    generic detection based on MAC OUI and IP range.
+    """
+    hl = hostname.lower()
+
+    # Try loaded patterns first
+    for pattern in _DEVICE_PATTERNS:
+        match = True
+        for field in ("match_hostname", "match_ip_suffix", "match_hostname_contains"):
+            vals = pattern.get(field, [])
+            if not vals:
+                continue
+            if field == "match_hostname":
+                for v in vals:
+                    if v not in hl:
+                        match = False
+                        break
+            elif field == "match_ip_suffix":
+                for v in vals:
+                    if not ip.endswith(v):
+                        match = False
+                        break
+            elif field == "match_hostname_contains":
+                for v in vals:
+                    if v not in hl:
+                        match = False
+                        break
+        if match:
+            return (pattern["device_type"], pattern["protocol"], pattern["manufacturer"], pattern["model"], hostname or ip)
+
+    # Fallback: generic detection based on MAC OUI and IP characteristics
+    manufacturer = _lookup_mac_oui(mac)
+    device_type = "DEVICE"
+    protocol = "unknown"
+    model = ""
+
+    # Infer device type from IP range and manufacturer
+    if manufacturer:
+        manufacturer_lower = manufacturer.lower()
+        if "apple" in manufacturer_lower:
+            device_type = "HUB"
+            protocol = "ssh"
+        elif "samsung" in manufacturer_lower or "lg" in manufacturer_lower:
+            device_type = "PHONE"
+            protocol = "adb"
+        elif "tp-link" in manufacturer_lower or "belkin" in manufacturer_lower:
+            device_type = "SWITCH"
+            protocol = "tapo"
+        elif "hp" in manufacturer_lower or "brother" in manufacturer_lower or "epson" in manufacturer_lower:
+            device_type = "PRINTER"
+            protocol = "ipp"
+        elif "google" in manufacturer_lower:
+            device_type = "HUB"
+            protocol = "mdns"
+        elif "amazon" in manufacturer_lower or "echo" in manufacturer_lower:
+            device_type = "HUB"
+            protocol = "mdns"
+        elif "xiaomi" in manufacturer_lower or "mi" in manufacturer_lower:
+            device_type = "SENSOR"
+            protocol = "mqtt"
+
+    # Infer from IP if private range
+    if ip.startswith("192.168.") or ip.startswith("10.") or ip.startswith("172."):
+        if device_type == "DEVICE":
+            device_type = "DEVICE"
+
+    return (device_type, protocol, manufacturer, model, hostname or ip)
+
+
+def _lookup_mac_oui(mac: str) -> str:
+    """Look up manufacturer from MAC OUI via local cache or return empty string."""
+    if not mac or len(mac) < 8:
+        return ""
+    oui = mac[:8].upper().replace(":", "-")
+
+    # Try local OUI cache
+    cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".oui_cache.json")
+    try:
+        if os.path.exists(cache_path):
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+            if oui in cache:
+                return cache[oui]
+    except (json.JSONDecodeError, IOError):
+        pass
+
+    return ""
+
+# Load device patterns on module import
+_DEVICE_PATTERNS = _load_device_patterns()
+
+
 async def startup_event():
     """
     Real device discovery on startup.
@@ -112,16 +237,18 @@ async def startup_event():
 
         print("[SOVEREIGN] Scanning real local network...")
 
-        # Get local subnet
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            local_ip = s.getsockname()[0]
-            s.close()
-            local_subnet = ".".join(local_ip.split(".")[:3])
-        except Exception:
-            local_ip = "127.0.0.1"
-            local_subnet = "192.168.1"
+        # Get local subnet (env override → dynamic detection → empty)
+        local_ip = "127.0.0.1"
+        local_subnet = os.environ.get("JARVIS_LOCAL_SUBNET", "").strip()
+        if not local_subnet:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+                local_subnet = ".".join(local_ip.split(".")[:3])
+            except Exception:
+                local_subnet = ""
 
         # Real ARP scan
         try:
@@ -149,75 +276,9 @@ async def startup_event():
             hostname = line.split("(")[0].strip() if "(" in line else ""
             hostname = hostname.replace("?", "").strip()
 
-            # Identify device type from hostname/MAC
-            device_type = "UNKNOWN"
-            protocol = "unknown"
-            manufacturer = ""
-            model = ""
-            device_name = hostname or ip
 
-            hl = hostname.lower()
-
-            # Router/Gateway
-            if "skysr213" in hl or ip.endswith(".1") and "router" in hl:
-                device_type = "ROUTER"
-                protocol = "http"
-                manufacturer = "Sky"
-                model = "SR213"
-            # TP-Link Tapo Smart Plugs
-            elif "tapo" in hl or "p100" in hl or "p110" in hl or "p125" in hl:
-                device_type = "SWITCH"
-                protocol = "tapo"
-                manufacturer = "TP-Link"
-                if "p110" in hl:
-                    model = "Tapo P110"
-                elif "p100" in hl:
-                    model = "Tapo P100"
-                elif "p125" in hl:
-                    model = "Tapo P125"
-                else:
-                    model = "Tapo Smart Plug"
-            # HP Printer
-            elif "hp" in hl or "printer" in hl:
-                device_type = "PRINTER"
-                protocol = "ipp"
-                manufacturer = "HP"
-                model = "Printer"
-            # Samsung phones
-            elif "samsung" in hl or "galaxy" in hl or "note20" in hl or "s24" in hl or "gargi" in hl or "suprotim" in hl:
-                device_type = "PHONE"
-                protocol = "adb"
-                manufacturer = "Samsung"
-                if "note20" in hl:
-                    model = "Galaxy Note20"
-                elif "s24 ultra" in hl:
-                    model = "Galaxy S24 Ultra"
-                elif "s24" in hl:
-                    model = "Galaxy S24"
-            # Range extender
-            elif "re200" in hl or "extender" in hl or "repeater" in hl:
-                device_type = "ROUTER"
-                protocol = "http"
-                manufacturer = "TP-Link"
-                model = "RE200"
-            # iMac / Apple
-            elif "imac" in hl or "macbook" in hl or "apple" in hl:
-                device_type = "HUB"
-                protocol = "ssh"
-                manufacturer = "Apple"
-                model = "iMac"
-            # Generic laptop
-            elif "laptop" in hl or "nbkw" in hl:
-                device_type = "HUB"
-                protocol = "ssh"
-                manufacturer = "Unknown"
-                model = "Laptop"
-            # lwip devices (likely IoT)
-            elif "lwip" in hl:
-                device_type = "SENSOR"
-                protocol = "mqtt"
-                manufacturer = "Unknown"
-                model = "IoT Device"
+            # Identify device using loaded patterns
+            device_type, protocol, manufacturer, model, device_name = _identify_device(hostname or "", ip, mac)
 
             if device_type == "UNKNOWN":
                 continue  # Skip unidentifiable devices
@@ -271,24 +332,11 @@ async def startup_event():
                 tags=cfg.get("tags", []),
             ))
 
-        # Connect to all servers (best-effort, async)
-        import asyncio
+        # Connect to all servers (best-effort, async on main loop)
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                def _connect_mcp():
-                    asyncio.run(client.connect_all())
-                pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-                pool.submit(_connect_mcp)
-            else:
-                loop.run_until_complete(client.connect_all())
-        except Exception:
-            import concurrent.futures
-            def _connect_mcp():
-                asyncio.run(client.connect_all())
-            pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-            pool.submit(_connect_mcp)
+            asyncio.create_task(client.connect_all())
+        except Exception as e:
+            print(f"[MCP] Could not schedule connect: {e}")
 
         status = client.get_status()
         print(f"[MCP] Initialized: {status['connected_servers']}/{status['total_servers']} servers, {status['total_tools']} tools")
@@ -681,6 +729,23 @@ async def text_chat(query: TextQuery):
         )
         result["reminder"] = {"id": r["id"], "title": r["title"], "due_date": r["due_date"]}
 
+    # Feed into deep user learner
+    try:
+        from deep_user_learner import get_learner
+        learner = get_learner(query.user_id or "local")
+        action = result.get("action", result.get("type", ""))
+        feedback = "correction" if result.get("corrected") else "none"
+        learner.observe_conversation(
+            user_input=query.text,
+            ai_response=result.get("text", result.get("response", "")),
+            action_taken=action,
+            success=result.get("success", True),
+            user_feedback=feedback,
+            context={"tier": tier, "source": "chat"}
+        )
+    except Exception:
+        pass
+
     return result
 
 
@@ -924,6 +989,67 @@ async def reset_profile(user_id: str = "local"):
     return {"status": "ok"}
 
 
+# ── Deep Learning Endpoints ─────────────────────────────────
+
+@app.get("/api/deep/psychological")
+async def deep_psychological(user_id: str = "local"):
+    from deep_learner import get_deep_learner
+    dl = get_deep_learner(user_id)
+    return dl.get_psychological_profile()
+
+
+@app.get("/api/deep/insights")
+async def deep_insights(user_id: str = "local"):
+    from deep_learner import get_deep_learner
+    dl = get_deep_learner(user_id)
+    return {"insights": dl.get_latest_insights(limit=20)}
+
+
+@app.get("/api/deep/empathy")
+async def deep_empathy(user_id: str = "local"):
+    from deep_learner import get_deep_learner
+    dl = get_deep_learner(user_id)
+    return dl.get_empathy_context()
+
+
+@app.get("/api/deep/comprehensive")
+async def deep_comprehensive(user_id: str = "local"):
+    from deep_learner import get_deep_learner
+    dl = get_deep_learner(user_id)
+    return dl.get_comprehensive_profile()
+
+
+@app.get("/api/deep/predictions")
+async def deep_predictions(user_id: str = "local"):
+    from deep_learner import get_deep_learner
+    dl = get_deep_learner(user_id)
+    return {
+        "markov_predictions": dl.predict_next_action(top_k=5),
+        "sequence_predictions": dl.predict_from_sequence(top_k=5),
+    }
+
+
+@app.get("/api/deep/latent-preferences")
+async def deep_latent_preferences(user_id: str = "local"):
+    from deep_learner import get_deep_learner
+    dl = get_deep_learner(user_id)
+    return {"preferences": dl.get_latent_preferences()}
+
+
+@app.get("/api/deep/narrative")
+async def deep_narrative(user_id: str = "local"):
+    from deep_learner import get_deep_learner
+    dl = get_deep_learner(user_id)
+    narrative = dl.build_life_narrative()
+    return {
+        "narrative": [
+            {"period": e.period, "summary": e.summary, "themes": e.themes,
+             "emotional_arc": e.emotional_arc}
+            for e in narrative
+        ]
+    }
+
+
 # ── Autonomous task execution with SSE streaming ─────────────
 
 from fastapi.responses import StreamingResponse
@@ -936,6 +1062,7 @@ class StrategyRequest(BaseModel):
     user_input: str
     user_id: str = "local"
     history: list = []  # [{role: "user"|"assistant", content: "..."}]
+    answers: dict = {}  # clarification answers from previous ask_clarify
 
 
 class WorkflowAdvanceRequest(BaseModel):
@@ -1070,7 +1197,7 @@ async def system_task_stop():
 async def entity_process(req: StrategyRequest):
     from entity_engine import get_entity
     entity = get_entity(req.user_id)
-    result = entity.process(req.user_input, history=req.history)
+    result = entity.process(req.user_input, history=req.history, answers=req.answers)
     return result
 
 
@@ -1177,6 +1304,134 @@ async def execute_task_stream(task: str, user_id: str = "local"):
         for event in run_task(task):
             yield f"data: {json.dumps(event)}\n\n"
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/api/orchestrate")
+async def orchestrate_task(request: Request, auth: AuthContext = Depends(require_write)):
+    """Execute a complex multi-goal orchestration directive.
+    
+    Accepts a prompt with optional flags:
+      --mode=autonomous
+      --background-vdi=:1
+      --laser-gate=strict
+    """
+    body = await request.json()
+    prompt = body.get("prompt", body.get("task", body.get("query", "")))
+    if not prompt:
+        return {"error": "No prompt provided"}
+
+    from goal_planner import get_planner, execute_plan
+    from progress_ui import track_task, update_step, log_task, finish_task
+    import hashlib
+
+    planner = get_planner()
+    plan = planner.plan(prompt)
+
+    task_id = "orch_" + hashlib.md5(prompt.encode()).hexdigest()[:8]
+    step_names = [sg.description[:60] for sg in plan.sub_goals]
+    track_task(task_id, "Orchestration: " + prompt[:80], step_names)
+
+    def execute_fn(action, params):
+        from task_planner import TaskPlanner
+        tp = TaskPlanner()
+        return tp.execute(action, params)
+
+    try:
+        plan = execute_plan(plan, execute_fn)
+        completed = sum(1 for sg in plan.sub_goals if sg.status == "done")
+        finish_task(task_id, "done" if completed == len(plan.sub_goals) else "partial")
+        return {
+            "status": "complete",
+            "task_id": task_id,
+            "total_steps": len(plan.sub_goals),
+            "completed": completed,
+            "results": [{"id": sg.id, "description": sg.description, "status": sg.status, "result": sg.result} for sg in plan.sub_goals],
+        }
+    except Exception as e:
+        finish_task(task_id, "failed")
+        return {"error": str(e), "task_id": task_id}
+
+
+@app.post("/api/canvas/render")
+async def canvas_render(request: Request):
+    """Render a canvas visualization dashboard."""
+    body = await request.json()
+    sections = body.get("sections", [])
+    title = body.get("title", "Dashboard")
+    output = body.get("output", None)
+
+    from canvas_engine import get_canvas
+    canvas = get_canvas()
+    path = canvas.render_full(sections, title, output)
+    return {"path": path, "url": "file:///" + path.replace("\\", "/")}
+
+
+@app.get("/api/canvas/osint/{target}")
+async def canvas_osint(target: str):
+    """Render an OSINT dashboard for a target."""
+    from canvas_engine import get_canvas
+    from knowledge_graph import get_graph
+    canvas = get_canvas()
+    graph = get_graph()
+
+    # Gather data from knowledge graph
+    subgraph = graph.get_subgraph(target, depth=2)
+    entity = graph.get_entity(target)
+    research_data = {
+        "summary": entity.attributes.get("summary", f"Intelligence report on {target}.") if entity else f"No data on {target}.",
+        "relationships": [],
+        "facts": entity.attributes.get("facts", []) if entity else [],
+        "tags": entity.tags if entity else [],
+    }
+    for rel in subgraph.get("relationships", []):
+        research_data["relationships"].append({
+            "name": rel.get("with", ""),
+            "type": rel.get("with_type", "concept"),
+            "relation": rel.get("relation", "related_to"),
+        })
+
+    path = canvas.render_osint(target, research_data)
+    return {"path": path, "url": "file:///" + path.replace("\\", "/")}
+
+
+@app.get("/api/knowledge/graph")
+async def knowledge_graph_get(entity: str = "", depth: int = 2):
+    """Get knowledge graph data."""
+    from knowledge_graph import get_graph
+    graph = get_graph()
+    if entity:
+        return graph.get_subgraph(entity, depth)
+    return {"entities": [e.to_dict() for e in graph.get_all_entities()], "relationships": []}
+
+
+@app.post("/api/knowledge/entity")
+async def knowledge_add_entity(request: Request):
+    """Add an entity to the knowledge graph."""
+    body = await request.json()
+    from knowledge_graph import get_graph
+    graph = get_graph()
+    ent = graph.add_entity(
+        body["name"], body.get("type", "concept"),
+        attributes=body.get("attributes", {}),
+        tags=body.get("tags", []),
+        source=body.get("source", "api"),
+    )
+    return {"id": ent.id, "name": ent.name}
+
+
+@app.post("/api/knowledge/relationship")
+async def knowledge_add_relationship(request: Request):
+    """Add a relationship to the knowledge graph."""
+    body = await request.json()
+    from knowledge_graph import get_graph
+    graph = get_graph()
+    rel = graph.add_relationship(
+        body["source"], body["target"], body.get("relation", "related_to"),
+        source_type=body.get("source_type", ""),
+        target_type=body.get("target_type", ""),
+        attributes=body.get("attributes", {}),
+    )
+    return {"id": rel.id if rel else None}
 
 
 def _exec_action(action: str, params: str = "") -> str:
@@ -1307,7 +1562,7 @@ async def list_all_actions():
 
 
 @ app.post("/api/actions/run")
-async def run_action(req: ActionRequest):
+async def run_action(req: ActionRequest, auth: AuthContext = Depends(require_write)):
     """Execute any action by ID with optional params."""
     from actions import execute_action, detect_action
     try:
@@ -2405,7 +2660,7 @@ async def sandbox_info():
 
 
 @app.post("/api/sandbox/execute")
-async def sandbox_execute(command: str, language: str = "bash", timeout: int = 30, network: bool = False):
+async def sandbox_execute(command: str, language: str = "bash", timeout: int = 30, network: bool = False, auth: AuthContext = Depends(require_write)):
     try:
         from production_sandbox import sandbox
         result = sandbox.execute(command, language=language, timeout=timeout, network=network)
@@ -4247,12 +4502,42 @@ async def system_quick(req: dict):
 from headless_api import router as headless_router
 app.include_router(headless_router)
 
+# ── JARVIS Workspace — Autonomous Computer Environment ─────────────────────
+from workspace_api import router as workspace_router
+app.include_router(workspace_router)
+
+# ── Capabilities & Setup API ────────────────────────────────────────────────
+@app.get("/api/capabilities")
+def get_capabilities():
+    from capabilities import get_capabilities as detect
+    report = detect()
+    return report.to_dict()
+
+@app.post("/api/capabilities/refresh")
+def refresh_capabilities():
+    from capabilities import refresh_capabilities
+    report = refresh_capabilities()
+    return report.to_dict()
+
+@app.get("/api/setup/status")
+def setup_status():
+    from capabilities import get_capabilities
+    report = get_capabilities()
+    return {
+        "setup_complete": report.setup_complete,
+        "isolation_backend": report.isolation_backend,
+        "isolation_available": report.isolation_available,
+        "recommended_action": report.recommended_action,
+        "python": report.tools.get("python", {}).available if hasattr(report.tools.get("python", {}), "available") else report.tools.get("python", {}).get("available", False),
+        "node": report.tools.get("node", {}).available if hasattr(report.tools.get("node", {}), "available") else report.tools.get("node", {}).get("available", False),
+        "virtualbox": report.tools.get("virtualbox", {}).available if hasattr(report.tools.get("virtualbox", {}), "available") else report.tools.get("virtualbox", {}).get("available", False),
+    }
+
 # ── Multi-Tenant Organization API ─────────────────────────────────────────
 from org_api import router as org_router
 app.include_router(org_router)
 
 # ── Initialize Multi-Tenant Engine at Startup ──────────────────────────────
-@app.on_event("startup")
 async def init_multi_tenant():
     try:
         from org_manager import get_org_manager
@@ -4262,7 +4547,6 @@ async def init_multi_tenant():
         print(f"[OrgManager] Init skipped: {e}")
 
 # ── Initialize Context Relay & Proactive Engine at Startup ─────────────────
-@app.on_event("startup")
 async def init_context_relay():
     try:
         from context_relay import get_context_relay
@@ -4286,7 +4570,10 @@ from fastapi.responses import FileResponse, StreamingResponse
 async def download_windows():
     """Redirect to Windows zip download hosted on HF Space."""
     from fastapi.responses import RedirectResponse
-    url = "https://huggingface.co/spaces/dgfhgjhj/jarvis-ai-brain/resolve/main/downloads/JARVIS-Windows.zip"
+    from config import get_config as _cfg
+    url = os.environ.get("JARVIS_WINDOWS_DOWNLOAD_URL", "") or (_cfg().get_deployment_url() + "/downloads/JARVIS-Windows.zip" if _cfg().get_deployment_url() else "")
+    if not url:
+        return {"error": "Download URL not configured"}
     return RedirectResponse(url=url)
 
 def _find_frontend_dir():
@@ -5068,7 +5355,2529 @@ if _frontend_out:
 else:
     print("[Frontend] No frontend/out directory found — running in API-only mode")
 
-# ── Local Run (Electron mode) ─────────────────────────────────────────────
+# ── Ambient Operating Layer ────────────────────────────────────────────────
+from ambient.overlay import router as ambient_overlay_router
+from messaging_bridge import router as messaging_bridge_router
+
+app.include_router(ambient_overlay_router)
+app.include_router(messaging_bridge_router)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# JARVIS CORE MODULES — Artifact, Model, Explain, Automation, Skills, Memory
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Artifact Engine ────────────────────────────────────────────────────────
+@app.get("/api/artifacts")
+async def list_artifacts(type: str = None):
+    """List all artifacts, optionally filtered by type."""
+    engine = get_artifact_engine()
+    return {"ok": True, "artifacts": engine.list_artifacts(type)}
+
+@app.get("/api/artifacts/stats")
+async def artifact_stats():
+    """Get artifact statistics."""
+    engine = get_artifact_engine()
+    return {"ok": True, "stats": engine.get_stats()}
+
+@app.post("/api/artifacts/create")
+async def create_artifact(body: dict):
+    """Create a new artifact from content."""
+    engine = get_artifact_engine()
+    name = body.get("name", f"artifact_{int(time.time())}")
+    content = body.get("content", "")
+    artifact_type = body.get("type", "text")
+    ext = body.get("extension", "txt")
+
+    if artifact_type == "markdown":
+        artifact = engine.create_markdown(name, content)
+    elif artifact_type == "json":
+        artifact = engine.create_json(name, json.loads(content) if isinstance(content, str) else content)
+    elif artifact_type == "csv":
+        artifact = engine.create_csv(name, body.get("headers", []), body.get("rows", []))
+    elif artifact_type == "python":
+        artifact = engine.create_python(name, content)
+    elif artifact_type == "html":
+        artifact = engine.create_html(name, content)
+    elif artifact_type == "docx":
+        artifact = engine.create_docx(name, content, body.get("title", ""))
+    elif artifact_type == "xlsx":
+        artifact = engine.create_xlsx(name, body.get("data", {}))
+    elif artifact_type == "pptx":
+        artifact = engine.create_pptx(name, body.get("slides", []))
+    elif artifact_type == "pdf":
+        artifact = engine.create_pdf(name, content, body.get("title", ""))
+    elif artifact_type == "zip":
+        artifact = engine.create_zip(name, body.get("files", {}))
+    else:
+        artifact = engine.create_text(name, content, ext)
+
+    return {"ok": True, "artifact": artifact.to_dict()}
+
+@app.post("/api/artifacts/validate")
+async def validate_artifact(body: dict):
+    """Validate an existing artifact."""
+    engine = get_artifact_engine()
+    result = engine.validate(body.get("artifact_id", ""))
+    return {"ok": True, "validation": result}
+
+@app.delete("/api/artifacts/{artifact_id}")
+async def delete_artifact(artifact_id: str):
+    """Delete an artifact."""
+    engine = get_artifact_engine()
+    success = engine.delete_artifact(artifact_id)
+    return {"ok": success}
+
+
+# ── Model Orchestrator ──────────────────────────────────────────────────────
+@app.get("/api/models")
+async def list_models():
+    """List all available models."""
+    orch = get_orchestrator()
+    return {"ok": True, "models": orch.get_available_models()}
+
+@app.post("/api/models/select")
+async def select_model(body: dict):
+    """Select the best model for a task."""
+    from model_orchestrator import TaskType
+    orch = get_orchestrator()
+    task_type = TaskType(body.get("task_type", "chat"))
+    max_cost = body.get("max_cost")
+    prefer_fast = body.get("prefer_fast", False)
+    selection = orch.select_model(task_type, max_cost=max_cost, prefer_fast=prefer_fast)
+    if selection:
+        return {"ok": True, "selection": {
+            "model_id": selection.model_id,
+            "provider": selection.provider,
+            "reason": selection.reason,
+            "estimated_cost": selection.estimated_cost,
+            "estimated_latency_ms": selection.estimated_latency_ms,
+        }}
+    return {"ok": False, "error": "No model available"}
+
+@app.post("/api/models/call")
+async def call_model(body: dict):
+    """Call a specific model with messages."""
+    import asyncio
+    orch = get_orchestrator()
+    model_id = body.get("model_id", "groq-llama3-70b")
+    messages = body.get("messages", [])
+    kwargs = body.get("kwargs", {})
+    result = await orch.call_model(model_id, messages, **kwargs)
+    return {"ok": True, "response": result}
+
+
+# ── Explainability ─────────────────────────────────────────────────────────
+@app.post("/api/explain/start-mission")
+async def start_mission_explain(body: dict):
+    """Start recording a mission for explainability."""
+    engine = get_explainability_engine()
+    mission_id = body.get("mission_id", f"mission_{int(time.time())}")
+    objective = body.get("objective", "")
+    timeline = engine.start_mission(mission_id, objective)
+    return {"ok": True, "mission_id": mission_id, "objective": objective}
+
+@app.post("/api/explain/end-mission")
+async def end_mission_explain(body: dict):
+    """End a mission recording."""
+    engine = get_explainability_engine()
+    mission_id = body.get("mission_id", "")
+    status = body.get("status", "completed")
+    engine.end_mission(mission_id, status)
+    return {"ok": True}
+
+@app.post("/api/explain/decision")
+async def record_decision(body: dict):
+    """Record a decision for explainability."""
+    engine = get_explainability_engine()
+    record = engine.record_decision(
+        mission_id=body.get("mission_id", ""),
+        observation=body.get("observation", ""),
+        decision=body.get("decision", ""),
+        action=body.get("action", ""),
+        reason=body.get("reason", ""),
+        expected_outcome=body.get("expected_outcome", ""),
+        context=body.get("context"),
+        alternatives=body.get("alternatives"),
+        confidence=body.get("confidence", 0.0),
+    )
+    return {"ok": True, "decision_id": record.id}
+
+@app.get("/api/explain/decision/{decision_id}")
+async def explain_decision(decision_id: str):
+    """Get explanation for a specific decision."""
+    engine = get_explainability_engine()
+    explanation = engine.explain_decision(decision_id)
+    if explanation:
+        return {"ok": True, "explanation": explanation}
+    return {"ok": False, "error": "Decision not found"}
+
+@app.get("/api/explain/timeline/{mission_id}")
+async def get_timeline(mission_id: str):
+    """Get the full timeline for a mission."""
+    engine = get_explainability_engine()
+    timeline = engine.get_timeline(mission_id)
+    if timeline:
+        return {"ok": True, "timeline": timeline}
+    return {"ok": False, "error": "Mission not found"}
+
+@app.get("/api/explain/replay/{mission_id}")
+async def replay_mission(mission_id: str):
+    """Get events for replaying a mission."""
+    engine = get_explainability_engine()
+    events = engine.replay_mission(mission_id)
+    if events:
+        return {"ok": True, "events": events}
+    return {"ok": False, "error": "Mission not found"}
+
+@app.get("/api/explain/missions")
+async def list_missions():
+    """List all recorded missions."""
+    engine = get_explainability_engine()
+    return {"ok": True, "missions": engine.list_missions()}
+
+
+# ── Automation ──────────────────────────────────────────────────────────────
+@app.get("/api/automations")
+async def list_automations():
+    """List all automations."""
+    scheduler = get_automation_scheduler()
+    return {"ok": True, "automations": scheduler.list_all()}
+
+@app.post("/api/automations/create")
+async def create_automation(body: dict):
+    """Create a new automation."""
+    scheduler = get_automation_scheduler()
+    auto = scheduler.create(
+        name=body.get("name", ""),
+        description=body.get("description", ""),
+        mission_objective=body.get("mission_objective", ""),
+        schedule_type=body.get("schedule_type", "daily"),
+        schedule_value=body.get("schedule_value", "09:00"),
+        enabled=body.get("enabled", True),
+        max_runs=body.get("max_runs", 0),
+    )
+    return {"ok": True, "automation": auto.to_dict()}
+
+@app.post("/api/automations/{automation_id}/run")
+async def run_automation(automation_id: str):
+    """Manually trigger an automation."""
+    scheduler = get_automation_scheduler()
+    result = scheduler.run_now(automation_id)
+    return result
+
+@app.delete("/api/automations/{automation_id}")
+async def delete_automation(automation_id: str):
+    """Delete an automation."""
+    scheduler = get_automation_scheduler()
+    success = scheduler.delete(automation_id)
+    return {"ok": success}
+
+
+# ── Permission Policies ────────────────────────────────────────────────────
+@app.get("/api/policies")
+async def list_policies():
+    """List all permission policies."""
+    mgr = get_permission_manager()
+    return {"ok": True, "policies": mgr.get_rules()}
+
+@app.post("/api/policies/evaluate")
+async def evaluate_policy(body: dict):
+    """Evaluate an action against policies."""
+    mgr = get_permission_manager()
+    decision = mgr.evaluate(body.get("action", ""), body.get("category", "system"))
+    return {"ok": True, "decision": {
+        "allowed": decision.allowed,
+        "action": decision.action,
+        "reason": decision.reason,
+        "matched_rule": decision.matched_rule,
+        "risk_level": decision.risk_level,
+        "requires_approval": decision.requires_approval,
+    }}
+
+@app.put("/api/policies/{rule_id}")
+async def update_policy(rule_id: str, body: dict):
+    """Update a policy rule."""
+    mgr = get_permission_manager()
+    rule = mgr.update_rule(rule_id, **body)
+    return {"ok": rule is not None, "rule": rule.to_dict() if rule else None}
+
+
+# ── Work Graph / Memory ────────────────────────────────────────────────────
+@app.get("/api/memory/stats")
+async def memory_stats():
+    """Get memory statistics."""
+    graph = get_work_graph()
+    return {"ok": True, "stats": graph.get_stats()}
+
+@app.get("/api/memory/procedures")
+async def list_procedures(category: str = None, min_success_rate: float = 0):
+    """List learned procedures."""
+    graph = get_work_graph()
+    procedures = graph.find_procedure(category=category, min_success_rate=min_success_rate)
+    return {"ok": True, "procedures": [p.to_dict() for p in procedures]}
+
+@app.post("/api/memory/procedures")
+async def learn_procedure(body: dict):
+    """Learn a new procedure."""
+    graph = get_work_graph()
+    proc = graph.learn_procedure(
+        name=body.get("name", ""),
+        description=body.get("description", ""),
+        category=body.get("category", "general"),
+        steps=body.get("steps", []),
+        requirements=body.get("requirements"),
+    )
+    return {"ok": True, "procedure": proc.to_dict()}
+
+@app.get("/api/memory/search")
+async def search_memory(q: str = "", type: str = None):
+    """Search memory for relevant information."""
+    graph = get_work_graph()
+    results = graph.search(q, node_type=type)
+    return {"ok": True, "results": [r.to_dict() for r in results]}
+
+@app.get("/api/memory/graph")
+async def export_graph():
+    """Export the full work graph."""
+    graph = get_work_graph()
+    return {"ok": True, "graph": graph.export_graph()}
+
+
+# ── Skills ──────────────────────────────────────────────────────────────────
+@app.get("/api/skills")
+async def list_skills():
+    """List all available skills."""
+    registry = get_skill_registry()
+    return {"ok": True, "skills": registry.get_available_skills()}
+
+@app.post("/api/skills/execute")
+async def execute_skill(body: dict):
+    """Execute a skill action."""
+    registry = get_skill_registry()
+    result = registry.execute_action(
+        skill_name=body.get("skill", ""),
+        action=body.get("action", ""),
+        params=body.get("params"),
+    )
+    return {"ok": result.success, "result": result.to_dict()}
+
+
+# ── Streaming (LiveKit WebRTC) ─────────────────────────────────────────────
+@app.post("/api/stream/start")
+async def start_stream(body: dict):
+    """Start streaming a workspace via WebRTC."""
+    streamer = get_streamer()
+    workspace_id = body.get("workspace_id", "")
+    config = StreamConfig(
+        workspace_id=workspace_id,
+        room_name=f"jarvis-workspace-{workspace_id}",
+        width=body.get("width", 1920),
+        height=body.get("height", 1080),
+        fps=body.get("fps", 30),
+    )
+    result = await streamer.start_stream(config)
+    return result
+
+@app.post("/api/stream/stop")
+async def stop_stream(body: dict):
+    """Stop streaming a workspace."""
+    streamer = get_streamer()
+    workspace_id = body.get("workspace_id", "")
+    result = streamer.stop_stream(workspace_id)
+    return result
+
+@app.get("/api/stream/token/{workspace_id}")
+async def get_stream_token(workspace_id: str):
+    """Get a viewer token for a workspace stream."""
+    streamer = get_streamer()
+    token = streamer.get_token(workspace_id)
+    return {"ok": True, "token": token, "url": LIVEKIT_URL, "room": f"jarvis-workspace-{workspace_id}"}
+
+@app.get("/api/stream/status/{workspace_id}")
+async def stream_status(workspace_id: str):
+    """Get stream status."""
+    streamer = get_streamer()
+    state = streamer.get_stream_state(workspace_id)
+    return {"ok": True, "state": state}
+
+@app.get("/api/stream/active")
+async def active_streams():
+    """List all active streams."""
+    streamer = get_streamer()
+    return {"ok": True, "streams": streamer.list_active_streams()}
+
+
+@app.post("/api/ambient/toggle")
+async def ambient_toggle():
+    """Toggle the ambient overlay visibility."""
+    from ambient.overlay import overlay_controller
+    overlay_controller.toggle()
+    return {"visible": overlay_controller.is_visible}
+
+
+# ── Computer Use Agent (Do Anything) ───────────────────────────────────────
+@app.post("/api/do-anything")
+async def do_anything(request: Request):
+    """Universal autonomous agent — does anything via the real AI (HF Space + Groq)."""
+    body = await request.json()
+    goal = body.get("goal", "").strip()
+    safety = body.get("safety", "confirm_destructive")
+    stream = body.get("stream", False)
+    followup_answers = body.get("answers") or body.get("followup_answers")
+
+    if not goal:
+        return JSONResponse({"success": False, "error": "No goal specified"}, status_code=400)
+
+    # ── Try local AI (HF Space → local GGUF) for conversational responses ──
+    gl = goal.lower().strip()
+
+    # ── Strip politeness prefixes to detect real intent ──
+    import re as _re_greet
+    _strip_re = _re_greet.compile(
+        r"^(?:can\s+you|could\s+you|would\s+you|please|pls|kindly|hey\s+jarvis|jarvis)\s+",
+        _re_greet.IGNORECASE,
+    )
+    _bare = _strip_re.sub("", gl).strip()
+
+    # ── Action keywords that mean "do something, not chat" ──
+    _ACTION_KEYWORDS = [
+        "open", "launch", "start", "run", "go to", "goto", "navigate",
+        "search", "find", "look up", "google", "browse", "visit",
+        "close", "kill", "stop", "quit", "exit",
+        "click", "type", "enter", "fill", "scroll", "press",
+        "take", "capture", "screenshot",
+        "install", "download", "update",
+        "send", "email", "write", "create", "make",
+        "play", "pause", "stop", "mute", "unmute", "volume",
+        "lock", "sleep", "shutdown", "restart", "hibernate",
+        "copy", "paste", "cut", "undo", "redo",
+        "set", "change", "switch", "toggle", "enable", "disable",
+        "where", "show", "list", "display",
+    ]
+    _has_action = any(kw in _bare for kw in _ACTION_KEYWORDS)
+
+    # Only treat as chat if it's truly conversational (no action intent)
+    is_chat = not _has_action and (len(gl.split()) < 8 or any(gl.startswith(w) for w in [
+        "hi", "hey", "hello", "how", "what", "who", "why", "tell me", "good",
+    ]))
+
+    # ── Greeting fast-path: deterministic, no LLM hallucination ──
+    GREETING_RE = _re_greet.compile(
+        r"^(?:hi|hey|hello|yo|sup|hiya|howdy|greetings|bonjour|salut|hola|ciao"
+        r"|namaste|salaam|aloha|konnichiwa|annyeong|merhaba|szia|hallo"
+        r"|good\s+(?:morning|afternoon|evening|night)"
+        r"|what'?s\s+up|how(?:'re|\s+are)\s+you"
+        r"|hey\s+jarvis|ok\s+jarvis|jarvis)\s*[!.?]*$",
+        _re_greet.IGNORECASE,
+    )
+    if GREETING_RE.match(gl):
+        from datetime import datetime as _dt
+        hour = _dt.now().hour
+        if hour < 6: period = "night"
+        elif hour < 12: period = "morning"
+        elif hour < 17: period = "afternoon"
+        else: period = "evening"
+        return {"success": True, "output": f"Good {period}. I'm here — what do you need?", "duration_seconds": 0.01, "model": "deterministic"}
+
+    if is_chat:
+        try:
+            from groq_agent import generate as ai_generate
+            text = ai_generate(goal, user_id="local", max_tokens=120, temperature=0.9)
+            if text:
+                return {"success": True, "output": text.strip(), "duration_seconds": 0.5, "model": "local-ai"}
+        except Exception:
+            pass
+
+    # ── Action routing ──
+    try:
+        from edge_router import classify_intent
+        intent, confidence, sub_type = classify_intent(goal)
+        if confidence > 0.95:
+            safety = safety or "full_auto"
+    except Exception:
+        pass
+
+    from computer_use import execute_goal
+    from universal_task_engine import UniversalTaskEngine, execute_complex_task
+
+    # Route complex tasks through Universal Task Engine
+    task_engine = UniversalTaskEngine()
+    complexity = task_engine.classify_complexity(goal)
+    if complexity.value in ("complex", "autonomous"):
+        result = await execute_complex_task(goal, safety)
+    else:
+        result = await execute_goal(goal, safety, followup_answers)
+
+    if isinstance(result, dict):
+        if "output" not in result and "result" in result:
+            result["output"] = result["result"]
+        if "output" not in result and result.get("steps"):
+            outputs = [s.get("result", "") for s in result["steps"] if s.get("status") == "done" and s.get("result")]
+            if outputs:
+                result["output"] = "\n".join(outputs)
+        if "output" not in result:
+            result["output"] = f"Completed {result.get('steps_done', 0)} of {result.get('steps_total', 0)} steps in {result.get('duration_seconds', 0)}s."
+    return JSONResponse(result)
+
+
+@app.get("/api/do-anything/actions")
+async def list_available_actions():
+    """List all available actions the computer use agent can perform."""
+    from computer_use import get_agent
+    agent = get_agent()
+    return {"actions": agent.list_actions(), "total": len(agent.list_actions())}
+
+
+@app.get("/api/do-anything/status")
+async def computer_use_status():
+    """Check if the computer use agent is available."""
+    from computer_use import get_agent
+    agent = get_agent()
+    return {
+        "available": True,
+        "actions": len(agent.list_actions()),
+        "safety_levels": ["full_auto", "confirm_destructive", "confirm_all", "manual"],
+    }
+
+
+@app.get("/api/screen/analyze")
+async def api_analyze_screen():
+    """Capture and analyze the current screen — returns OCR text, buttons, forms, elements."""
+    from computer_use import get_agent
+    agent = get_agent()
+    result = agent._analyze_screen()
+    return JSONResponse({"success": result.success, "data": json.loads(result.output) if result.success else result.error})
+
+
+@app.get("/api/screen/text")
+async def api_read_screen_text():
+    """Read all visible text from the screen."""
+    from computer_use import get_agent
+    agent = get_agent()
+    result = agent._read_screen_text()
+    return JSONResponse({"success": result.success, "text": result.output})
+
+
+@app.post("/api/screen/click")
+async def api_click_screen(request: Request):
+    """Click a UI element by its label text."""
+    body = await request.json()
+    label = body.get("label", body.get("text", ""))
+    from computer_use import get_agent
+    agent = get_agent()
+    result = agent._click_button(label)
+    return JSONResponse({"success": result.success, "output": result.output})
+
+
+@app.post("/api/screen/type")
+async def api_type_into_field(request: Request):
+    """Type text into a form field identified by its label."""
+    body = await request.json()
+    label = body.get("label", "")
+    value = body.get("value", "")
+    from computer_use import get_agent
+    agent = get_agent()
+    result = agent._fill_form_field(label, value)
+    return JSONResponse({"success": result.success, "output": result.output})
+
+
+@app.post("/api/screen/fill-form")
+async def api_fill_form(request: Request):
+    """Auto-detect and fill all form fields on screen."""
+    body = await request.json()
+    form_data = body.get("form_data", body.get("data", ""))
+    from computer_use import get_agent
+    agent = get_agent()
+    result = agent._fill_form(form_data)
+    return JSONResponse({"success": result.success, "output": result.output})
+
+
+@app.websocket("/ws/screen")
+async def screen_stream_websocket(websocket):
+    """Stream live screen captures to the UI as JPEG frames over WebSocket.
+
+    The server continuously captures the screen, analyzes it with OCR,
+    and sends frames + analysis data to connected clients.
+    This powers the Picture-in-Picture live preview in the Electron overlay.
+    """
+    from fastapi import WebSocketDisconnect
+    import asyncio
+    from mss import mss
+    from PIL import Image
+    from screen_analyzer import get_analyzer
+    import io
+
+    await websocket.accept()
+    analyzer = get_analyzer()
+
+    try:
+        while True:
+            try:
+                with mss() as sct:
+                    monitor = sct.monitors[1]
+                    sct_img = sct.grab(monitor)
+                    img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+
+                # Encode frame as JPEG
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=75)
+                jpeg_bytes = buf.getvalue()
+
+                # Run OCR analysis
+                analysis = analyzer.analyze_screenshot(img)
+
+                # Send frame + analysis over WebSocket
+                import base64
+                await websocket.send_json({
+                    "type": "frame",
+                    "width": analysis.width,
+                    "height": analysis.height,
+                    "jpeg": base64.b64encode(jpeg_bytes).decode("utf-8"),
+                    "text": analysis.text[:1000],
+                    "buttons": [b.to_dict() for b in analysis.buttons[:20]],
+                    "form_fields": [f.to_dict() for f in analysis.form_fields[:15]],
+                    "element_count": len(analysis.elements),
+                    "timestamp": analysis.timestamp,
+                })
+
+                # 5 fps (200ms between frames)
+                await asyncio.sleep(0.2)
+
+            except Exception as e:
+                await websocket.send_json({"type": "error", "error": str(e)})
+                await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  VIRTUAL DESKTOP ISOLATED TASKS — do anything without disturbing user
+# ═══════════════════════════════════════════════════════════════════
+
+class DesktopTaskRequest(BaseModel):
+    url: str = ""
+    title: str = ""
+    content: str = ""
+    save_path: str = ""
+    to: str = ""
+    subject: str = ""
+    body: str = ""
+    query: str = ""
+    app_name: str = ""
+    browser: str = "chrome"
+    headers: list = []
+    rows: list = []
+    slides: list = []
+    steps: list = []
+
+
+@app.post("/api/desktop/browse")
+async def api_desktop_browse(req: DesktopTaskRequest):
+    """Browse a URL on an isolated virtual desktop. User's desktop is never disturbed."""
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.browse_url(req.url, req.browser)
+        return {"status": "ok" if result.success else "error", "result": result.message}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/desktop/document")
+async def api_desktop_document(req: DesktopTaskRequest):
+    """Create a Word document on an isolated virtual desktop."""
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.create_document(req.title, req.content, req.save_path)
+        return {"status": "ok" if result.success else "error", "result": result.message}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/desktop/spreadsheet")
+async def api_desktop_spreadsheet(req: DesktopTaskRequest):
+    """Create an Excel spreadsheet on an isolated virtual desktop."""
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.create_spreadsheet(req.title, req.headers, req.rows, req.save_path)
+        return {"status": "ok" if result.success else "error", "result": result.message}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/desktop/presentation")
+async def api_desktop_presentation(req: DesktopTaskRequest):
+    """Create a PowerPoint presentation on an isolated virtual desktop."""
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.create_presentation(req.title, req.slides, req.save_path)
+        return {"status": "ok" if result.success else "error", "result": result.message}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/desktop/email")
+async def api_desktop_email(req: DesktopTaskRequest):
+    """Send an email on an isolated virtual desktop."""
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.send_email(req.to, req.subject, req.body)
+        return {"status": "ok" if result.success else "error", "result": result.message}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/desktop/research")
+async def api_desktop_research(req: DesktopTaskRequest):
+    """Research a topic on an isolated virtual desktop."""
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.research_topic(req.query)
+        return {"status": "ok" if result.success else "error", "result": result.message}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/desktop/open-app")
+async def api_desktop_open_app(req: DesktopTaskRequest):
+    """Open an app on an isolated virtual desktop."""
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.open_app_isolated(req.app_name)
+        return {"status": "ok" if result.success else "error", "result": result.message}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/desktop/task")
+async def api_desktop_task(req: DesktopTaskRequest):
+    """Execute a custom multi-step task on an isolated virtual desktop."""
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.run_custom_task(req.steps)
+        return {"status": "ok" if result.success else "error", "result": result.message,
+                "details": result.details}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.get("/api/desktop/status")
+async def api_desktop_status():
+    """Get virtual desktop engine status."""
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        return {
+            "status": "ok",
+            "current_desktop": engine.desktop.get_current(),
+            "active_sessions": len(engine._active_sessions),
+            "platform": sys.platform,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/shutdown")
+async def api_shutdown():
+    """Graceful shutdown."""
+    import os
+    os._exit(0)
+
+
+@app.websocket("/api/pip/ws/stream")
+async def pip_ws_stream(websocket):
+    """
+    PIP Virtual Cockpit WebSocket stream.
+    Streams JPEG frames from the virtual desktop framebuffer.
+    """
+    from fastapi import WebSocketDisconnect
+    import asyncio
+    import base64
+    import io
+
+    await websocket.accept()
+    session_id = websocket.query_params.get("session_id", "pip_main")
+
+    try:
+        from pip_cockpit import get_pip_cockpit
+        cockpit = get_pip_cockpit()
+
+        # Create session if needed
+        cockpit.create_session(session_id=session_id)
+
+        async for frame_msg in cockpit.generate_frames(session_id):
+            try:
+                await websocket.send_json(frame_msg)
+            except WebSocketDisconnect:
+                break
+            except Exception:
+                await asyncio.sleep(0.1)
+    except WebSocketDisconnect:
+        pass
+    except ImportError:
+        await websocket.send_json({"type": "error", "error": "pip_cockpit module not available"})
+    except Exception as e:
+        try:
+            await websocket.send_json({"type": "error", "error": str(e)})
+        except Exception:
+            pass
+
+
+async def init_ambient_layer():
+    """Initialize the ambient operating layer — hotkeys, tray, edge router."""
+    # ── Edge Router (sub-10ms intent classification) ──────────────
+    try:
+        from edge_router import get_router
+        router = get_router()
+        print(f"[AMBIENT] Edge router initialized — {len(router._compiled)} patterns")
+        # Attempt to load local model for fallback (non-blocking)
+        try:
+            import threading
+            threading.Thread(target=router.load_local_model, daemon=True).start()
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"[AMBIENT] Edge router init skipped: {e}")
+
+    # ── Hotkey Daemon (Ctrl+Shift+J summons JARVIS) ───────────────
+    try:
+        from hotkey_daemon import start as start_hotkeys, register_action, DEFAULT_HOTKEY
+        from ambient.overlay import overlay_controller
+
+        def _summon_jarvis():
+            overlay_controller.show()
+
+        register_action(DEFAULT_HOTKEY, _summon_jarvis)
+        start_hotkeys()
+        print(f"[AMBIENT] Hotkey daemon started — press {DEFAULT_HOTKEY} to summon JARVIS")
+    except Exception as e:
+        print(f"[AMBIENT] Hotkey daemon init skipped: {e}")
+
+    # ── System Tray Agent ─────────────────────────────────────────
+    try:
+        from tray_agent import start as start_tray
+        start_tray()
+        print("[AMBIENT] System tray agent started")
+    except Exception as e:
+        print(f"[AMBIENT] System tray agent init skipped: {e}")
+
+    # ── Messaging Bridge ───────────────────────────────────────────
+    try:
+        from messaging_bridge import bridge
+        from ai_agent import generate_response
+
+        async def _bridge_handler(msg):
+            try:
+                response = await generate_response(msg.text)
+                return {"reply": response}
+            except Exception as e:
+                return {"error": str(e)}
+
+        bridge.on_message(_bridge_handler)
+        print(f"[AMBIENT] Messaging bridge active — {len(bridge._handlers)} handler(s)")
+    except Exception as e:
+        print(f"[AMBIENT] Messaging bridge init skipped: {e}")
+
+    # ── Electron Desktop Shell (optional, if Electron installed) ──
+    if os.environ.get("JARVIS_DESKTOP", "").lower() in ("1", "true", "yes"):
+        try:
+            from electron_shell import start as start_shell
+            start_shell()
+            print("[AMBIENT] Electron desktop shell started")
+        except Exception as e:
+            print(f"[AMBIENT] Electron shell init skipped: {e}")
+
+    # ── Environment Sync Engine ────────────────────────────────────
+    try:
+        from environment_sync import get_environment_sync
+        env_sync = get_environment_sync()
+        print(f"[AMBIENT] Environment sync loaded — {len(env_sync._rules)} rules active")
+    except Exception as e:
+        print(f"[AMBIENT] Environment sync init skipped: {e}")
+
+    # ── Acoustic Guardian ──────────────────────────────────────────
+    try:
+        from acoustic_guardian import get_acoustic_guardian
+        guardian = get_acoustic_guardian()
+        print(f"[AMBIENT] Acoustic guardian active — monitoring {len(guardian._config.monitoring_events)} sound types")
+    except Exception as e:
+        print(f"[AMBIENT] Acoustic guardian init skipped: {e}")
+
+    # ── Wake Word Detector ─────────────────────────────────────────
+    try:
+        from wake_word import get_wake_word_detector
+        detector = get_wake_word_detector()
+        print(f"[AMBIENT] Wake word detector ready — engines: {[e[0] for e in detector._engines]}")
+    except Exception as e:
+        print(f"[AMBIENT] Wake word init skipped: {e}")
+
+    # ── Smart Clipboard Pipeline ───────────────────────────────────
+    try:
+        from clipboard_pipeline import get_clipboard_pipeline
+        pipeline = get_clipboard_pipeline()
+        print(f"[AMBIENT] Smart clipboard pipeline loaded — {pipeline.get_stats()['total_entries']} entries")
+    except Exception as e:
+        print(f"[AMBIENT] Clipboard pipeline init skipped: {e}")
+
+    # ── Secure Enclave ─────────────────────────────────────────────
+    try:
+        from secure_enclave import get_secure_enclave
+        enclave = get_secure_enclave()
+        status = enclave.get_status()
+        print(f"[SECURE] Enclave ready — type: {status.enclave_type}, items: {status.total_items}")
+    except Exception as e:
+        print(f"[SECURE] Enclave init skipped: {e}")
+
+    # ── Laser Gate ─────────────────────────────────────────────────
+    try:
+        from laser_gate import get_laser_gate
+        gate = get_laser_gate()
+        print("[SECURE] Laser gate active — sovereign approval system armed")
+    except Exception as e:
+        print(f"[SECURE] Laser gate init skipped: {e}")
+
+    # ── Injection Sandbox ──────────────────────────────────────────
+    try:
+        from injection_sandbox import get_injection_sandbox
+        sandbox = get_injection_sandbox()
+        print(f"[SECURE] Injection sandbox ready — {sandbox.get_stats()['patterns_loaded']} patterns loaded")
+    except Exception as e:
+        print(f"[SECURE] Injection sandbox init skipped: {e}")
+
+    # ── Tesseract OCR check (for screen vision system) ──────────────────
+    try:
+        import pytesseract
+        import shutil
+        if shutil.which("tesseract"):
+            print("[SCREEN] Tesseract OCR ready — screen vision enabled")
+        else:
+            common_paths = [
+                r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+                r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+            ]
+            found = False
+            for p in common_paths:
+                if os.path.exists(p):
+                    pytesseract.pytesseract.tesseract_cmd = p
+                    print(f"[SCREEN] Tesseract OCR ready (auto-detected at {p}) — screen vision enabled")
+                    found = True
+                    break
+            if not found:
+                print("[SCREEN] Tesseract OCR not found — screen vision tools (analyze, read, click) will be disabled")
+                print("[SCREEN] Install from: https://github.com/tesseract-ocr/tesseract/releases")
+    except ImportError:
+        print("[SCREEN] pytesseract not installed — screen vision disabled (pip install pytesseract)")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Smart Clipboard Pipeline
+# ══════════════════════════════════════════════════════════════════════════
+
+class ClipboardProcessRequest(BaseModel):
+    content: str
+    source_app: str = ""
+
+@app.post("/api/clipboard/process")
+async def clipboard_process(req: ClipboardProcessRequest):
+    """Process clipboard content: classify, suggest formats, store history."""
+    try:
+        from clipboard_pipeline import get_clipboard_pipeline
+        pipeline = get_clipboard_pipeline()
+        return pipeline.process_clipboard(req.content, req.source_app)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/clipboard/history")
+async def clipboard_history(limit: int = 50, search: str = ""):
+    """Get clipboard history with optional search."""
+    try:
+        from clipboard_pipeline import get_clipboard_pipeline
+        pipeline = get_clipboard_pipeline()
+        return {"entries": pipeline.get_history(limit, search)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/clipboard/pin/{entry_id}")
+async def clipboard_pin(entry_id: str):
+    """Pin/unpin a clipboard entry."""
+    from clipboard_pipeline import get_clipboard_pipeline
+    pipeline = get_clipboard_pipeline()
+    return {"ok": pipeline.pin_entry(entry_id)}
+
+@app.delete("/api/clipboard/{entry_id}")
+async def clipboard_delete(entry_id: str):
+    """Delete a clipboard entry."""
+    from clipboard_pipeline import get_clipboard_pipeline
+    pipeline = get_clipboard_pipeline()
+    return {"ok": pipeline.delete_entry(entry_id)}
+
+@app.get("/api/clipboard/stats")
+async def clipboard_stats():
+    """Get clipboard pipeline statistics."""
+    from clipboard_pipeline import get_clipboard_pipeline
+    pipeline = get_clipboard_pipeline()
+    return pipeline.get_stats()
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Physical Environment Sync
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/environment/status")
+async def environment_status():
+    """Get environment sync state."""
+    try:
+        from environment_sync import get_environment_sync
+        engine = get_environment_sync()
+        return engine.get_state()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/environment/check")
+async def environment_check():
+    """Check triggers and return pending actions."""
+    from environment_sync import get_environment_sync
+    engine = get_environment_sync()
+    actions = engine.check_triggers()
+    from dataclasses import asdict
+    return {"actions": [asdict(a) for a in actions]}
+
+@app.post("/api/environment/execute")
+async def environment_execute(body: dict):
+    """Execute a single environment action."""
+    from environment_sync import get_environment_sync, EnvironmentAction
+    engine = get_environment_sync()
+    action = EnvironmentAction(
+        action_type=body.get("action_type", "unknown"),
+        value=body.get("value", ""),
+        description=body.get("description", ""),
+    )
+    return engine.execute_action(action)
+
+@app.post("/api/environment/activity")
+async def environment_activity():
+    """Update activity timestamp (call on user interaction)."""
+    from environment_sync import get_environment_sync
+    engine = get_environment_sync()
+    engine.update_activity()
+    return {"ok": True}
+
+@app.post("/api/environment/keyword")
+async def environment_keyword(body: dict):
+    """Check user input for keyword triggers."""
+    from environment_sync import get_environment_sync
+    engine = get_environment_sync()
+    actions = engine.process_keyword_trigger(body.get("input", ""))
+    from dataclasses import asdict
+    return {"actions": [asdict(a) for a in actions]}
+
+@app.post("/api/environment/rules")
+async def environment_add_rule(body: dict):
+    """Add a new environment rule."""
+    from environment_sync import get_environment_sync
+    engine = get_environment_sync()
+    rule_id = engine.add_rule(body)
+    return {"ok": True, "rule_id": rule_id}
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Air-Gapped Secure Enclave
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/enclave/status")
+async def enclave_status():
+    """Get secure enclave status."""
+    try:
+        from secure_enclave import get_secure_enclave
+        enclave = get_secure_enclave()
+        status = enclave.get_status()
+        from dataclasses import asdict
+        return asdict(status)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/enclave/seal")
+async def enclave_seal(body: dict):
+    """Seal (encrypt and store) an item in the enclave."""
+    from secure_enclave import get_secure_enclave
+    enclave = get_secure_enclave()
+    ok = enclave.seal(
+        item_id=body.get("item_id", ""),
+        item_type=body.get("item_type", "key"),
+        data=body.get("data", ""),
+        metadata=body.get("metadata"),
+    )
+    return {"ok": ok}
+
+@app.post("/api/enclave/unseal")
+async def enclave_unseal(body: dict):
+    """Unseal (decrypt and retrieve) an item from the enclave."""
+    from secure_enclave import get_secure_enclave
+    enclave = get_secure_enclave()
+    data = enclave.unseal(body.get("item_id", ""))
+    if data is None:
+        return {"error": "Item not found"}
+    return {"ok": True, "data": data}
+
+@app.post("/api/enclave/seal-file")
+async def enclave_seal_file(body: dict):
+    """Seal a file into the enclave."""
+    from secure_enclave import get_secure_enclave
+    enclave = get_secure_enclave()
+    ok = enclave.seal_file(body.get("file_path", ""), body.get("item_id"))
+    return {"ok": ok}
+
+@app.post("/api/enclave/seal-knowledge-graph")
+async def enclave_seal_graph(body: dict):
+    """Seal the knowledge graph into the enclave."""
+    from secure_enclave import get_secure_enclave
+    enclave = get_secure_enclave()
+    ok = enclave.seal_knowledge_graph(body.get("graph", {}))
+    return {"ok": ok}
+
+@app.post("/api/enclave/seal-credential")
+async def enclave_seal_credential(body: dict):
+    """Seal a service credential."""
+    from secure_enclave import get_secure_enclave
+    enclave = get_secure_enclave()
+    ok = enclave.seal_credential(body.get("service", ""), body.get("credential", {}))
+    return {"ok": ok}
+
+@app.delete("/api/enclave/{item_id}")
+async def enclave_delete(item_id: str):
+    """Delete an item from the enclave."""
+    from secure_enclave import get_secure_enclave
+    enclave = get_secure_enclave()
+    return {"ok": enclave.delete_item(item_id)}
+
+@app.get("/api/enclave/verify")
+async def enclave_verify():
+    """Verify vault integrity."""
+    from secure_enclave import get_secure_enclave
+    enclave = get_secure_enclave()
+    return enclave.verify_integrity()
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Laser Gate (Sovereign Approval)
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/laser-gate/pending")
+async def laser_gate_pending():
+    """Get all pending actions awaiting approval."""
+    try:
+        from laser_gate import get_laser_gate
+        gate = get_laser_gate()
+        return {"actions": gate.get_pending_actions()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/laser-gate/submit")
+async def laser_gate_submit(body: dict):
+    """Submit an action for approval."""
+    from laser_gate import get_laser_gate
+    gate = get_laser_gate()
+    return gate.submit_action(
+        action_type=body.get("action_type", "unknown"),
+        payload=body.get("payload", {}),
+        description=body.get("description", ""),
+        diff_preview=body.get("diff_preview"),
+    )
+
+@app.post("/api/laser-gate/approve/{action_id}")
+async def laser_gate_approve(action_id: str):
+    """Approve a pending action."""
+    from laser_gate import get_laser_gate
+    gate = get_laser_gate()
+    return gate.approve_action(action_id)
+
+@app.post("/api/laser-gate/deny/{action_id}")
+async def laser_gate_deny(action_id: str):
+    """Deny a pending action."""
+    from laser_gate import get_laser_gate
+    gate = get_laser_gate()
+    return gate.deny_action(action_id)
+
+@app.get("/api/laser-gate/history")
+async def laser_gate_history(limit: int = 50):
+    """Get approval/denial history."""
+    from laser_gate import get_laser_gate
+    gate = get_laser_gate()
+    return {"history": gate.get_history(limit)}
+
+@app.get("/api/laser-gate/stats")
+async def laser_gate_stats():
+    """Get laser gate statistics."""
+    from laser_gate import get_laser_gate
+    gate = get_laser_gate()
+    return gate.get_stats()
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: PIP Virtual Cockpit
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/pip/status")
+async def pip_status():
+    """Get PIP cockpit status."""
+    try:
+        from pip_cockpit import get_pip_cockpit
+        cockpit = get_pip_cockpit()
+        return cockpit.get_status()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/pip/start")
+async def pip_start(body: dict):
+    """Start a PIP streaming session."""
+    from pip_cockpit import get_pip_cockpit
+    cockpit = get_pip_cockpit()
+    return cockpit.create_session(
+        session_id=body.get("session_id", "default"),
+        display_id=body.get("display_id", 1),
+        resolution=tuple(body.get("resolution", [640, 360])),
+        fps=body.get("fps", 15),
+        quality=body.get("quality", 70),
+    )
+
+@app.post("/api/pip/stop")
+async def pip_stop(body: dict):
+    """Stop a PIP streaming session."""
+    from pip_cockpit import get_pip_cockpit
+    cockpit = get_pip_cockpit()
+    return cockpit.stop_session(body.get("session_id", "default"))
+
+@app.post("/api/pip/manual-control")
+async def pip_manual_control(body: dict):
+    """Toggle manual control mode."""
+    from pip_cockpit import get_pip_cockpit
+    cockpit = get_pip_cockpit()
+    return cockpit.take_manual_control(body.get("session_id", "default"))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: VDI Background Execution & Live Backstage Canvas
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/vdi/start")
+async def vdi_start(body: dict):
+    """Start the background virtual desktop (DISPLAY=:1 isolation on Linux,
+    hidden desktop on Windows/macOS). Zero cursor hijacking."""
+    from vdi_manager import VDIManager
+    vdi = VDIManager()
+    ok = vdi.start()
+    return {"ok": ok, "display": vdi.get_display_env(), "running": vdi._running}
+
+@app.post("/api/vdi/launch")
+async def vdi_launch(body: dict):
+    """Launch an application on the isolated VDI without disturbing the physical display."""
+    from headless_worker import get_headless_worker
+    worker = get_headless_worker()
+    session_id = body.get("session_id", "default")
+    app_name = body.get("app_name", "app")
+    command = body.get("command", [])
+    if not command:
+        # Resolve from app_name
+        app_map = {
+            "chrome": "google-chrome", "firefox": "firefox",
+            "code": "code", "terminal": "xterm",
+            "python": "python3", "excel": "libreoffice --calc",
+            "word": "libreoffice --writer", "powerpoint": "libreoffice --impress",
+        }
+        resolved = app_map.get(app_name.lower(), app_name)
+        command = resolved.split()
+    # Ensure session exists
+    if session_id not in worker.sessions:
+        worker.start_session(session_id)
+    return worker.launch_app(session_id, app_name, command)
+
+
+@app.post("/api/wsl/launch")
+async def wsl_launch(body: dict):
+    """Launch an app or URL in the WSL XFCE4 VDI (display :99).
+
+    Body: { "app": "chrome", "url": "https://...", "command": ["custom", "cmd"] }
+    Supported apps: chrome, edge, firefox, xterm, code, terminal
+    """
+    import subprocess as _sp
+    app = body.get("app", "").lower().strip()
+    url = body.get("url", "")
+    custom_cmd = body.get("command", [])
+
+    # App resolution — WSL commands
+    WSL_APPS = {
+        "chrome": "google-chrome-stable",
+        "google-chrome": "google-chrome-stable",
+        "edge": "microsoft-edge-stable",
+        "microsoft-edge": "microsoft-edge-stable",
+        "firefox": "firefox",
+        "xterm": "xfce4-terminal",
+        "terminal": "xfce4-terminal",
+        "code": "code",
+        "thunar": "thunar",
+        "files": "thunar",
+        "calculator": "gnome-calculator",
+        "notepad": "mousepad",
+        "text-editor": "mousepad",
+        "gimp": "gimp",
+        "vlc": "vlc",
+        "libreoffice": "libreoffice",
+    }
+
+    if custom_cmd:
+        cmd_parts = custom_cmd
+    elif app in WSL_APPS:
+        cmd_parts = [WSL_APPS[app]]
+    elif app:
+        cmd_parts = [app]
+    else:
+        return {"ok": False, "error": "No app specified. Use 'app' (chrome/edge/firefox/etc) or 'command'."}
+
+    # Build the full command with URL if provided
+    if url and app in ("chrome", "google-chrome", "edge", "microsoft-edge", "firefox", "google-chrome-stable", "microsoft-edge-stable"):
+        cmd_parts.append(url)
+    elif url:
+        # For non-browser apps, open URL in default browser
+        cmd_parts_after = [url]
+        cmd_parts = ["xdg-open", url]
+
+    # Execute in WSL with DISPLAY=:99
+    try:
+        # Check if app exists, fallback to chrome
+        check_cmd = ["wsl", "-e", "bash", "-c", f"which {cmd_parts[0]} 2>/dev/null || echo MISSING"]
+        check = _sp.run(check_cmd, capture_output=True, text=True, timeout=5)
+        if "MISSING" in check.stdout:
+            cmd_parts = ["google-chrome-stable"]
+            app = "chrome (edge not installed)"
+
+        wsl_cmd = ["wsl", "-e", "bash", "-c",
+                    f"DISPLAY=:99 {' '.join(cmd_parts)} &"]
+        proc = _sp.Popen(wsl_cmd, stdout=_sp.PIPE, stderr=_sp.PIPE)
+        return {
+            "ok": True,
+            "app": app or " ".join(custom_cmd),
+            "url": url,
+            "pid": proc.pid,
+            "display": ":99",
+            "message": f"Launched {app or 'command'} in WSL VDI",
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── Workspace Cloner Endpoints ─────────────────────────────────────────────
+
+@app.post("/api/workspace/clone")
+async def workspace_clone(body: dict = None):
+    """Clone host browser profiles to WSL VDI."""
+    from workspace_cloner import WorkspaceCloner
+    cloner = WorkspaceCloner()
+    result = cloner.clone_browser_profiles()
+    return {"ok": True, "clone": result}
+
+@app.post("/api/workspace/init-vdi")
+async def workspace_init_vdi(body: dict = None):
+    """Initialize VDI desktop with cloned profiles."""
+    from workspace_cloner import WorkspaceCloner
+    body = body or {}
+    cloner = WorkspaceCloner()
+    width = body.get("width", 1920)
+    height = body.get("height", 1080)
+    result = cloner.init_vdi_desktop(width, height)
+    return result
+
+@app.post("/api/workspace/launch")
+async def workspace_launch(body: dict):
+    """Launch browser in VDI with cloned profile."""
+    from workspace_cloner import WorkspaceCloner
+    cloner = WorkspaceCloner()
+    browser = body.get("browser", "chrome")
+    url = body.get("url", "")
+    result = cloner.launch_cloned_browser(browser, url)
+    return result
+
+@app.get("/api/workspace/status")
+async def workspace_status():
+    """Get workspace cloner status."""
+    from workspace_cloner import WorkspaceCloner
+    cloner = WorkspaceCloner()
+    return cloner.get_status()
+
+
+# ── State Migrator Endpoints ───────────────────────────────────────────────
+
+@app.get("/api/migrator/windows")
+async def migrator_windows(display: str = ":99"):
+    """List windows on a display."""
+    from state_migrator import StateMigrator
+    migrator = StateMigrator()
+    windows = migrator.list_windows(display)
+    return {"windows": [{"wid": w.wid, "title": w.title, "app": w.app_name} for w in windows]}
+
+@app.post("/api/migrator/transfer")
+async def migrator_transfer(body: dict):
+    """Transfer window between displays."""
+    from state_migrator import StateMigrator
+    migrator = StateMigrator()
+    direction = body.get("direction", "to_foreground")
+    window_id = body.get("window_id")
+    title = body.get("title")
+    if direction == "to_foreground":
+        return migrator.transfer_to_foreground(window_id, title)
+    else:
+        return migrator.transfer_to_background(window_id, title)
+
+@app.get("/api/migrator/status")
+async def migrator_status():
+    """Get migrator status."""
+    from state_migrator import StateMigrator
+    migrator = StateMigrator()
+    return migrator.get_status()
+
+
+# ── Execution Router Endpoints ──────────────────────────────────────────────
+
+@app.post("/api/route/execute")
+async def route_execute(body: dict):
+    """Route command to correct display (VDI or host)."""
+    from execution_router import ExecutionRouter, ExecutionContext, TargetDisplay, ExecutionMode
+    router = ExecutionRouter()
+    ctx = ExecutionContext(
+        target_display=TargetDisplay(body.get("display", ":99")),
+        mode=ExecutionMode(body.get("mode", "background")),
+        app=body.get("app", ""),
+        url=body.get("url", ""),
+        command=body.get("command", []),
+        anti_detect=body.get("anti_detect", True),
+    )
+    return router.route(ctx)
+
+@app.post("/api/route/screenshot")
+async def route_screenshot(body: dict = None):
+    """Get screenshot from a display as base64."""
+    from execution_router import ExecutionRouter
+    import base64
+    router = ExecutionRouter()
+    display = (body or {}).get("display", ":99")
+    img_bytes = router.screen.capture(display)
+    if img_bytes:
+        b64 = base64.b64encode(img_bytes).decode()
+        return {"ok": True, "image": b64, "display": display}
+    return {"ok": False, "error": "Capture failed"}
+
+@app.post("/api/route/click-text")
+async def route_click_text(body: dict):
+    """Find and click text on screen."""
+    from execution_router import ExecutionRouter
+    router = ExecutionRouter()
+    display = body.get("display", ":99")
+    text = body.get("text", "")
+    return router.click_text(display, text)
+
+@app.get("/api/vdi/status")
+async def vdi_status():
+    """Get VDI session status."""
+    from headless_worker import get_headless_worker
+    worker = get_headless_worker()
+    return worker.get_status()
+
+
+# ── App State Discovery Endpoints ──────────────────────────────────────
+
+@app.get("/api/apps/discover")
+async def apps_discover():
+    """Discover signed-in state for all desktop apps."""
+    from app_state_discovery import discover_app_states
+    return discover_app_states()
+
+@app.get("/api/apps/installed")
+async def apps_installed():
+    """List all installed apps in WSL VDI."""
+    from app_installer import AppInstaller
+    installer = AppInstaller()
+    return {"apps": installer.get_installed_apps()}
+
+@app.get("/api/apps/catalog")
+async def apps_catalog():
+    """List all available apps in the install catalog."""
+    from app_installer import AppInstaller
+    installer = AppInstaller()
+    return {"apps": installer.get_available_apps()}
+
+@app.post("/api/apps/install")
+async def apps_install(body: dict):
+    """Install an app in WSL VDI."""
+    from app_installer import install_app
+    app_name = body.get("app", "")
+    return install_app(app_name)
+
+@app.post("/api/apps/install-all-missing")
+async def apps_install_missing():
+    """Install all missing essential apps."""
+    from app_installer import AppInstaller
+    installer = AppInstaller()
+    results = installer.install_all_missing()
+    return {"results": [{"app": r.app_name, "success": r.success, "message": r.message} for r in results]}
+
+
+# ── 3D CAD Pipeline Endpoints ──────────────────────────────────────────
+
+@app.post("/api/cad/turbine")
+async def cad_turbine(body: dict = None):
+    """Generate a parametric 3D turbine engine in Blender."""
+    from cad_pipeline import BlenderPipeline
+    body = body or {}
+    pipeline = BlenderPipeline()
+    result = pipeline.generate_turbine(
+        num_blades=body.get("blades", 12),
+        radius=body.get("radius", 3.0),
+        blade_length=body.get("blade_length", 1.5),
+    )
+    return {"success": result.success, "output": result.output_path,
+            "duration": result.duration_seconds, "error": result.error}
+
+@app.post("/api/cad/render")
+async def cad_render(body: dict):
+    """Render animation from .blend file."""
+    from cad_pipeline import BlenderPipeline
+    pipeline = BlenderPipeline()
+    result = pipeline.render_animation(
+        blend_file=body.get("blend_file", ""),
+        output_dir=body.get("output_dir", "/tmp/render"),
+        frames=body.get("frames", 60),
+        resolution=body.get("resolution", "1920x1080"),
+    )
+    return {"success": result.success, "output": result.output_path,
+            "duration": result.duration_seconds, "error": result.error}
+
+@app.post("/api/cad/presentation")
+async def cad_presentation(body: dict):
+    """Create PowerPoint from research findings."""
+    from cad_pipeline import PresentationGenerator
+    gen = PresentationGenerator()
+    result = gen.create_from_research(
+        topic=body.get("topic", "Research"),
+        findings=body.get("findings", []),
+        output_path=body.get("output_path", "C:\\Users\\supro\\Desktop\\presentation.pptx"),
+    )
+    return {"success": result}
+
+
+# ── ReAct Loop Endpoints ───────────────────────────────────────────────
+
+@app.post("/api/react/execute")
+async def react_execute(body: dict):
+    """Execute a complex task using the VDI ReAct loop."""
+    from react_loop import run_react_task
+    goal = body.get("goal", "")
+    max_steps = body.get("max_steps", 30)
+    result = await run_react_task(goal, max_steps=max_steps)
+    return result
+
+@app.get("/api/react/status")
+async def react_status():
+    """Get ReAct loop status."""
+    from react_loop import LoopState
+    return {"state": LoopState.IDLE.value, "max_iterations": 50}
+
+
+@app.websocket("/api/vdi/stream")
+async def vdi_stream_websocket(websocket):
+    """
+    WebSocket: Live 60fps thumbnail stream from the hidden backend virtual desktop.
+    Clients receive JPEG frames of the background VDI (:1) as JARVIS executes tasks.
+    This is the 'Live Backstage Canvas' — watch JARVIS work without cursor hijacking.
+    """
+    from vdi_manager import VDIManager, FrameCapturer
+    await websocket.accept()
+    vdi = VDIManager()
+    capturer = FrameCapturer(vdi, fps=60)
+
+    async def send_frames():
+        import base64, asyncio, json, time
+        while True:
+            frame = capturer.get_latest_frame() or vdi.capture_desktop()
+            if frame:
+                b64 = base64.b64encode(frame).decode()
+                await websocket.send_text(json.dumps({"type": "frame", "data": b64, "ts": time.time()}))
+            await asyncio.sleep(1.0 / 60)
+
+    capturer.start()
+    try:
+        await send_frames()
+    except Exception:
+        capturer.stop()
+
+@app.get("/api/desktop/vdi-thumbnail")
+async def vdi_thumbnail(width: int = 640, height: int = 360, quality: int = 70, session_id: str = "default"):
+    """Capture a single thumbnail JPEG from the VDI background desktop."""
+    from headless_worker import get_headless_worker
+    worker = get_headless_worker()
+    if session_id not in worker.sessions:
+        worker.start_session(session_id)
+    frame = worker.sessions[session_id].capture_jpeg(
+        session_id=session_id, width=width, height=height, quality=quality
+    ) if hasattr(worker.sessions[session_id], 'capture_jpeg') else None
+    if not frame:
+        # Fallback to headless worker screenshot
+        frame = worker.capture_jpeg(session_id, width=width, height=height)
+    if frame:
+        from fastapi.responses import Response
+        return Response(content=frame, media_type="image/jpeg")
+    return JSONResponse({"error": "no VDI frame available"}, status_code=404)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: ADB / WiFi Debugging Bridge
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/adb/devices")
+async def adb_devices():
+    """List all ADB-connected Android devices on WiFi."""
+    try:
+        result = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=10)
+        devices = []
+        for line in result.stdout.strip().split("\n")[1:]:
+            if "\t" in line:
+                parts = line.split("\t")
+                devices.append({
+                    "device_id": parts[0],
+                    "status": parts[1] if len(parts) > 1 else "unknown",
+                })
+        return {"ok": True, "devices": devices}
+    except FileNotFoundError:
+        return {"ok": False, "error": "ADB not installed. Install: brew install android-platform-tools"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/api/adb/connect")
+async def adb_connect(body: dict):
+    """Connect to an Android device via ADB over WiFi (no USB needed)."""
+    ip = body.get("ip", "")
+    port = body.get("port", 5555)
+    if not ip:
+        return {"ok": False, "error": "Missing 'ip' parameter"}
+    try:
+        result = subprocess.run(
+            ["adb", "connect", f"{ip}:{port}"],
+            capture_output=True, text=True, timeout=10
+        )
+        return {"ok": True, "output": result.stdout.strip(), "stderr": result.stderr.strip()}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/api/adb/command")
+async def adb_command(body: dict):
+    """Send a raw ADB command to a connected device (reboot, lock, notify)."""
+    device_id = body.get("device_id", "")
+    command = body.get("command", "")
+    if not device_id or not command:
+        return {"ok": False, "error": "Missing device_id or command"}
+    try:
+        args = ["adb", "-s", device_id] + command.split()
+        result = subprocess.run(args, capture_output=True, text=True, timeout=30)
+        return {"ok": result.returncode == 0, "stdout": result.stdout.strip(), "stderr": result.stderr.strip()}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/api/adb/scan-ports")
+async def adb_port_scan(body: dict):
+    """Scan for ADB ports on a phone's IP (for wireless debugging setup)."""
+    ip = body.get("ip", "")
+    if not ip:
+        return {"ok": False, "error": "Missing 'ip' parameter"}
+    try:
+        from adb_port_scan import is_adb_port
+        # Check common ADB ports
+        found_ports = []
+        for port in [5555, 37829, 38829, *range(30000, 50000, 1000)]:
+            if await is_adb_port(ip, port):
+                found_ports.append(port)
+        return {"ok": True, "ip": ip, "ports": found_ports}
+    except FileNotFoundError:
+        return {"ok": False, "error": "adb_port_scan module not found"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Wearable / Phone Streamer ("Send to my watch")
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/wearable/send-to-watch")
+async def send_to_watch(body: dict):
+    """Send the active background VDI display to paired smartwatch/phone.
+    
+    Compresses the VDI framebuffer and streams it live over ws://localhost:8080/stream.
+    """
+    from headless_worker import get_headless_worker
+    worker = get_headless_worker()
+    session_id = body.get("session_id", "default")
+    quality = body.get("quality", 25)
+
+    if session_id not in worker.sessions:
+        worker.start_session(session_id)
+
+    # Capture a frame from the VDI
+    frame = worker.capture_jpeg(session_id, width=320, height=180, quality=quality)
+    if not frame:
+        return {"success": False, "error": "No VDI frame available"}
+
+    # Send to wearables via WebSocket streamer
+    try:
+        from wearable_sync import get_wearable_sync
+        sync = get_wearable_sync()
+
+        async def _send():
+            return await sync.send_to_watch(frame, quality)
+
+        result = asyncio.ensure_future(_send())
+        result_dict = await result
+        return {"success": True, "frame_size": len(frame), "result": result_dict}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/wearable/discover")
+async def wearable_discover():
+    """Discover local IoT devices, phones, and smartwatches via mDNS/UPnP/ARP."""
+    from smart_home_manager import get_smart_home_manager
+    try:
+        manager = get_smart_home_manager()
+        devices = manager.discover(protocol="mDNS") + manager.discover(protocol="upnp") + manager.discover(protocol="arp")
+        return {"devices": devices, "count": len(devices)}
+    except Exception:
+        # Fallback to standalone scan
+        from wearable_sync import DeviceDiscovery
+        discovery = DeviceDiscovery()
+        devices = discovery.discover()
+        return {"devices": devices, "count": len(devices)}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Laser Gate Visual Overlay
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/laser-gate/visual/intercept")
+async def laser_gate_visual_intercept(body: dict):
+    """Trigger the crimson border overlay on the primary display.
+    
+    Shows a crimson (#EF4444) border with a live PiP preview of the background VDI.
+    """
+    from laser_gate import LaserGateVisual, get_laser_gate
+    action = body.get("action", "unknown")
+    risk = body.get("risk", "high")
+    vdi_preview = body.get("vdi_preview_path")
+
+    gate = get_laser_gate()
+    visual = LaserGateVisual()
+    visual.show_intercept_overlay(action, risk, vdi_preview)
+
+    # Submit the action for approval
+    record = gate.submit_action(
+        action_type=action,
+        payload=body.get("payload", {}),
+        description=body.get("description", action),
+        diff_preview=body.get("diff_preview"),
+    )
+    return {"intercepted": True, "action_id": record.get("action_id"), "overlay": "crimson_active"}
+
+@app.post("/api/laser-gate/hold")
+async def laser_gate_hold(body: dict):
+    """Register a tactile Spacebar hold for high-risk action approval."""
+    from laser_gate import get_laser_gate
+    gate = get_laser_gate()
+    duration = body.get("hold_duration", 1.5)
+    # Start the hold timer
+    gate.start_hold()
+    # Check after duration
+    import time
+    time.sleep(duration)
+    confirmed = gate.stop_hold()
+    return {"confirmed": confirmed, "hold_duration": duration}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Complex Task Runner with PiP Streaming
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/complex/run")
+async def complex_run(body: dict):
+    """Run a really complex multi-step task inside the isolated VDI.
+
+    Executes everything from stock data downloads and chart generation
+    to PDF/PPTX compilation — all in an invisible background VM.
+    """
+    from complex_task_pip import COMPLEX_TASKS, run_complex_task_with_pip
+    task_key = body.get("task_key", "financial_dashboard")
+    pip_width = body.get("pip_width", 480)
+    pip_height = body.get("pip_height", 270)
+
+    if task_key not in COMPLEX_TASKS:
+        return {"success": False, "error": f"Unknown task: {task_key}. Available: {list(COMPLEX_TASKS.keys())}"}
+
+    result = await run_complex_task_with_pip(
+        task_key=task_key,
+        pip_width=pip_width,
+        pip_height=pip_height,
+        pip_fps=30,
+    )
+    return result
+@app.get("/api/complex/tasks")
+async def complex_list_tasks():
+    """List available complex tasks."""
+    from complex_task_pip import COMPLEX_TASKS
+    tasks = []
+    for k, v in COMPLEX_TASKS.items():
+        tasks.append({"key": k, "name": v["name"], "description": v["description"], "steps": len(v["steps"])})
+    return {"tasks": tasks}
+
+@app.websocket("/api/complex/pip-stream")
+async def complex_pip_stream(websocket):
+    """WebSocket: streams a small PiP (Picture-in-Picture) window showing live
+    progress of the complex task running inside the isolated VDI.
+
+    The thumbnail is a small overlay (e.g., 480x270) that can be displayed
+    as a floating window on the user's real desktop while JARVIS works invisibly.
+
+    Sources (tried in order):
+      1. VDI XFCE4 stream (vdi_xfce_streamer.py on port 8766)
+      2. headless_worker VDI session
+      3. Local desktop capture (mss/GDI)
+    """
+    import base64, json, time
+    from PIL import Image
+    import io
+
+    await websocket.accept()
+
+    # Source 1: Try VDI XFCE4 stream (vdi_xfce_streamer.py)
+    vdi_capture = None
+    try:
+        from vdi_xfce_streamer import VDIFrameCapture
+        vdi_capture = VDIFrameCapture(display=":1", width=480, height=270)
+        vdi_capture.start(fps=15)
+        log.info("[PiP] Using VDI XFCE4 stream source")
+    except Exception as e:
+        log.debug(f"[PiP] VDI XFCE4 stream not available: {e}")
+
+    # Source 2: Try headless_worker
+    worker = None
+    try:
+        from headless_worker import get_headless_worker
+        worker = get_headless_worker()
+        if "default" not in worker.sessions:
+            worker.start_session("default", width=1920, height=1080)
+    except Exception as e:
+        log.debug(f"[PiP] headless_worker not available: {e}")
+
+    try:
+        while True:
+            frame = None
+
+            # Try VDI XFCE4 first
+            if vdi_capture:
+                frame = vdi_capture.get_latest_frame()
+
+            # Fall back to headless_worker
+            if not frame and worker:
+                try:
+                    frame = worker.capture_jpeg("default", width=480, height=270, quality=60)
+                except Exception:
+                    pass
+
+            if frame:
+                b64 = base64.b64encode(frame).decode()
+                await websocket.send_json({"type": "frame", "data": b64, "ts": time.time()})
+            await asyncio.sleep(1.0 / 15)  # 15fps PiP stream
+    except Exception:
+        pass
+    finally:
+        if vdi_capture:
+            vdi_capture.stop()
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Wake Word Detection
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/wakeword/status")
+async def wakeword_status():
+    """Get wake word detector status."""
+    try:
+        from wake_word import get_wake_word_detector
+        detector = get_wake_word_detector()
+        return detector.get_status()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/wakeword/enable")
+async def wakeword_enable():
+    """Enable wake word detection."""
+    from wake_word import get_wake_word_detector
+    detector = get_wake_word_detector()
+    detector.enable()
+    return {"ok": True, "enabled": True}
+
+@app.post("/api/wakeword/disable")
+async def wakeword_disable():
+    """Disable wake word detection."""
+    from wake_word import get_wake_word_detector
+    detector = get_wake_word_detector()
+    detector.disable()
+    return {"ok": True, "enabled": False}
+
+@app.post("/api/wakeword/sensitivity")
+async def wakeword_sensitivity(body: dict):
+    """Update detection sensitivity."""
+    from wake_word import get_wake_word_detector
+    detector = get_wake_word_detector()
+    detector.set_sensitivity(body.get("sensitivity", 0.5))
+    return {"ok": True, "sensitivity": body.get("sensitivity", 0.5)}
+
+@app.post("/api/wakeword/phrase")
+async def wakeword_phrase(body: dict):
+    """Update the wake phrase."""
+    from wake_word import get_wake_word_detector
+    detector = get_wake_word_detector()
+    detector.set_wake_phrase(body.get("phrase", "hey jarvis"))
+    return {"ok": True, "phrase": body.get("phrase", "hey jarvis")}
+
+@app.post("/api/wakeword/detect")
+async def wakeword_detect(body: dict):
+    """Test wake word detection on a single audio chunk."""
+    import base64
+    from wake_word import get_wake_word_detector
+    detector = get_wake_word_detector()
+    audio_b64 = body.get("audio_b64", "")
+    if not audio_b64:
+        return {"error": "No audio data"}
+    audio_bytes = base64.b64decode(audio_b64)
+    return detector.detect_sync(audio_bytes)
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Ambient Acoustic Guardian
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/acoustic/status")
+async def acoustic_status():
+    """Get acoustic guardian status."""
+    try:
+        from acoustic_guardian import get_acoustic_guardian
+        guardian = get_acoustic_guardian()
+        return guardian.get_stats()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/acoustic/events")
+async def acoustic_events(limit: int = 20):
+    """Get recent sound events."""
+    from acoustic_guardian import get_acoustic_guardian
+    guardian = get_acoustic_guardian()
+    return {"events": guardian.get_recent_events(limit)}
+
+@app.post("/api/acoustic/acknowledge/{alert_id}")
+async def acoustic_acknowledge(alert_id: str):
+    """Acknowledge an acoustic alert."""
+    from acoustic_guardian import get_acoustic_guardian
+    guardian = get_acoustic_guardian()
+    return {"ok": guardian.acknowledge_alert(alert_id)}
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Anti-Prompt Injection Sandbox
+# ══════════════════════════════════════════════════════════════════════════
+
+class InjectionScanRequest(BaseModel):
+    content: str
+    source: str = "unknown"
+
+@app.post("/api/sandbox/scan")
+async def sandbox_scan(req: InjectionScanRequest):
+    """Scan content for injection attacks and sanitize."""
+    try:
+        from injection_sandbox import get_injection_sandbox
+        sandbox = get_injection_sandbox()
+        result = sandbox.scan_and_sanitize(req.content, req.source)
+        from dataclasses import asdict
+        return asdict(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/sandbox/stats")
+async def sandbox_stats():
+    """Get sandbox statistics."""
+    from injection_sandbox import get_injection_sandbox
+    sandbox = get_injection_sandbox()
+    return sandbox.get_stats()
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: Sovereign Action Approval (Legacy Intercept)
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/sovereign/pending-actions")
+async def sovereign_pending():
+    """Get pending actions (routes to Laser Gate)."""
+    try:
+        from laser_gate import get_laser_gate
+        gate = get_laser_gate()
+        return {"actions": gate.get_pending_actions()}
+    except Exception:
+        return {"actions": []}
+
+@app.post("/api/sovereign/approve/{action_id}")
+async def sovereign_approve(action_id: str):
+    """Approve a sovereign action."""
+    from laser_gate import get_laser_gate
+    gate = get_laser_gate()
+    return gate.approve_action(action_id)
+
+@app.post("/api/sovereign/deny/{action_id}")
+async def sovereign_deny(action_id: str):
+    """Deny a sovereign action."""
+    from laser_gate import get_laser_gate
+    gate = get_laser_gate()
+    return gate.deny_action(action_id)
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: OAuth/SSO Identity
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/identity/status")
+async def identity_status():
+    """Get current identity propagation status."""
+    try:
+        from mcp_auth import get_local_identity, OIDC_ISSUER
+        identity = get_local_identity()
+        return {
+            "authenticated": bool(OIDC_ISSUER),
+            "auth_method": "oidc" if OIDC_ISSUER else "local",
+            "oidc_configured": bool(OIDC_ISSUER),
+            "user_id": identity.user_id,
+            "scopes": identity.scopes,
+        }
+    except Exception as e:
+        return {"authenticated": False, "error": str(e)}
+
+# ── Progress Dashboard (mounted at /tasks) ──────────────────────────────────
+try:
+    from progress_ui import start_progress_server, DASHBOARD_HTML
+    from fastapi.responses import HTMLResponse as _HTMLResp
+
+    @app.get("/tasks", response_class=_HTMLResp)
+    async def progress_dashboard():
+        return DASHBOARD_HTML.replace("PORT", "7890")
+
+    @app.get("/api/tasks")
+    async def progress_tasks():
+        from progress_ui import get_tracker
+        return get_tracker().get_all_tasks()
+
+    @app.websocket("/tasks/ws")
+    async def progress_ws(websocket):
+        from progress_ui import get_tracker
+        import threading as _thr
+        await websocket.accept()
+        tracker = get_tracker()
+        connected = [websocket]
+
+        def on_update(data):
+            try:
+                _thr.Thread(target=lambda: websocket.send_json(data), daemon=True).start()
+            except Exception:
+                pass
+
+        tracker.add_listener(on_update)
+        try:
+            while True:
+                await websocket.receive_text()
+        except Exception:
+            connected.remove(websocket)
+
+    print("[PROGRESS] Dashboard available at /tasks")
+except Exception as _prog_err:
+    print(f"[PROGRESS] Dashboard not mounted: {_prog_err}")
+
+
+# ── Desktop Stream WebSocket ──────────────────────────────────────
+try:
+    from desktop_streamer import get_streamer
+
+    @app.websocket("/stream/desktop")
+    async def desktop_stream_ws(websocket):
+        """WebSocket: streams hidden desktop browser frames to the Electron app.
+        
+        Client sends JSON commands:
+          {"action": "start", "cdp_port": 9223, "fps": 2, "quality": 40, "source": "cdp|screen"}
+          {"action": "stop"}
+          {"action": "capture"}  -- single snapshot
+        Server sends:
+          {"type": "frame", "data": "<base64 jpeg>", "ts": ...}
+        """
+        await websocket.accept()
+        streamer = get_streamer()
+        streamer.add_client(websocket)
+        try:
+            while True:
+                msg = await websocket.receive_text()
+                data = json.loads(msg)
+                if data.get("action") == "start":
+                    streamer.start(
+                        cdp_port=data.get("cdp_port", 9223),
+                        fps=data.get("fps", 2),
+                        quality=data.get("quality", 40),
+                        source=data.get("source", "cdp"),
+                    )
+                elif data.get("action") == "stop":
+                    streamer.stop()
+                elif data.get("action") == "capture":
+                    frame = streamer.capture_once(
+                        cdp_port=data.get("cdp_port"),
+                        source=data.get("source"),
+                    )
+                    if frame:
+                        await websocket.send_json({
+                            "type": "snapshot",
+                            "data": base64.b64encode(frame).decode(),
+                        })
+                    else:
+                        await websocket.send_json({"type": "snapshot", "error": "no frame"})
+        except Exception:
+            streamer.remove_client(websocket)
+
+    @app.get("/api/stream/snapshot")
+    async def stream_snapshot():
+        """REST endpoint: capture a single frame from the hidden desktop."""
+        streamer = get_streamer()
+        frame = streamer.capture_once()
+        if frame:
+            return Response(content=frame, media_type="image/jpeg")
+        return JSONResponse({"error": "no frame available"}, status_code=404)
+
+    print("[STREAMER] Desktop stream endpoint available at /stream/desktop")
+except Exception as _stream_err:
+    print(f"[STREAMER] Not mounted: {_stream_err}")
+
+# ── Lifespan: Chain all startup handlers ────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app):
+    # Auto-install deps on first run
+    try:
+        import auto_deps
+        auto_deps.check_and_install()
+    except Exception:
+        pass
+
+    await startup_event()
+    await init_multi_tenant()
+    await init_context_relay()
+    await init_ambient_layer()
+    yield
+
+app.router.lifespan_context = lifespan
+
+# ══════════════════════════════════════════════════════════════════════════
+# SECTION: 5 Loose Files — Wired Into The AI Pipeline
+# ══════════════════════════════════════════════════════════════════════════
+
+# ── RAG Engine (embedding-based search) ──
+try:
+    from rag_engine import query_context as _rag_query, index_document as _rag_index, has_documents as _rag_has_docs
+
+    @app.post("/api/rag/query")
+    async def rag_query(body: dict):
+        """Query the local RAG engine for relevant document chunks."""
+        user_id = body.get("user_id", "default")
+        query = body.get("query", "")
+        top_k = body.get("top_k", 3)
+        results = _rag_query(user_id, query, top_k=top_k)
+        return {"results": results, "has_docs": _rag_has_docs(user_id)}
+
+    @app.post("/api/rag/index")
+    async def rag_index(body: dict):
+        """Index a document chunk into the local RAG store."""
+        user_id = body.get("user_id", "default")
+        chunks = body.get("chunks", [])
+        _rag_index(user_id, chunks)
+        return {"indexed": len(chunks)}
+
+    print("[RAG] Embeddings search engine wired in at /api/rag/*")
+except Exception as _rag_err:
+    print(f"[RAG] Not mounted: {_rag_err}")
+
+
+# ── Reminders (persistent AI scheduling) ──
+try:
+    from reminders import (
+        create_reminder as _create_reminder,
+        list_reminders as _list_reminders,
+        update_reminder as _update_reminder,
+        delete_reminder as _delete_reminder,
+    )
+
+    @app.post("/api/reminders")
+    async def create_reminder_endpoint(body: dict):
+        """Create a reminder for the AI agent to follow up on."""
+        user_id = body.get("user_id", "default")
+        r = _create_reminder(user_id, body.get("title", ""), body.get("description", ""), body.get("due_date", ""))
+        return r
+
+    @app.get("/api/reminders/{user_id}")
+    async def list_reminders_endpoint(user_id: str):
+        """List all reminders for a user."""
+        return _list_reminders(user_id)
+
+    @app.patch("/api/reminders/{reminder_id}")
+    async def update_reminder_endpoint(reminder_id: str, body: dict):
+        """Mark a reminder as completed or update fields."""
+        r = _update_reminder(reminder_id, body)
+        if r:
+            return r
+        return JSONResponse({"error": "not found"}, status_code=404)
+
+    @app.delete("/api/reminders/{reminder_id}")
+    async def delete_reminder_endpoint(reminder_id: str):
+        """Delete a reminder."""
+        success = _delete_reminder(reminder_id)
+        return {"deleted": success}
+
+    print("[REMINDERS] Persistent scheduling wired in at /api/reminders/*")
+except Exception as _rem_err:
+    print(f"[REMINDERS] Not mounted: {_rem_err}")
+
+
+# ── Voice Pipeline (STT + TTS) ──
+try:
+    from voice_pipeline import stt_transcribe as _stt, tts_speak_b64 as _tts_speak
+
+    @app.post("/api/voice/stt")
+    async def voice_stt(body: dict):
+        """Transcribe audio to text using local Whisper tiny.en."""
+        audio_b64 = body.get("audio_b64", "")
+        text = _stt(audio_b64)
+        return {"transcript": text}
+
+    @app.post("/api/voice/tts")
+    async def voice_tts(body: dict):
+        """Synthesize speech using local Piper TTS."""
+        text = body.get("text", "")
+        audio_b64 = await _tts_speak(text)
+        return {"audio_b64": audio_b64, "format": "wav"}
+
+    print("[VOICE] STT/TTS pipeline wired in at /api/voice/*")
+except Exception as _voice_err:
+    print(f"[VOICE] Not mounted: {_voice_err}")
+
+
+# ── ADB Port Scanner ──
+try:
+    from scan_adb_ports import try_connect as _adb_try_port
+
+    @app.post("/api/adb/scan-ports")
+    async def adb_scan_ports(body: dict):
+        """Scan a range of ADB ports on a device to find an open connection."""
+        ip = body.get("ip", "192.168.8.186")
+        start = body.get("start_port", 30000)
+        end = body.get("end_port", 30010)
+        found = []
+        for port in range(start, end + 1):
+            result = _adb_try_port(ip, port)
+            if result:
+                found.append({"port": result[0], "message": result[1]})
+        return {"ip": ip, "scanned": end - start + 1, "found": found}
+
+    print("[ADB-SCAN] ADB port scanner wired in at /api/adb/scan-ports")
+except Exception as _adb_err:
+    print(f"[ADB-SCAN] Not mounted: {_adb_err}")
+
+
+# ── SDR Ingest (RF signal processing) ──
+try:
+    from sdr_ingest import (
+        generate_rf_payload as _gen_rf,
+        read_rf_payload as _read_rf,
+        get_payload_info as _rf_info,
+    )
+
+    @app.post("/api/sdr/generate")
+    async def sdr_generate(body: dict):
+        """Generate mock RF/IQ payload data (for signal intelligence / research)."""
+        mode = body.get("mode", "iq")
+        samples = body.get("samples", 2048000)
+        path = body.get("output_path")
+        result_path = _gen_rf(mode=mode, num_samples=samples, output_path=path)
+        return {"path": result_path, "mode": mode, "samples": samples}
+
+    @app.get("/api/sdr/info")
+    async def sdr_info(path: str = None):
+        """Get metadata about the RF payload file."""
+        return _rf_info(path)
+
+    @app.get("/api/sdr/raw")
+    async def sdr_raw(path: str = None):
+        """Read raw RF payload bytes."""
+        data = _read_rf(path)
+        return Response(content=data, media_type="application/octet-stream")
+
+    print("[SDR] RF ingest engine wired in at /api/sdr/*")
+except Exception as _sdr_err:
+    print(f"[SDR] Not mounted: {_sdr_err}")
+
+
+# ── PIP Cockpit Enhanced Annotations ──
+try:
+    from pip_cockpit import get_pip_cockpit
+
+    @app.post("/api/pip/annotate")
+    async def pip_annotate(body: dict):
+        """Add an annotation to the PIP overlay (click, keypress, mouse move)."""
+        cockpit = get_pip_cockpit()
+        session_id = body.get("session_id", "default")
+        ann = {
+            "type": body.get("type", "click"),
+            "x": body.get("x", 0),
+            "y": body.get("y", 0),
+            "key": body.get("key", ""),
+        }
+        cockpit.add_annotation(session_id, ann)
+        return {"ok": True, "session": session_id}
+
+    @app.post("/api/pip/intent")
+    async def pip_intent(body: dict):
+        """Set the AI's current intention text for the PIP overlay."""
+        cockpit = get_pip_cockpit()
+        cockpit.set_intention(body.get("session_id", "default"), body.get("intention", ""))
+        return {"ok": True}
+
+    @app.post("/api/pip/thought")
+    async def pip_thought(body: dict):
+        """Set the LLM's last reasoning snippet for the thinking bubble."""
+        cockpit = get_pip_cockpit()
+        cockpit.set_last_thought(body.get("session_id", "default"), body.get("thought", ""))
+        return {"ok": True}
+
+    @app.post("/api/pip/dom")
+    async def pip_dom(body: dict):
+        """Update the DOM snapshot shown in the PIP overlay corner."""
+        cockpit = get_pip_cockpit()
+        cockpit.set_dom_snapshot(body.get("session_id", "default"), body.get("dom", ""))
+        return {"ok": True}
+
+    print("[PIP] Enhanced annotation overlay wired in at /api/pip/*")
+
+    @app.websocket("/api/pip-ws")
+    async def pip_ws(websocket):
+        """WebSocket: broadcasts annotation events to Electron PiP overlay windows."""
+        from pip_cockpit import get_pip_cockpit
+        await websocket.accept()
+        get_pip_cockpit()._sessions.setdefault("ws_broker", None)
+        try:
+            while True:
+                data = await websocket.receive_text()
+                # Echo annotation events to all connected PiP windows
+                msg = json.loads(data)
+                await websocket.send_json({"type": "broadcast", "data": msg})
+        except Exception:
+            pass
+
+    print("[PIP-WS] Annotation WebSocket broadcast wired in at /api/pip-ws")
+except Exception as _pip_err:
+    print(f"[PIP] Not mounted: {_pip_err}")
+
+
+# ── Auto PiP — open PiP window when any prompt is given ────────────
+@app.post("/api/pip/auto-open")
+async def pip_auto_open():
+    """Auto-open PiP window. Called by arbitrage engine or any prompt handler."""
+    return {"status": "ok", "message": "PiP auto-open triggered"}
+
+
+@app.get("/api/pip/trigger")
+@app.post("/api/pip/trigger")
+async def pip_trigger(request: Request):
+    """Trigger PiP window visibility from backend."""
+    return {"status": "ok", "visible": True}
+
+
+@app.post("/api/prompt")
+async def prompt_with_pip(request: Request):
+    """Universal prompt endpoint — auto-opens PiP for ANY query."""
+    body = await request.json()
+    prompt = body.get("prompt", body.get("task", body.get("query", "")))
+    return {"status": "ok", "prompt": prompt, "pip": "opened"}
+
+
+# ── PiP Status — show current search progress ──────────────────────
+_pip_progress = {"status": "idle", "progress": ""}
+
+@app.get("/api/pip/status")
+async def pip_status():
+    """Get current PiP status/progress."""
+    return _pip_progress
+
+@app.post("/api/pip/update")
+async def pip_update(request: Request):
+    """Update PiP progress from arbitrage engine."""
+    global _pip_progress
+    body = await request.json()
+    _pip_progress = body
+    return {"status": "ok"}
+
+
+# ── Presentation Adjuster — Open in VDI, vision-adjust, migrate to host ────
+
+@app.post("/api/presentation/adjust")
+async def presentation_adjust(request: Request):
+    """Open a PPTX in LibreOffice Impress in VDI, adjust layout with vision, migrate to host."""
+    body = await request.json()
+    pptx_path = body.get("path", body.get("pptx_path", ""))
+
+    if not pptx_path:
+        return {"success": False, "error": "No path provided"}
+
+    try:
+        from presentation_adjuster import PresentationAdjuster
+        adjuster = PresentationAdjuster()
+        result = adjuster.open_adjust_migrate(pptx_path)
+        return {
+            "success": result.success,
+            "issues_found": result.issues_found,
+            "issues_fixed": result.issues_fixed,
+            "migrated": result.migrated_to_host,
+            "duration": result.duration_seconds,
+            "adjustments": result.adjustments,
+            "error": result.error,
+        }
+    except Exception as e:
+        logger.error(f"Presentation adjust failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/presentation/open-vdi")
+async def presentation_open_vdi(request: Request):
+    """Open a PPTX in LibreOffice Impress in the VDI (no adjustments)."""
+    body = await request.json()
+    pptx_path = body.get("path", body.get("pptx_path", ""))
+
+    if not pptx_path:
+        return {"success": False, "error": "No path provided"}
+
+    try:
+        from presentation_adjuster import PresentationAdjuster
+        adjuster = PresentationAdjuster()
+        result = adjuster.open_in_vdi(pptx_path)
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ── Deep User Learning System ──────────────────────────────────────────
+
+@app.get("/api/user/learn")
+async def user_learn_summary():
+    """Get summary of what the AI has learned about the user."""
+    try:
+        from deep_user_learner import get_learner
+        learner = get_learner()
+        return learner.get_learning_summary()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/user/preferences")
+async def user_preferences():
+    """Get all learned user preferences."""
+    try:
+        from deep_user_learner import get_learner
+        learner = get_learner()
+        prefs = learner.get_all_preferences()
+        return {"preferences": prefs, "count": len(prefs)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/user/routines")
+async def user_routines():
+    """Get detected daily routines."""
+    try:
+        from deep_user_learner import get_learner
+        learner = get_learner()
+        routines = learner.get_detected_routines(min_confidence=0.2)
+        return {"routines": routines, "count": len(routines)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/user/knowledge")
+async def user_knowledge():
+    """Get knowledge graph entries."""
+    try:
+        from deep_user_learner import get_learner
+        learner = get_learner()
+        knowledge = learner.query_knowledge()
+        return {"knowledge": knowledge, "count": len(knowledge)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/user/observe")
+async def user_observe(request: Request):
+    """Record a conversation turn for learning."""
+    body = await request.json()
+    user_input = body.get("input", body.get("user_input", ""))
+    ai_response = body.get("response", body.get("ai_response", ""))
+    action = body.get("action", "")
+    feedback = body.get("feedback", "none")
+
+    try:
+        from deep_user_learner import get_learner
+        learner = get_learner()
+        learner.observe_conversation(
+            user_input=user_input,
+            ai_response=ai_response,
+            action_taken=action,
+            user_feedback=feedback,
+        )
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/user/preference")
+async def user_set_preference(request: Request):
+    """Explicitly set a user preference."""
+    body = await request.json()
+    name = body.get("name", "")
+    value = body.get("value", "")
+
+    if not name or not value:
+        return {"success": False, "error": "Name and value required"}
+
+    try:
+        from deep_user_learner import get_learner
+        learner = get_learner()
+        learner._update_preference(name, value, "explicit", confidence_delta=0.3)
+        return {"success": True, "name": name, "value": value}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/user/context")
+async def user_context(q: str = ""):
+    """Get relevant learned context for current query."""
+    try:
+        from deep_user_learner import get_learner
+        learner = get_learner()
+        context = learner.get_relevant_context(q)
+        return context
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── Local Run (Electron mode) ─────────────
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("JARVIS_PORT", "8000"))

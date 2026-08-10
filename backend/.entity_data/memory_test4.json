@@ -1,0 +1,182 @@
+{
+  "facts": [],
+  "preferences": {},
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "open notepad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:29:47.354371"
+    },
+    {
+      "query": "open notepad",
+      "response": "\ud83d\udcdd Opening Notepad...\nNotepad opened.",
+      "action": "notepad",
+      "timestamp": "2026-07-29T16:29:47.583979"
+    },
+    {
+      "query": "take a screenshot",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:29:47.615692"
+    },
+    {
+      "query": "take a screenshot",
+      "response": "\ud83d\udcf8 Taking screenshot...\nScreenshot saved to Desktop.",
+      "action": "screenshot",
+      "timestamp": "2026-07-29T16:29:47.719420"
+    },
+    {
+      "query": "what time is it",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:29:47.767656"
+    },
+    {
+      "query": "what time is it",
+      "response": "\ud83d\udd50 Time and date\nWednesday, July 29, 2026 \u2014 04:29 PM",
+      "action": "time",
+      "timestamp": "2026-07-29T16:29:47.875126"
+    },
+    {
+      "query": "open chrome and go to youtube",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:29:47.928289"
+    },
+    {
+      "query": "open chrome and go to youtube",
+      "response": "Done. \u2713 open_app: Which app?\n\u2713 browser: Browser opened.",
+      "action": "",
+      "timestamp": "2026-07-29T16:29:50.399022"
+    },
+    {
+      "query": "turn on the lights",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:29:59.371562"
+    },
+    {
+      "query": "turn on the lights",
+      "response": "\ud83c\udfe0 Controlling device...\nAction 'smart_home_control' not implemented",
+      "action": "smart_home_control",
+      "timestamp": "2026-07-29T16:29:59.479799"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:29:59.540152"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"weather in london\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T16:29:59.648210"
+    },
+    {
+      "query": "open outlook in chrome",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:29:59.700864"
+    },
+    {
+      "query": "open outlook in chrome",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T16:30:26.983928"
+    },
+    {
+      "query": "open outlook on the file of gragi in chrome in a new widonw",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:30:27.014642"
+    },
+    {
+      "query": "open outlook on the file of gragi in chrome in a new widonw",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T16:30:27.233770"
+    },
+    {
+      "query": "can you open outlook in chrome with my word file",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:30:27.278466"
+    },
+    {
+      "query": "can you open outlook in chrome with my word file",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T16:30:27.496076"
+    },
+    {
+      "query": "make the lights blue",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:30:27.528183"
+    },
+    {
+      "query": "make the lights blue",
+      "response": "\ud83c\udfe0 Controlling device...\nAction 'smart_home_control' not implemented",
+      "action": "smart_home_control",
+      "timestamp": "2026-07-29T16:30:27.632090"
+    },
+    {
+      "query": "lock my computer",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:30:27.697639"
+    },
+    {
+      "query": "lock my computer",
+      "response": "\ud83e\udd16 AI doing computer task...\nPartially done after 1 steps (0.5s): Screen analysis unavailable in local mode. Install Tesseract OCR for basic screen reading.",
+      "action": "ai_computer_task",
+      "timestamp": "2026-07-29T16:30:30.780970"
+    },
+    {
+      "query": "open excel and create a new spreadsheet",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:30:30.834483"
+    },
+    {
+      "query": "open excel and create a new spreadsheet",
+      "response": "\ud83d\ude80 Open a macOS application\nWhich app?",
+      "action": "open_app",
+      "timestamp": "2026-07-29T16:30:30.949176"
+    },
+    {
+      "query": "send an mail to john",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:30:31.002081"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T16:30:31.002081",
+  "mood_history": [
+    {
+      "mood": "thoughtful",
+      "timestamp": "2026-07-29T16:29:47.418269"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T16:29:47.583009"
+    },
+    {
+      "mood": "thoughtful",
+      "timestamp": "2026-07-29T16:30:17.523163"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T16:30:27.117447"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

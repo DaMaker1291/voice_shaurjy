@@ -19,6 +19,12 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/api/headless", tags=["headless"])
 
 
+def _get_worker():
+    """Return the process-wide headless worker singleton (sessions persist)."""
+    from headless_worker import get_headless_worker
+    return get_headless_worker()
+
+
 class StartSessionReq(BaseModel):
     session_id: str = "default"
     width: int = 1920
@@ -78,9 +84,7 @@ async def headless_status(session_id: Optional[str] = None):
     if _relay_available():
         params = {"session_id": session_id} if session_id else {}
         return _queue_headless_action("status", params)
-    # Fallback: local worker (for direct relay execution)
-    from headless_worker import JarvisHeadlessWorker
-    worker = JarvisHeadlessWorker()
+    worker = _get_worker()
     return worker.get_status(session_id)
 
 
@@ -88,8 +92,7 @@ async def headless_status(session_id: Optional[str] = None):
 async def headless_start(req: StartSessionReq):
     if _relay_available():
         return _queue_headless_action("start", {"session_id": req.session_id, "width": req.width, "height": req.height, "depth": req.depth})
-    from headless_worker import JarvisHeadlessWorker
-    worker = JarvisHeadlessWorker()
+    worker = _get_worker()
     return worker.start_session(req.session_id, req.width, req.height, req.depth)
 
 
@@ -97,8 +100,7 @@ async def headless_start(req: StartSessionReq):
 async def headless_stop(session_id: str = "default"):
     if _relay_available():
         return _queue_headless_action("stop", {"session_id": session_id})
-    from headless_worker import JarvisHeadlessWorker
-    worker = JarvisHeadlessWorker()
+    worker = _get_worker()
     return worker.stop_session(session_id)
 
 
@@ -106,8 +108,7 @@ async def headless_stop(session_id: str = "default"):
 async def headless_launch(req: LaunchAppReq):
     if _relay_available():
         return _queue_headless_action("launch", {"session_id": req.session_id, "app_name": req.app_name, "command": req.command})
-    from headless_worker import JarvisHeadlessWorker
-    worker = JarvisHeadlessWorker()
+    worker = _get_worker()
     return worker.launch_app(req.session_id, req.app_name, req.command)
 
 
@@ -115,8 +116,7 @@ async def headless_launch(req: LaunchAppReq):
 async def headless_click(req: ClickReq):
     if _relay_available():
         return _queue_headless_action("click", {"session_id": req.session_id, "x": req.x, "y": req.y, "button": req.button})
-    from headless_worker import JarvisHeadlessWorker
-    worker = JarvisHeadlessWorker()
+    worker = _get_worker()
     return worker.inject_click(req.session_id, req.x, req.y, req.button)
 
 
@@ -124,8 +124,7 @@ async def headless_click(req: ClickReq):
 async def headless_key(req: KeyReq):
     if _relay_available():
         return _queue_headless_action("key", {"session_id": req.session_id, "key": req.key})
-    from headless_worker import JarvisHeadlessWorker
-    worker = JarvisHeadlessWorker()
+    worker = _get_worker()
     return worker.inject_key(req.session_id, req.key)
 
 
@@ -133,8 +132,7 @@ async def headless_key(req: KeyReq):
 async def headless_type(req: TypeReq):
     if _relay_available():
         return _queue_headless_action("type", {"session_id": req.session_id, "text": req.text})
-    from headless_worker import JarvisHeadlessWorker
-    worker = JarvisHeadlessWorker()
+    worker = _get_worker()
     return worker.inject_text(req.session_id, req.text)
 
 
@@ -143,11 +141,10 @@ async def headless_screenshot(session_id: str = "default"):
     if _relay_available():
         result = _queue_headless_action("screenshot", {"session_id": session_id})
         return result
-    from headless_worker import JarvisHeadlessWorker
-    worker = JarvisHeadlessWorker()
-    data = worker.screenshot(session_id)
+    worker = _get_worker()
+    data = worker.capture_jpeg(session_id)
     if data:
-        return {"ok": True, "image": base64.b64encode(data).decode(), "format": "png"}
+        return {"ok": True, "image": base64.b64encode(data).decode(), "format": "jpeg"}
     return {"ok": False, "error": "No frame available"}
 
 
@@ -155,8 +152,7 @@ async def headless_screenshot(session_id: str = "default"):
 async def headless_windows(session_id: str = "default"):
     if _relay_available():
         return _queue_headless_action("windows", {"session_id": session_id})
-    from headless_worker import JarvisHeadlessWorker
-    worker = JarvisHeadlessWorker()
+    worker = _get_worker()
     return worker.get_window_tree(session_id)
 
 
@@ -164,55 +160,72 @@ async def headless_windows(session_id: str = "default"):
 async def headless_sessions():
     if _relay_available():
         return _queue_headless_action("status", {})
-    from headless_worker import JarvisHeadlessWorker
-    worker = JarvisHeadlessWorker()
+    worker = _get_worker()
     return {"ok": True, "sessions": worker.list_sessions()}
 
 
 @router.websocket("/ws/stream")
 async def headless_ws_stream(websocket: WebSocket):
     """
-    WebSocket endpoint for live frame streaming from the headless virtual display.
-    On HF Space, frames are fetched via relay polling.
+    WebSocket endpoint for live low-latency frame streaming from the isolated
+    backstage virtual desktop (JPEG). Interactive commands (click/type/key/launch)
+    are executed against the isolated desktop so the user's screen is never touched.
+
+    Query params:
+      session_id (default "default"), fps (default 30), quality (default 60),
+      width (default 960), height (default 540)
+
+    Client -> server (JSON): {"cmd": "click|key|type|launch|set_session|quit", ...}
+    Server -> client: {"type": "frame", "data": "<base64 jpeg>", "format": "jpeg", ...}
+                      {"type": "status", "state": "waiting|running|error", ...}
     """
     await websocket.accept()
-    session_id = "default"
-    running = True
-    fps_target = 10  # Adaptive FPS — drops under load
+    params = websocket.query_params
+    session_id = params.get("session_id", "default")
+    fps_target = max(1, min(int(params.get("fps", "30")), 60))
+    quality = max(10, min(int(params.get("quality", "60")), 95))
+    width = int(params.get("width", "960"))
+    height = int(params.get("height", "540"))
+
     frame_interval = 1.0 / fps_target
     adaptive_interval = frame_interval
+    running = True
+    worker = _get_worker()
 
     try:
         while running:
             start = time.time()
 
-            # Try to get a frame
+            # Try to get a JPEG frame from the isolated desktop
             frame_data = None
             if _relay_available():
                 result = _queue_headless_action("screenshot", {"session_id": session_id})
                 if result.get("ok") and result.get("image"):
                     frame_data = base64.b64decode(result["image"])
             else:
-                from headless_worker import JarvisHeadlessWorker
-                worker = JarvisHeadlessWorker()
-                frame_data = worker.screenshot(session_id)
+                frame_data = worker.capture_jpeg(
+                    session_id, width=width, height=height, quality=quality
+                )
 
             if frame_data:
                 b64 = base64.b64encode(frame_data).decode()
                 await websocket.send_json({
                     "type": "frame",
                     "data": b64,
-                    "format": "png",
+                    "format": "jpeg",
+                    "session_id": session_id,
+                    "fps": fps_target,
                     "timestamp": time.time(),
                 })
             else:
                 await websocket.send_json({
                     "type": "status",
                     "state": "waiting",
+                    "session_id": session_id,
                     "timestamp": time.time(),
                 })
 
-            # Check for incoming commands
+            # Handle incoming interactive commands (isolated desktop only)
             try:
                 raw = await asyncio.wait_for(websocket.receive_text(), timeout=0.01)
                 msg = json.loads(raw)
@@ -235,7 +248,7 @@ async def headless_ws_stream(websocket: WebSocket):
             except json.JSONDecodeError:
                 pass
 
-            # Adaptive FPS: slow down if frame took too long
+            # Adaptive FPS: slow down if frame capture took too long
             elapsed = time.time() - start
             if elapsed > frame_interval * 1.5:
                 adaptive_interval = min(adaptive_interval * 1.2, 0.5)

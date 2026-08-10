@@ -58,23 +58,8 @@ def ps(cmd: str, timeout: float = 15.0, use_cache: bool = True) -> str:
         except Exception as e:
             result = f"vault_error: {e}"
     else:
-        # Fallback: direct subprocess (legacy mode)
-        try:
-            if _IS_WINDOWS:
-                r = subprocess.run(
-                    ["powershell", "-NoProfile", "-Command", cmd],
-                    capture_output=True, text=True, timeout=timeout,
-                )
-            else:
-                r = subprocess.run(
-                    ["bash", "-c", cmd],
-                    capture_output=True, text=True, timeout=timeout,
-                )
-            result = (r.stdout.strip() or r.stderr.strip())[:2000]
-        except subprocess.TimeoutExpired:
-            result = "timed_out"
-        except Exception as e:
-            result = f"error: {e}"
+        # FAIL-CLOSED: vault unavailable → block raw subprocess entirely
+        raise RuntimeError("Execution vault unavailable. Refusing un-sandboxed execution.")
 
     if result and use_cache:
         with _LOCK:

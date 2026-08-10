@@ -383,8 +383,10 @@ class SystemController:
         if path is None:
             path = f"/tmp/jarvis_screenshot_{int(time.time())}.png"
         try:
-            script = f'screencapture -R{x},{y},{w},{h} "{path}"'
-            subprocess.run(script, shell=True, timeout=10)
+            from execution_vault import vaulted_run
+            vr = vaulted_run(script, timeout=10)
+            if vr.blocked:
+                return {"error": f"BLOCKED: {vr.block_reason}"}
             return {"status": "screenshot", "path": path, "region": {"x": x, "y": y, "w": w, "h": h}}
         except Exception as e:
             return {"error": str(e)}

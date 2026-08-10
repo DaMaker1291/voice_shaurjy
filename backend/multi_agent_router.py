@@ -135,12 +135,12 @@ class RouterEngine:
     WORKER_SLA_MS = 2000.0
 
     def __init__(self):
-        from groq_agent import _get_client
-        self._get_client = _get_client
+        from hyperlocal_ai import get_hyperlocal
+        self._get_hl = lambda: get_hyperlocal("router")
         
         self.local_model = None
         self.grammar = None
-        self.model_source = "CLOUD_GROQ"
+        self.model_source = "LOCAL_HL"
 
         # Load grammars for all agents
         self.grammars = {}
@@ -501,12 +501,11 @@ class RouterEngine:
             except Exception:
                 pass  # fallback to cloud
 
-        # Fallback to high-speed cloud API
-        raw = self._groq_call(
+        # Fallback to local generation
+        raw = self._hl_call(
             system_prompt=SUPERVISOR_PROMPT,
             user_msg=user_text,
             max_tokens=256,
-            model=_ROUTER_MODEL,
             temperature=0.05,
         )
         return self._parse_json(raw, fallback={
@@ -522,11 +521,10 @@ class RouterEngine:
 
     def _run_os_agent(self, routing_packet: dict, context: dict) -> dict:
         user_msg = self._build_worker_prompt(routing_packet, context)
-        raw = self._groq_call(
+        raw = self._hl_call(
             system_prompt=OS_AGENT_PROMPT,
             user_msg=user_msg,
             max_tokens=512,
-            model=_WORKER_MODEL,
             temperature=0.1,
         )
         return self._parse_json(raw, fallback={
@@ -546,11 +544,10 @@ class RouterEngine:
 
     def _run_hal_agent(self, routing_packet: dict, context: dict) -> dict:
         user_msg = self._build_worker_prompt(routing_packet, context)
-        raw = self._groq_call(
+        raw = self._hl_call(
             system_prompt=HAL_AGENT_PROMPT,
             user_msg=user_msg,
             max_tokens=512,
-            model=_WORKER_MODEL,
             temperature=0.05,
         )
         return self._parse_json(raw, fallback={
@@ -561,11 +558,10 @@ class RouterEngine:
 
     def _run_web_agent(self, routing_packet: dict, context: dict) -> dict:
         user_msg = self._build_worker_prompt(routing_packet, context)
-        raw = self._groq_call(
+        raw = self._hl_call(
             system_prompt=WEB_AGENT_PROMPT,
             user_msg=user_msg,
             max_tokens=512,
-            model=_WORKER_MODEL,
             temperature=0.1,
         )
         return self._parse_json(raw, fallback={
@@ -633,42 +629,23 @@ class RouterEngine:
             lines.append(f"RELAY_CONTEXT: {json.dumps(context)[:800]}")
         return "\n".join(lines)
 
-    def _groq_call(
+    def _hl_call(
         self,
         system_prompt: str,
         user_msg: str,
         max_tokens: int = 256,
-        model: str = _ROUTER_MODEL,
         temperature: float = 0.1,
     ) -> str:
         try:
-            client = self._get_client()
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_msg},
-                ],
-                max_tokens=max_tokens,
-                temperature=temperature,
-                response_format={"type": "json_object"},
+            prompt = f"{system_prompt}\n\n{user_msg}"
+            response = self._get_hl()._generator.generate(
+                prompt, max_tokens=max_tokens, temperature=temperature
             )
-            return response.choices[0].message.content.strip()
-        except Exception:
-            try:
-                client = self._get_client()
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                )
-                return response.choices[0].message.content.strip()
-            except Exception as e2:
-                return f'{{"error": "{str(e2)[:100]}"}}'
+            if response and response[0] != "[":
+                return response
+            return '{"error": "local generation returned unavailable: ' + str(response) + '"}'
+        except Exception as e:
+            return '{"error": "' + str(e)[:100] + '"}'
 
     @staticmethod
     def _parse_json(raw: str, fallback: dict) -> dict:

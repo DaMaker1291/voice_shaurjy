@@ -96,6 +96,7 @@ class JARVISMCPClient:
         self._tool_to_server: Dict[str, str] = {}  # tool_name -> server_name
         self._resources: Dict[str, MCPResource] = {}
         self._connected: Dict[str, bool] = {}
+        self._contexts: Dict[str, Any] = {}  # server_name -> {"stdio": ctx_mgr, "session": ctx_mgr}
         self._ledger: Optional["ComplianceLedger"] = None
 
     def set_ledger(self, ledger: "ComplianceLedger"):
@@ -148,7 +149,7 @@ class JARVISMCPClient:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for name, result in zip(self.servers.keys(), results):
             if isinstance(result, Exception):
-                log.error(f"Failed to connect to {name}: {result}")
+                log.debug(f"Failed to connect to {name}: {result}")
                 self._connected[name] = False
             else:
                 self._connected[name] = True
@@ -163,7 +164,7 @@ class JARVISMCPClient:
             elif config.transport in (TransportType.SSE, TransportType.STREAMABLE_HTTP):
                 await self._connect_http(name, config)
         except Exception as e:
-            log.error(f"Connection failed for {name}: {e}")
+            log.debug(f"Connection failed for {name}: {e}")
             raise
 
     async def _connect_stdio(self, name: str, config: MCPServerConfig):
@@ -183,11 +184,13 @@ class JARVISMCPClient:
             cwd=config.cwd,
         )
 
-        read_stream, write_stream = await stdio_client(server_params).__aenter__()
-        session = ClientSession(read_stream, write_stream)
-        await session.__aenter__()
+        stdio_cm = stdio_client(server_params)
+        read_stream, write_stream = await stdio_cm.__aenter__()
+        session_cm = ClientSession(read_stream, write_stream)
+        session = await session_cm.__aenter__()
         await session.initialize()
 
+        self._contexts[name] = {"stdio": stdio_cm, "session": session_cm}
         self._sessions[name] = session
         await self._discover_tools(name, session)
         log.info(f"Connected to {name} via stdio")
@@ -496,16 +499,25 @@ class JARVISMCPClient:
 
     async def disconnect_all(self):
         """Disconnect from all MCP servers."""
-        for name, session in self._sessions.items():
+        for name in list(self._contexts.keys()):
             try:
-                if hasattr(session, "__aexit__"):
-                    await session.__aexit__(None, None, None)
-                elif "proc" in session:
-                    session["proc"].terminate()
-                elif "session" in session:
-                    await session["session"].close()
+                cm = self._contexts.get(name, {})
+                # Exit in reverse order: session first, then stdio
+                for ctx_key in ("session", "stdio"):
+                    ctx = cm.get(ctx_key)
+                    if ctx is not None:
+                        try:
+                            await ctx.__aexit__(None, None, None)
+                        except RuntimeError as e:
+                            if "cancel scope" in str(e):
+                                log.debug(f"Ignored cancel scope error during {name} {ctx_key} cleanup")
+                            else:
+                                log.warning(f"Cleanup error {name}/{ctx_key}: {e}")
+                        except Exception as e:
+                            log.warning(f"Cleanup error {name}/{ctx_key}: {e}")
             except Exception as e:
                 log.warning(f"Error disconnecting {name}: {e}")
+        self._contexts.clear()
         self._sessions.clear()
         self._tools.clear()
         self._tool_to_server.clear()
@@ -583,10 +595,34 @@ class JARVISMCPClient:
 
 # ── Singleton ────────────────────────────────────────────────────────────
 _client: Optional[JARVISMCPClient] = None
+_config_loaded = False
 
 
 def get_mcp_client() -> JARVISMCPClient:
-    global _client
+    global _client, _config_loaded
     if _client is None:
         _client = JARVISMCPClient()
+        # Load config on first access
+        if not _config_loaded:
+            _config_loaded = True
+            import os
+            config_path = os.path.expanduser("~/.jarvis/mcp.json")
+            if os.path.exists(config_path):
+                _client.load_config(config_path)
+                log.info(f"Loaded MCP config from {config_path}, {len(_client.servers)} servers")
+                # Try to connect synchronously (best effort)
+                try:
+                    import asyncio
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Can't block in async context — schedule for later
+                        asyncio.ensure_future(_client.connect_all())
+                    else:
+                        loop.run_until_complete(_client.connect_all())
+                except RuntimeError:
+                    # No event loop running — create one
+                    try:
+                        asyncio.run(_client.connect_all())
+                    except Exception as e:
+                        log.debug(f"MCP connect deferred: {e}")
     return _client

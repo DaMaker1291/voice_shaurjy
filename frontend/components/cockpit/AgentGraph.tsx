@@ -221,37 +221,21 @@ export default function AgentGraph() {
       </div>
 
       {/* Selected node info */}
-      {selectedNode && (() => {
-        const node = nodes.find(n => n.id === selectedNode);
-        if (!node) return null;
-        return (
-          <div style={{ padding: "8px 14px", borderTop: "1px solid var(--border)", background: "var(--surface-raised)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-              <span style={{ fontSize: 9, color: "var(--neon-green)", fontFamily: "var(--font-mono)", fontWeight: 600 }}>{node.label}</span>
-              <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 3, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{node.type}</span>
-              <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 3, background: node.status === "active" ? "var(--neon-green-dim)" : "var(--surface)", color: node.status === "active" ? "var(--neon-green)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{node.status}</span>
+      {selectedNode && nodes.find(n => n.id === selectedNode) && (() => {
+          const node = nodes.find(n => n.id === selectedNode)!;
+          return (
+            <div style={{ padding: "8px 14px", borderTop: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: 9, color: "var(--neon-green)", fontFamily: "var(--font-mono)", fontWeight: 600 }}>{node.label}</span>
+                <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 3, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{node.type}</span>
+                <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 3, background: node.status === "active" ? "var(--neon-green-dim)" : "var(--surface)", color: node.status === "active" ? "var(--neon-green)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{node.status}</span>
+              </div>
+              <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                Connections: {INITIAL_EDGES.filter(e => e.from === node.id || e.to === node.id).map(e => e.from === node.id ? e.to : e.from).join(", ")}
+              </div>
             </div>
-            <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-              Connections: {INITIAL_EDGES.filter(e => e.from === node.id || e.to === node.id).map(e => e.from === node.id ? e.to : e.from).join(", ")}
-            </div>
-          </div>
-        );
+          );
       })()}
-
-      {/* Action Stream */}
-      <div style={{ borderTop: "1px solid var(--border)", padding: "8px 12px", maxHeight: 140, overflowY: "auto" }}>
-        <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.08em", marginBottom: 6, textTransform: "uppercase" }}>Action Stream</div>
-        {logs.length === 0 && (
-          <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", opacity: 0.4, textAlign: "center", padding: "12px 0" }}>Awaiting dispatch...</div>
-        )}
-        {logs.map((log, i) => (
-          <div key={i} className="animate-fade" style={{ fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--text-muted)", marginBottom: 3, display: "flex", gap: 6, lineHeight: 1.5 }}>
-            <span style={{ color: "var(--steel)", flexShrink: 0 }}>{log.time}</span>
-            <span style={{ color: log.type === "error" ? "var(--crimson)" : log.type === "success" ? "var(--neon-green)" : "var(--amber)", flexShrink: 0 }}>[{log.agent}]</span>
-            <span style={{ color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{log.msg}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

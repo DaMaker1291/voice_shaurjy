@@ -1,0 +1,125 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T18:08:32.247083"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T18:08:32.789488"
+    },
+    {
+      "fact": "Search results for Shaurjesh Basu: Searching for \"Shaurjesh Basu\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T18:08:48.467924"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T18:08:32.136171"
+    },
+    "user_name": {
+      "value": "Shaurjesh Basu",
+      "updated": "2026-07-29T18:08:32.248592"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:08:32.125969"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "You've already told me, Shaurjesh Basu. I've searched for more information about you, but couldn't find any notable results.\n \nSince you've mentioned your name, I'll keep it in mind for future interac",
+      "action": "",
+      "timestamp": "2026-07-29T18:08:45.026658"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:08:46.428394"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "I've searched the web for information about Elon Musk. \n\n**Search Results:**\nElon Musk is a South African-born entrepreneur, inventor, and business magnate. He is the CEO and CTO of SpaceX, CEO and pr",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T18:08:48.218630"
+    },
+    {
+      "query": "search me on internet",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:08:48.348739"
+    },
+    {
+      "query": "search me on internet",
+      "response": "\ud83d\udd0d Searching for Shaurjesh Basu...",
+      "action": "search_self",
+      "timestamp": "2026-07-29T18:08:48.462411"
+    },
+    {
+      "query": "search deeper",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:08:48.540876"
+    },
+    {
+      "query": "search deeper",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"deeper\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T18:08:48.683367"
+    },
+    {
+      "query": "what is python",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:08:48.755204"
+    },
+    {
+      "query": "what is python",
+      "response": "**Search Results:**\nPython is a high-level, interpreted programming language that is widely used for various purposes such as web development, scientific computing, data analysis, artificial intellige",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T18:08:56.610689"
+    },
+    {
+      "query": "tell me about tesla",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:08:56.711819"
+    },
+    {
+      "query": "tell me about tesla",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T18:09:19.462075"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T18:09:19.462075",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T18:08:32.142809"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T18:08:48.681367"
+    },
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T18:09:02.254058"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

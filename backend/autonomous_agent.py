@@ -4,7 +4,7 @@ import json
 import re
 import time
 import threading
-from groq_agent import generate as groq_generate
+from hyperlocal_ai import get_hyperlocal
 from actions import execute_action, cloud_safe_execute, _EXECUTORS
 
 _ACTIVE_TASKS: dict[str, dict] = {}
@@ -75,10 +75,38 @@ Output ONLY valid JSON array. No other text.
 Example:
 [{{"step":"Search for information","action":"search_web","params":"latest AI news 2026"}},{{"step":"Read top result","action":"scrape_url","params":"{{search_result_1_url}}","requires":"search_result_1_url"}},{{"step":"Summarize","action":"groq","params":"Summarize this article in 3 bullet points:\\n{{scrape_result_0}}"}},{{"step":"Save report","action":"write_file","params":"~/Desktop/ai_report.md::{{groq_result_2}}"}},{{"step":"Notify user","action":"notify","params":"Report saved to Desktop!"}},{{"step":"Present result","action":"present","params":"Done! I saved a report to your Desktop."}}]"""
 
-    raw = groq_generate(prompt, max_tokens=500, temperature=0.3)
-    steps = _extract_json_array(raw)
-    if steps:
-        return steps
+    # PRIMARY: Groq cloud API
+    try:
+        import os
+        api_key = os.getenv("GROQ_API_KEY") or ""
+        if api_key and api_key != "your_groq_api_key_here":
+            import groq
+            client = groq.Groq(api_key=api_key)
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[
+                    {"role": "system", "content": "You are an autonomous AI agent. Output ONLY valid JSON array."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500,
+                temperature=0.3,
+            )
+            raw = response.choices[0].message.content.strip()
+            steps = _extract_json_array(raw)
+            if steps:
+                return steps
+    except Exception as e:
+        logger.debug(f"[AutonomousAgent] Groq plan failed: {e}")
+
+    # FALLBACK: HyperLocal AI
+    try:
+        raw = get_hyperlocal("autonomous")._generator.generate(prompt, max_tokens=500, temperature=0.3)
+        steps = _extract_json_array(raw)
+        if steps:
+            return steps
+    except Exception:
+        pass
+
     return [{"step": f"Executing: {goal}", "action": "groq", "params": goal}]
 
 
@@ -162,23 +190,21 @@ def _execute_action(action: str, params: str, user_id: str) -> str:
                 return f"Scrape error: {e}"
 
         elif action == "groq":
-            return groq_generate(params, max_tokens=300)
+            return get_hyperlocal("autonomous")._generator.generate(params, max_tokens=300)
 
         elif action == "run_shell":
-            import subprocess
-            try:
-                r = subprocess.run(params, shell=True, capture_output=True, text=True, timeout=30)
-                return (r.stdout or r.stderr or f"exit {r.returncode}")[:2000]
-            except Exception as e:
-                return f"Shell error: {e}"
-
+            from execution_vault import vaulted_run
+            vr = vaulted_run(params, timeout=30)
+            if vr.blocked:
+                return f"BLOCKED: {vr.block_reason}"
+            return (vr.stdout or vr.stderr or f"exit {vr.exit_code}")[:2000]
+        
         elif action == "run_python":
-            import subprocess, sys
-            try:
-                r = subprocess.run([sys.executable, "-c", params], capture_output=True, text=True, timeout=30)
-                return (r.stdout or r.stderr or "ok")[:2000]
-            except Exception as e:
-                return f"Python error: {e}"
+            from execution_vault import vaulted_python
+            vr = vaulted_python(params, timeout=30)
+            if vr.blocked:
+                return f"BLOCKED: {vr.block_reason}"
+            return (vr.stdout or vr.stderr or "ok")[:2000]
 
         elif action == "present":
             return params

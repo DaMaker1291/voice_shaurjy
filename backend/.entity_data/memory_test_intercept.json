@@ -1,0 +1,19 @@
+{
+  "facts": [],
+  "preferences": {},
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T18:09:47.354353",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T18:09:47.354353"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

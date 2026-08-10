@@ -5,7 +5,6 @@ Real smartphone control over WiFi via ADB (Android Debug Bridge)
 and mDNS service discovery.
 
 Supports:
-- Samsung Galaxy devices (Note20, S24, S24 Ultra)
 - Any Android device with ADB over WiFi enabled
 - mDNS/Bonjour device discovery
 - Screen lock/unlock, app launch, volume, brightness, notification
@@ -303,8 +302,8 @@ class PhoneClient:
             import subprocess
             result = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=15)
 
-            phone_keywords = ["samsung", "galaxy", "note20", "s24", "pixel", "oneplus",
-                             "android", "gargi", "suprotim"]
+            # Phone keywords loaded from device_patterns.json at runtime
+            phone_keywords = self._load_phone_keywords()
             for line in result.stdout.splitlines():
                 line_lower = line.lower()
                 for keyword in phone_keywords:
@@ -314,15 +313,8 @@ class PhoneClient:
                         if match:
                             ip = match.group(1)
                             hostname = line.split("(")[0].strip() if "(" in line else ""
-                            # Determine manufacturer from hostname
-                            manufacturer = "Samsung" if "samsung" in hostname.lower() or "gargi" in hostname.lower() or "note20" in hostname.lower() or "s24" in hostname.lower() else "Unknown"
-                            model = ""
-                            if "note20" in hostname.lower():
-                                model = "Galaxy Note20"
-                            elif "s24 ultra" in hostname.lower():
-                                model = "Galaxy S24 Ultra"
-                            elif "s24" in hostname.lower():
-                                model = "Galaxy S24"
+                            # Determine manufacturer/model dynamically from MAC OUI + hostname
+                            manufacturer, model = self._identify_phone(hostname, mac_match.group(1) if mac_match else "")
 
                             discovered.append({
                                 "ip": ip,
@@ -337,6 +329,50 @@ class PhoneClient:
             pass
 
         return discovered
+
+    @staticmethod
+    def _load_phone_keywords() -> List[str]:
+        """Load phone discovery keywords from device_patterns.json (fallback: generic set)."""
+        default_keywords = ["samsung", "galaxy", "pixel", "oneplus", "android", "phone"]
+        try:
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "device_patterns.json")
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            keywords = []
+            for pattern in data.get("patterns", []):
+                if pattern.get("device_type") == "PHONE":
+                    keywords.extend(pattern.get("match_hostname_contains", []))
+            return list(dict.fromkeys(keywords)) or default_keywords
+        except (FileNotFoundError, json.JSONDecodeError):
+            return default_keywords
+
+    @staticmethod
+    def _identify_phone(hostname: str, mac: str = "") -> tuple:
+        """Identify phone manufacturer/model via MAC OUI cache and hostname hints."""
+        manufacturer = "Unknown"
+        model = ""
+        hl = hostname.lower()
+        if mac:
+            # MAC OUI first 3 octets identify manufacturer (Samsung, Apple, Xiaomi, etc.)
+            oui = mac[:8].upper().replace(":", "-")
+            cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".oui_cache.json")
+            try:
+                if os.path.exists(cache_path):
+                    with open(cache_path, "r", encoding="utf-8") as f:
+                        cache = json.load(f)
+                    vendor = cache.get(oui, "")
+                    if vendor:
+                        manufacturer = vendor.split()[0]
+            except (json.JSONDecodeError, IOError):
+                pass
+        # Generic model hints — no hardcoded user-specific device names
+        for brand, hint in [("samsung", "Galaxy"), ("pixel", "Pixel"), ("oneplus", "OnePlus")]:
+            if hint.lower() in hl:
+                if manufacturer == "Unknown":
+                    manufacturer = brand.title()
+                model = hint
+                break
+        return manufacturer, model
 
     def get_all_phones(self) -> List[Dict[str, Any]]:
         """Get status of all registered phones."""

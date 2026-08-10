@@ -287,6 +287,40 @@ class HeadlessDisplayEnvironment:
             return True
         return False
 
+    def execute_in_xvfb(self, command: str, timeout: int = 30) -> Dict[str, Any]:
+        """Execute a shell command inside the Xvfb virtual framebuffer (Linux)
+        or via the best available headless mechanism (macOS/Windows).
+        
+        Returns dict with keys: stdout, stderr, exit_code, timed_out, blocked, block_reason
+        """
+        from execution_vault import ExecutionVault, VaultPolicy
+        
+        if not self._xvfb_process and sys.platform.startswith("linux"):
+            self.start_display()
+        
+        vault = ExecutionVault()
+        policy = VaultPolicy(timeout=timeout)
+        
+        if sys.platform.startswith("linux") and self._xvfb_process:
+            # Run command with DISPLAY set to the virtual framebuffer
+            env_prefix = f"export DISPLAY={self.display}; "
+            full_cmd = f"{env_prefix}{command}"
+            vr = vault.execute(full_cmd, policy=policy)
+        else:
+            # macOS / Windows / no Xvfb: run through vault directly
+            # macOS uses native Window Server; Windows uses TrueDesktop isolation
+            vr = vault.execute(command, policy=policy)
+        
+        return {
+            "stdout": vr.stdout,
+            "stderr": vr.stderr,
+            "exit_code": vr.exit_code,
+            "timed_out": vr.timed_out,
+            "blocked": vr.blocked,
+            "block_reason": vr.block_reason,
+            "security_violations": vr.security_violations,
+        }
+
     def stop_all(self):
         for name in list(self.process_pool.keys()):
             self.kill_process(name)
@@ -301,12 +335,22 @@ class SecurityPolicyGate:
     """Security policy engine — blocks destructive commands."""
 
     def __init__(self):
-        self.restricted_terms = [
-            "DROP TABLE", "DELETE FROM", "rm -rf", "shutdown",
-            "format c:", "mkfs", "> /dev/sda", "dd if=",
-            "chmod -R 777 /", "wget.*|sh", "curl.*|bash",
-        ]
+        self.restricted_terms = self._load_restricted_terms()
         self.intercept_log: List[Dict] = []
+
+    def _load_restricted_terms(self) -> List[str]:
+        """Load restricted security terms from security_terms.json."""
+        terms_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "security_terms.json")
+        try:
+            with open(terms_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("restricted_terms", [])
+        except FileNotFoundError:
+            print("[SECURITY] security_terms.json not found — no restricted terms loaded")
+            return []
+        except json.JSONDecodeError as e:
+            print(f"[SECURITY] Failed to parse security_terms.json: {e}")
+            return []
 
     def evaluate_payload(self, command_payload: str) -> bool:
         lower = command_payload.lower()
@@ -345,28 +389,25 @@ class JarvisCoreEngine:
         print("[CORE] JarvisCoreEngine initialized successfully")
 
     def _seed_initial_graph(self):
-        entities = [
-            ("user_local", "PERSON", "Local User", {"role": "operator"}),
-            ("jarvis_system", "SYSTEM", "JARVIS", {"version": "4.0", "status": "active"}),
-            ("agent_os", "AGENT", "OS Agent", {"domain": "headless_workspace"}),
-            ("agent_hal", "AGENT", "HAL Agent", {"domain": "hardware_abstraction"}),
-            ("agent_web", "AGENT", "WEB Agent", {"domain": "browser_automation"}),
-            ("agent_core", "AGENT", "CORE Agent", {"domain": "memory_wellness"}),
-            ("relay_local", "DEVICE", "Local Relay", {"protocol": "websocket", "port": 9880}),
-        ]
+        entities, edges = self._load_seed_data()
         for nid, ntype, name, props in entities:
             self.memory.upsert_node(nid, ntype, name, props)
-
-        edges = [
-            ("user_local", "jarvis_system", "operates"),
-            ("jarvis_system", "agent_os", "manages"),
-            ("jarvis_system", "agent_hal", "manages"),
-            ("jarvis_system", "agent_web", "manages"),
-            ("jarvis_system", "agent_core", "manages"),
-            ("jarvis_system", "relay_local", "communicates_via"),
-        ]
         for src, tgt, pred in edges:
             self.memory.upsert_edge(src, tgt, pred)
+
+    def _load_seed_data(self) -> tuple[list, list]:
+        """Load seed entities and edges from seed_entities.json."""
+        seed_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed_entities.json")
+        try:
+            with open(seed_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("entities", []), data.get("edges", [])
+        except FileNotFoundError:
+            print("[CORE] seed_entities.json not found — skipping graph seeding")
+            return [], []
+        except json.JSONDecodeError as e:
+            print(f"[CORE] Failed to parse seed_entities.json: {e}")
+            return [], []
 
     def process_intent(self, intent: str, user_id: str = "local") -> Dict[str, Any]:
         start = time.perf_counter()

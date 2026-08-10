@@ -15,469 +15,45 @@ def _ps(cmd: str) -> str:
 
 # ── Patterns: fast keyword-based dispatch (O(1)) + regex fallback ──────
 
-# Keyword hash map: if ANY of these words appear, try the corresponding action
-_KEYWORD_MAP: dict[str, str] = {
-    # Autonomous / Complex
-    "read file": "read_file", "read the file": "read_file",
-    "write file": "write_file", "create file": "write_file", "save file": "write_file",
-    "list directory": "list_dir", "list files": "list_dir", "show files": "list_dir",
-    "run python": "run_python", "execute python": "run_python",
-    "run shell": "run_shell", "run command": "run_shell", "execute command": "run_shell",
-    "run code": "run_python",
-    "open app": "open_app", "launch app": "open_app", "start app": "open_app",
-    "go to": "open_app", "navigate to": "open_app", "browse to": "open_app",
-    "explore your device": "system_explore", "scan your device": "system_explore",
-    "explore your system": "system_explore", "explore my device": "system_explore",
-    "what apps do you have": "system_explore", "what apps do i have": "system_explore",
-    "what can your device do": "system_explore", "what can this device do": "system_explore",
-    "tell me about your device": "system_explore", "tell me about this device": "system_explore",
+# Action keyword mappings loaded from action_mappings.json at runtime
+_ACTION_MAPPINGS: dict[str, str] = {}
 
-    # Headless Virtual Workstation
-    "start virtual desktop": "headless_start_session", "start virtual display": "headless_start_session",
-    "provision virtual desktop": "headless_start_session", "spin up virtual desktop": "headless_start_session",
-    "stop virtual desktop": "headless_stop_session", "stop virtual display": "headless_stop_session",
-    "kill virtual desktop": "headless_stop_session", "shut down virtual desktop": "headless_stop_session",
-    "virtual desktop status": "headless_check_status", "virtual display status": "headless_check_status",
-    "headless status": "headless_check_status",
-    "research": "fetch_search", "investigate": "fetch_search",
-    "scrape": "fetch_search", "read the web": "fetch_search",
-    "fetch": "fetch_search",
-    # Network & Smart Home
-    "scan network": "network_scan_deep", "deep scan": "network_scan_deep",
-    "scan my network": "network_scan_deep", "network scan": "network_scan_deep",
-    "scan all devices": "network_scan_deep", "find all devices": "network_scan_deep",
-    "scan wifi": "network_scan_deep", "what devices": "network_scan_deep",
-    "what's on my network": "network_scan_deep", "scan everything": "network_scan_deep",
-    "quick scan": "network_scan_quick", "arp scan": "network_scan_quick",
-    "who is on the network": "network_scan_quick",
-    "what devices": "network_scan_quick",
-    "wake": "wake_on_lan", "wake up": "wake_on_lan", "wol": "wake_on_lan",
-    "wake on lan": "wake_on_lan",
-    "smart home": "smart_home_discover", "smart devices": "smart_home_discover",
-    "discover devices": "smart_home_discover",
-    "turn on": "smart_home_control", "turn off": "smart_home_control",
-    "toggle": "smart_home_control", "lights": "smart_home_control",
-    "light on": "smart_home_control", "light off": "smart_home_control",
-    "set credentials": "set_device_credentials", "set tapo credentials": "set_device_credentials",
-    "device credentials": "set_device_credentials", "tapo login": "set_device_credentials",
-    "alexa": "alexa_speak", "echo": "alexa_speak", "alexa speak": "alexa_speak",
-    "alexa say": "alexa_speak", "alexa announce": "alexa_speak",
-    "alexa play": "alexa_play", "alexa pause": "alexa_pause", "alexa stop": "alexa_stop",
-    "alexa next": "alexa_next", "alexa previous": "alexa_prev",
-    "alexa volume": "alexa_volume", "alexa discover": "alexa_discover",
-    "find echo": "alexa_discover", "find alexa": "alexa_discover",
-    "alexa timer": "alexa_timer", "alexa routine": "alexa_routine",
-    "alexa dnd": "alexa_dnd", "alexa do not disturb": "alexa_dnd",
-    "camera": "camera_snap", "take a photo": "camera_snap",
-    "take photo": "camera_snap", "snap": "camera_snap",
-    "notify phone": "phone_notify", "push notification": "phone_notify",
-    "send notification": "phone_notify", "text me": "phone_notify",
-    "who is online": "who_is_online", "network users": "who_is_online",
-    "system load": "system_load", "system status": "system_load",
-    "load": "system_load",
-    # System
-    "lock": "lock", "locked": "lock",
-    "sleep": "sleep", "hibernate": "hibernate",
-    "restart": "restart", "reboot": "restart",
-    "shutdown": "shutdown", "shut down": "shutdown", "power off": "shutdown",
-    "restarting": "restart", "rebooting": "restart",
-    "logoff": "logoff", "sign out": "logoff", "sign out": "logoff",
-    "trash": "trash", "recycle bin": "trash", "recycle": "trash",
-    "screenshot": "screenshot", "screen capture": "screenshot",
-    "snipping": "snipping_tool", "snip": "snipping_tool",
-    "show desktop": "show_desktop", "show me the desktop": "show_desktop",
-    "minimize": "minimize_all", "minimise": "minimize_all",
-    "alt tab": "alt_tab", "switch window": "alt_tab",
-    "task view": "task_view", "taskview": "task_view",
+def _load_action_mappings() -> None:
+    """Load keyword-to-action mappings from the JSON config file."""
+    global _ACTION_MAPPINGS
+    mapping_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "action_mappings.json")
+    try:
+        with open(mapping_path, "r", encoding="utf-8") as f:
+            _ACTION_MAPPINGS = json.load(f)
+        print(f"[ACTIONS] Loaded {len(_ACTION_MAPPINGS)} keyword-action mappings from action_mappings.json")
+    except FileNotFoundError:
+        print("[ACTIONS] action_mappings.json not found — no keyword actions available")
+    except json.JSONDecodeError as e:
+        print(f"[ACTIONS] Failed to parse action_mappings.json: {e}")
 
-    # Session
-    "switch user": "switch_user",
-    "current user": "whoami",
-    "who am i": "whoami",
-    "whoami": "whoami",
+def get_action_mapping(keyword: str) -> str | None:
+    """Look up an action for a given keyword. Returns None if not found."""
+    return _ACTION_MAPPINGS.get(keyword)
 
-    # Power
-    "battery": "battery_status",
-    "battery level": "battery_status",
-    "battery saver": "battery_saver",
-    "power plan": "power_plan",
-    "power saving": "power_plan",
-    "uptime": "uptime",
-    "last boot": "last_boot",
+def get_all_mappings() -> dict[str, str]:
+    """Return all loaded keyword-action mappings."""
+    return dict(_ACTION_MAPPINGS)
 
-    # Volume
-    "volume up": "vol_up", "louder": "vol_up", "turn it up": "vol_up",
-    "turn up the volume": "vol_up", "turn up volume": "vol_up",
-    "volume down": "vol_down", "quieter": "vol_down", "turn it down": "vol_down",
-    "turn down the volume": "vol_down", "turn down volume": "vol_down",
-    "mute": "vol_mute", "unmute": "vol_mute", "silence": "vol_mute",
-    "mic": "mic_toggle",
-    "microphone": "mic_toggle",
-    "audio device": "audio_device",
-    "speaker": "speaker_test",
+def reload_action_mappings() -> None:
+    """Reload keyword-action mappings from disk (hot-reload)."""
+    _load_action_mappings()
 
-    # Display
-    "brightness up": "brightness_up", "brighter": "brightness_up",
-    "brightness down": "brightness_down", "dimmer": "brightness_down",
-    "night light": "night_light", "night mode": "night_light",
-    "dark mode": "toggle_theme", "light mode": "toggle_theme",
-    "hdr": "hdr_toggle",
-    "screen resolution": "screen_resolution",
-    "display": "display_info",
-    "projector": "projector_mode",
-    "second screen": "second_screen",
-
-    # WiFi
-    "wifi on": "wifi_on", "wi-fi on": "wifi_on",
-    "wifi off": "wifi_off", "wi-fi off": "wifi_off",
-    "wifi": "wifi_list", "wi-fi": "wifi_list",
-    "hotspot": "hotspot_toggle",
-    "airplane mode": "airplane_mode",
-    "network": "network_info",
-    "ip": "network_info",
-    "ipconfig": "network_info",
-    "dns": "dns_flush",
-    "flush dns": "dns_flush",
-    "proxy": "proxy_status",
-    "network profile": "network_profile",
-
-    # Bluetooth
-    "bluetooth on": "bt_on",
-    "bluetooth off": "bt_off",
-    "bluetooth": "bt_devices",
-    "bt devices": "bt_devices",
-
-    # Processes
-    "task manager": "taskmgr",
-    "process": "process_list",
-    "processes": "process_list",
-    "running": "process_list",
-    "kill": "process_kill",
-    "stop process": "process_kill",
-    "startup": "startup_programs",
-
-    # Services
-    "service": "service_list",
-    "services": "service_list",
-
-    # Windows
-    "settings": "settings",
-    "windows settings": "settings",
-    "network settings": "network_settings",
-    "control panel": "control_panel",
-    "device manager": "device_manager",
-    "registry": "reg_edit",
-    "calculator": "calc",
-    "notepad": "notepad",
-    "terminal": "terminal",
-    "command prompt": "terminal", "cmd": "terminal",
-    "powershell": "terminal",
-
-    # Windows Update
-    "windows update": "windows_update", "check for update": "windows_update",
-    "check for updates": "windows_update", "check updates": "windows_update",
-    "check update": "windows_update",
-    "install update": "windows_update",
-
-    # Network devices
-    "scan network": "scan_network",
-    "network scan": "scan_network",
-    "arp": "scan_network",
-    "wake": "wol",
-    "wake on lan": "wol",
-    "wol": "wol",
-    "ping": "ping",
-
-    # Files
-    "file": "search_files",
-    "files": "search_files",
-    "folder": "open_documents",
-    "directory": "open_documents",
-    "downloads": "open_downloads",
-    "downloads folder": "open_downloads",
-    "documents": "open_documents",
-    "recent files": "recent_files",
-    "recycle": "trash",
-    "usb": "usb_eject",
-    "eject": "usb_eject",
-    "disk": "drive_usage",
-    "drive": "drive_list",
-    "disk space": "drive_usage",
-    "free space": "drive_usage",
-    "disk cleanup": "disk_cleanup",
-
-    # Clipboard
-    "clipboard": "clipboard_show",
-    "copy": "clipboard_copy",
-    "paste": "clipboard_paste",
-
-    # Media
-    "next track": "media_next", "skip": "media_next", "next song": "media_next",
-    "previous track": "media_prev", "prev": "media_prev", "previous song": "media_prev",
-    "play": "media_play", "pause": "media_pause", "stop": "media_pause",
-    "resume": "media_play",
-    "spotify": "spotify", "music player": "spotify",
-    "what song": "current_song",
-    "now playing": "current_song",
-    "shazam": "shazam", "identify song": "shazam",
-
-    # Search
-    "google": "search",
-    "search for": "search",
-    "look up": "search",
-    "search google": "search",
-    "youtube": "search_youtube",
-    "yt": "search_youtube",
-    "wikipedia": "search_wiki",
-    "wiki": "search_wiki",
-    "amazon": "search_amazon",
-    "shop": "search_amazon",
-    "news": "search_news",
-    "maps": "search_maps",
-
-    # Time
-    "time": "time",
-    "date": "time",
-    "current time": "time",
-    "current date": "time",
-    "timer": "timer",
-    "alarm": "alarm",
-    "countdown": "timer",
-
-    # Browser (keyword matching too greedy — simple open commands use _ACTION_PATTERNS instead)
-    "open url": "open_url",
-    "bookmark": "open_bookmarks",
-    "history": "open_history",
-    "incognito": "open_incognito",
-    "private": "open_incognito",
-
-    # Misc
-    "help": "help",
-    "what can you": "help",
-    "what do you": "help",
-    "system info": "system_info",
-    "computer info": "system_info",
-    "about this pc": "system_info",
-    "hardware": "hardware_info",
-    "weather": "weather",
-    "public ip": "public_ip",
-    "my ip": "public_ip",
-    "external ip": "public_ip",
-    "ip address": "public_ip",
-    "type": "send_keys",
-    "on screen keyboard": "osk",
-    "magnifier": "magnifier",
-    "narrator": "narrator",
-    "high contrast": "high_contrast",
-    "notification": "send_notification",
-    "notify": "send_notification",
-    "toast": "send_notification",
-    "empty recycle": "trash",
-    "clean trash": "trash",
-    "snipping tool": "snipping_tool",
-    "screenshot tool": "snipping_tool",
-    "camera": "camera",
-    "webcam": "camera",
-    "take photo": "camera",
-    "sticky keys": "sticky_keys",
-    "filter keys": "filter_keys",
-    "mouse keys": "mouse_keys",
-    "vpn": "vpn_status",
-    "firewall": "firewall_status",
-    "defender": "defender_status",
-    "virus": "defender_scan",
-    "scan virus": "defender_scan",
-    "bitlocker": "bitlocker_status",
-    "encryption": "bitlocker_status",
-    "windows features": "windows_features",
-    "features": "windows_features",
-    "task scheduler": "scheduler_tasks",
-    "scheduled tasks": "scheduler_tasks",
-    "quick assist": "quick_assist",
-    "remote desktop": "remote_desktop",
-    "character map": "charmap",
-    "math": "math_eval",
-    "calculate": "math_eval",
-    "calculator": "calc",
-    "volume mixer": "vol_mixer",
-    "color profile": "color_profile",
-    "calibration": "calibrate_display",
-    "cleanmgr": "disk_cleanup",
-    "disk cleanup": "disk_cleanup",
-    "refresh rate": "refresh_rate",
-    "screen refresh": "refresh_rate",
-    "multiple monitors": "multi_monitor",
-    "extend display": "second_screen",
-    "duplicate display": "second_screen",
-    "project": "projector_mode",
-    "windows key": "send_keys",
-    "open folder": "open_documents",
-    "show folder": "open_documents",
-    "launch": "open_app",
-    "start app": "open_app",
-    "run": "run_dialog",
-    "execute": "run_dialog",
-    "installed apps": "app_list", "installed programs": "app_list",
-    "list apps": "app_list", "list programs": "app_list", "list software": "app_list",
-    "show apps": "app_list", "show programs": "app_list",
-    "uninstall": "app_uninstall", "remove program": "app_uninstall",
-    "force quit": "app_quit", "close app": "app_quit",
-    "running apps": "app_running", "open windows": "app_running",
-    "which apps are running": "app_running", "what is running": "app_running",
-    "what apps are open": "app_running", "what programs are open": "app_running",
-    "deep scan": "net_scan_deep", "full network scan": "net_scan_deep",
-    "scan all devices": "net_scan_deep", "port scan": "net_port_scan",
-    "open ports": "net_port_scan",
-    "network shares": "net_shares", "shared folders": "net_shares",
-    "device info": "net_device_info", "device details": "net_device_info",
-    "scan my computer": "device_scan",
-    "scan my device": "device_scan",
-    "scan my system": "device_scan",
-    "scan my laptop": "device_scan",
-    "scan my pc": "device_scan",
-    "device scan": "device_scan",
-    "full scan": "device_scan",
-    "profile my computer": "device_scan",
-    "profile my device": "device_scan",
-    "free up memory": "memory_cleanup",
-    "free up ram": "memory_cleanup",
-    "clean up memory": "memory_cleanup",
-    "clean up ram": "memory_cleanup",
-    "memory is full": "memory_cleanup",
-    "memory too high": "memory_cleanup",
-    "ram is full": "memory_cleanup",
-    "ram too high": "memory_cleanup",
-    "low on memory": "memory_cleanup",
-    "out of memory": "memory_cleanup",
-    "close unnecessary apps": "memory_cleanup",
-    "close unused apps": "memory_cleanup",
-    "reduce memory usage": "memory_cleanup",
-    "reduce ram usage": "memory_cleanup",
-    "too many apps running": "memory_cleanup",
-    "too many programs running": "memory_cleanup",
-    "too many processes running": "memory_cleanup",
-    "why is my computer so slow": "memory_cleanup",
-    "computer is very slow": "memory_cleanup",
-    "pc is lagging": "memory_cleanup",
-    "command": "run_dialog",
-    "environment": "env_list",
-    "environment variable": "env_list",
-    "path variable": "env_list",
-    "change directory": "open_documents",
-    "file explorer": "open_documents",
-    "explorer": "open_documents",
-    "this pc": "open_documents",
-    "user": "whoami",
-    "username": "whoami",
-    "computer name": "system_info",
-    "hostname": "system_info",
-    "memory": "memory_info",
-    "ram": "memory_info",
-    "cpu": "cpu_info",
-    "processor": "cpu_info",
-    "graphics": "gpu_info",
-    "gpu": "gpu_info",
-    "video card": "gpu_info",
-
-    # Real-world task keywords
-    "flight": "search_flights", "flights": "search_flights", "fly": "search_flights", "travel": "search_flights",
-    "hotel": "search_hotels", "hotels": "search_hotels", "booking": "search_hotels", "stay": "search_hotels",
-    "accommodation": "search_hotels", "vacation": "search_flights", "holiday": "search_flights",
-    "calendar": "calendar_events", "schedule": "calendar_events", "appointment": "calendar_events",
-    "event": "calendar_events", "meeting": "calendar_events", "cal": "calendar_events",
-    "onenote": "onenote_tasks", "notes": "onenote_tasks", "notebook": "onenote_tasks",
-    "arbitrage": "arbitrage_check", "deal": "compare_prices", "cheap": "compare_prices",
-    "price": "compare_prices", "compare": "compare_prices", "discount": "compare_prices",
-    "teams": "teams_status", "microsoft teams": "teams_status",
-    "my assignments": "teams_assignments", "teams assignments": "teams_assignments",
-    "remaining assignments": "teams_assignments", "due assignments": "teams_assignments",
-    "assignments on teams": "teams_assignments", "teams homework": "teams_assignments",
-    "assignments on microsoft teams": "teams_assignments",
-
-    # WhatsApp Web
-    "whatsapp": "whatsapp_open", "web whatsapp": "whatsapp_open", "open whatsapp": "whatsapp_open",
-    "whatsapp messages": "whatsapp_read", "read whatsapp": "whatsapp_read",
-    "check whatsapp": "whatsapp_unread", "unread messages": "whatsapp_unread",
-    "send whatsapp": "whatsapp_send", "whatsapp message": "whatsapp_send",
-    "schedule whatsapp": "whatsapp_schedule", "whatsapp later": "whatsapp_schedule",
-    "sms from": "whatsapp_read", "message from": "whatsapp_read",
-    "my sister": "whatsapp_read", "messages from": "whatsapp_read",
-    "skyscanner": "search_flights", "kayak": "search_flights",
-
-    # Computer use agent
-    "computer use": "ai_computer_task", "computer": "ai_computer_task",
-    "control": "ai_computer_task", "automate": "ai_computer_task",
-    "screen": "screen_analyze", "what's on screen": "screen_analyze",
-    "what do you see": "screen_analyze", "look at screen": "screen_analyze",
-
-    # UI Automation
-    "click there": "ui_click", "click at": "ui_click", "click on": "ui_click_text",
-    "tap that": "ui_click", "tap on": "ui_click_text", "press that": "ui_click",
-    "type this": "ui_type", "type text": "ui_type", "enter text": "ui_type",
-    "keyboard": "ui_type", "keystroke": "ui_type",
-    "handwrite": "ui_handwrite", "hand writing": "ui_handwrite",
-    "handwrite this": "ui_handwrite", "write naturally": "ui_handwrite",
-    "drag mouse": "ui_drag", "drag from": "ui_drag",
-    "what's on screen": "ui_get_text", "what do you see on screen": "ui_get_text",
-    "read screen": "ui_get_text", "screen text": "ui_get_text",
-    "find text": "ui_find", "locate text": "ui_find", "find on screen": "ui_find",
-    "app running": "ui_app_running", "activate app": "ui_activate_app",
-    "bring app": "ui_activate_app", "focus app": "ui_activate_app",
-    "screenshot ui": "ui_screenshot", "capture screen": "ui_screenshot",
-
-    # Phone Bridge
-    "read my texts": "phone_read_sms", "read my sms": "phone_read_sms",
-    "show texts": "phone_read_sms", "read messages": "phone_read_sms",
-    "check messages": "phone_read_sms", "any new messages": "phone_read_sms",
-    "phone notifications": "phone_get_notifications", "read notifications": "phone_get_notifications",
-    "check notifications": "phone_get_notifications",
-    "call log": "phone_call_log", "recent calls": "phone_call_log",
-    "phone battery": "phone_battery", "phone charge": "phone_battery",
-    "connect phone": "phone_adb_connect", "adb connect": "phone_adb_connect",
-    "phone contacts": "phone_contacts", "my contacts": "phone_contacts",
-    "phone location": "phone_location", "where is my phone": "phone_location",
-    "find my phone": "phone_location",
-
-    # Home Assistant
-    "home assistant": "ha_status", "ha status": "ha_status",
-    "smart home status": "ha_status",
-    "discover ha": "ha_discover", "find home assistant": "ha_discover",
-    "ha sensors": "ha_sensors", "read sensors": "ha_sensors",
-    "turn on": "smart_home_control", "turn off": "smart_home_control",
-    "toggle light": "smart_home_control", "dim light": "smart_home_control",
-
-    # Cognitive Surveillance
-    "scan environment": "cognitive_scan", "survey environment": "cognitive_scan",
-    "what's happening": "cognitive_scan", "status report": "cognitive_scan",
-    "insight": "cognitive_insight", "analyze environment": "cognitive_insight",
-    "cognitive insight": "cognitive_insight",
-    "monitor environment": "cognitive_monitor", "start monitoring": "cognitive_monitor",
-    "stop monitoring": "cognitive_monitor",
-    "alert me": "cognitive_alert", "set alert": "cognitive_alert",
-    "warn me": "cognitive_alert",
-
-    # Persistent Notifications
-    "remind me": "notify_persistent", "set a reminder": "notify_persistent",
-    "remind me to": "notify_persistent", "don't forget": "notify_persistent",
-    "persistent notification": "notify_persistent", "pop up": "notify_persistent",
-    "notification center": "notify_center", "center notification": "notify_center",
-    "show notification": "notify_persistent", "sticky note": "notify_persistent",
-    "sticky notification": "notify_persistent",
-
-    # Network scanning
-    "network scan": "network_scan_deep", "deep scan": "network_scan_deep",
-    "scan network": "network_scan_deep", "scan my network": "network_scan_deep",
-    "quick scan": "network_scan_quick", "arp scan": "network_scan_quick",
-    "who is on the network": "network_scan_quick",
-    "what devices": "network_scan_quick",
-}
+# Load mappings on module import
+_load_action_mappings()
 
 # Keyword phrase → action ID lookup (longest-first for specificity)
 # Complex multi-step queries fall through to action-verb fallback → ai_computer_task
 # _route_action() in entity_engine.py handles the fallback routing
-_KEYWORD_LOOKUP: dict[str, str] = {k.lower().strip(): v for k, v in _KEYWORD_MAP.items()}
+_KEYWORD_LOOKUP: dict[str, str] = {k.lower().strip(): v for k, v in _ACTION_MAPPINGS.items()}
 
 _ACTION_PATTERNS = {
+    # ── Browser ─────────────────────────────────────────────────
+    r"^browser\s+\S+": "browser",
     # ── System ──────────────────────────────────────────────────
     r"^(?:lock|secure)\s+(?:my\s+)?(?:computer|pc|laptop|system|workstation)": "lock",
     r"^(?:put|send)\s+(?:the\s+)?(?:computer|pc|laptop)\s+(?:to\s+)?(?:sleep|suspend)": "sleep",
@@ -561,6 +137,27 @@ _ACTION_PATTERNS = {
     r"^(?:who|what)\s*(?:'s|is)\s+(?:on|connected\s+to)\s+(?:my\s+)?(?:network|wifi)": "scan_network",
     r"^(?:wake|turn\s+on|power\s+on)\s+(?:up\s+)?(?:my\s+)?(?:device\s+)?(.+?)$": "wol",
     r"^(?:ping|check)\s+(?:device\s+|host\s+)?(.+?)$": "ping",
+
+    # ── Phone / Device Control (Router-level) ───────────────────
+    r"^(?:pause|disable|turn\s+off|block)\s+(?:internet\s+(?:for\s+)?)?(.+?)(?:'s\s+(?:wifi|internet|network))?$": "phone_pause",
+    r"^(?:resume|enable|turn\s+on|unblock|restore)\s+(?:internet\s+(?:for\s+)?)?(.+?)(?:'s\s+(?:wifi|internet|network))?$": "phone_resume",
+    r"^(?:kick|disconnect|remove)\s+(.+?)\s+(?:from\s+(?:wifi|network|internet))?$": "phone_kick",
+    r"^(?:permanently\s+)?block\s+(.+?)(?:'s\s+(?:wifi|internet|network))?$": "phone_block",
+    r"^(?:unblock|allow)\s+(.+?)$": "phone_unblock",
+    r"^(?:throttle|limit|slow)\s+(.+?)(?:'s\s+(?:wifi|internet|network|bandwidth))?$": "phone_throttle",
+    r"^(?:what|show)\s+(?:info(?:rmation)?\s+(?:about|on|for)\s+)?(.+?)(?:'s\s+(?:device|phone|connection))?$": "phone_info",
+    r"^(?:list|show)\s+(?:all\s+)?(?:connected\s+)?(?:devices|phones|phones?\s+on\s+network)": "phone_scan",
+
+    # ── ADB Phone Control (Direct Android) ──────────────────────
+    r"^(?:power\s+off|shut\s+down)\s+(?:my\s+)?(?:phone|android|device)": "adb_power_off",
+    r"^(?:reboot|restart)\s+(?:my\s+)?(?:phone|android|device)": "adb_reboot",
+    r"^(?:lock)\s+(?:my\s+)?(?:phone|screen|device)": "adb_lock",
+    r"^(?:unlock)\s+(?:my\s+)?(?:phone|screen|device)": "adb_unlock",
+    r"^(?:take\s+)?screenshot\s+(?:of\s+)?(?:my\s+)?(?:phone|device)": "adb_screenshot",
+    r"^(?:what's|what\s+is)\s+(?:my\s+)?(?:phone's?\s+)?battery": "adb_battery",
+    r"^(?:turn\s+(?:on|off)\s+)?wifi\s+(?:on|off)\s+(?:my\s+)?(?:phone|device)": "adb_wifi",
+    r"^(?:turn\s+(?:on|off)\s+)?airplane\s+mode\s+(?:on|off)\s+(?:my\s+)?(?:phone|device)": "adb_airplane",
+    r"^(?:open|launch)\s+(.+?)\s+(?:on\s+)?(?:my\s+)?(?:phone|device)": "adb_launch_app",
 
     # ── Processes ───────────────────────────────────────────────
     r"^(?:list|show)\s+(?:running\s+)?(?:process|processes|tasks)": "process_list",
@@ -989,6 +586,14 @@ _ACTION_LABELS = {
     "window_snap": "🪟 Snapping window...", "task_view": "📋 Task View",
     "virtual_desktop": "🖥 Virtual desktop",
     "switch_desktop": "🖥 Switching desktop...",
+    "desktop_browse": "🌐 Browsing in background...",
+    "desktop_document": "📄 Creating document in background...",
+    "desktop_spreadsheet": "📊 Creating spreadsheet in background...",
+    "desktop_ppt": "📽 Creating presentation in background...",
+    "desktop_email": "📧 Sending email in background...",
+    "desktop_research": "🔍 Researching in background...",
+    "desktop_open_app_bg": "🚀 Opening app in background...",
+    "desktop_do_task": "🤖 Running task in background...",
     "network_settings": "🌐 Network & Internet settings",
     "datetime_settings": "🕐 Date & Time settings",
     "personalization_settings": "🎨 Personalization settings",
@@ -1134,6 +739,33 @@ _ACTION_TIPS = {
 def detect_action(text: str) -> str | None:
     lower = text.lower().strip()
 
+    # 0. Priority: "browser URL" always routes to browser action
+    if lower.startswith("browser "):
+        return "browser"
+
+    # 0.5 Priority: "in background" / "in isolation" modifiers override everything
+    if re.search(r'\b(?:in\s+)?(?:background|isolation|virtual\s+desktop)\s*$', lower) or \
+       re.search(r'\b(?:in\s+)?(?:background|isolation)\b', lower):
+        # Determine the intent from the rest of the text
+        clean = re.sub(r'\s+in\s+(?:the\s+)?(?:background|isolation|virtual\s+desktop)\s*$', '', lower).strip()
+        clean = re.sub(r'\s*(?:on\s+an?\s+)?(?:isolated\s+)?(?:virtual\s+)?desktop\s*$', '', clean).strip()
+        if any(w in clean for w in ['browse', 'open website', 'go to http', 'open http', 'open google', 'open youtube']):
+            return "desktop_browse"
+        elif any(w in clean for w in ['create document', 'word', 'essay', 'report', 'letter', 'write document', 'write a']):
+            return "desktop_document"
+        elif any(w in clean for w in ['excel', 'spreadsheet', 'table', 'data']):
+            return "desktop_spreadsheet"
+        elif any(w in clean for w in ['powerpoint', 'presentation', 'ppt', 'slides']):
+            return "desktop_ppt"
+        elif any(w in clean for w in ['email', 'send mail', 'compose']):
+            return "desktop_email"
+        elif any(w in clean for w in ['research', 'search', 'find', 'look up', 'investigate']):
+            return "desktop_research"
+        elif any(w in clean for w in ['open', 'launch', 'start', 'run']):
+            return "desktop_open_app_bg"
+        else:
+            return "desktop_do_task"
+
     # 1. Keyword lookup — sort by longest phrase first to avoid "time" matching "timer"
     word_count = len(text.split())
     is_complex = word_count > 4  # multi-word query likely describes a task, not a simple command
@@ -1177,6 +809,14 @@ def register(name: str):
     return wrapper
 
 def execute_action(action: str, user_text: str = "") -> str:
+    # ── Laser Gate: intercept high-risk actions before execution ──
+    from laser_gate import get_laser_gate
+    gate = get_laser_gate()
+    risk = gate.assess_risk(action, {"text": user_text})
+    if risk in ("critical", "high"):
+        action_id = gate.submit_action(action, {"text": user_text}, description=f"{action}: {user_text}")
+        return f"ACTION_GATED (risk: {risk}). Approval required via laser gate (action_id={action_id}). Hold Spacebar for 1.5s to confirm."
+    
     try:
         fn = _EXECUTORS.get(action)
         if not fn:
@@ -1289,10 +929,13 @@ def _system_explore(_):
     try:
         from device_profiler import build_full_profile, get_profile_summary
         profile = build_full_profile()
-        # Send to HF Space
+        # Send to HF Space (URL from config/env — no hardcoded default)
         try:
             import urllib.request, json
-            hf_url = os.environ.get("HF_API", "https://dgfhgjhj-jarvis-ai-brain.hf.space")
+            from config import get_config as _get_cfg
+            hf_url = os.environ.get("HF_API", "") or _get_cfg().get_deployment_url()
+            if not hf_url:
+                return get_profile_summary(profile)
             data = json.dumps({"user_id": "local", "profile": profile}).encode()
             req = urllib.request.Request(f"{hf_url}/api/device/profile", data=data, headers={"Content-Type": "application/json"})
             urllib.request.urlopen(req, timeout=10)
@@ -1667,7 +1310,7 @@ def _bt_unpair(text):
 @register("scan_network")
 def _scan_network(_):
     subnet = _ps("(Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'Wi-Fi','Ethernet' -ErrorAction SilentlyContinue).IPAddress")
-    if not subnet: subnet = "192.168.1.1"
+    if not subnet: subnet = os.environ.get("JARVIS_LOCAL_SUBNET", "") or "127.0.0.1"
     base = ".".join(subnet.split(".")[:3])
 
     arp = _ps("arp -a")
@@ -1728,6 +1371,107 @@ def _wol(text):
         return f"Wake signal sent to {device} ({mac})."
     except Exception as e:
         return f"WoL failed: {e}"
+
+
+# ── Phone / Device Control (Router-level) ─────────────────────────────
+
+def _get_phone_controller():
+    """Get the phone controller instance."""
+    try:
+        from phone_controller import PhoneController
+        return PhoneController()
+    except ImportError:
+        return None
+
+@register("phone_pause")
+def _phone_pause(text):
+    device = extract_param(text, r"^(?:pause|disable|turn\s+off|block)\s+(?:internet\s+(?:for\s+)?)?(.+?)(?:'s\s+(?:wifi|internet|network))?$")
+    if not device: return "Which device should I pause?"
+    pc = _get_phone_controller()
+    if not pc: return "Phone controller not available."
+    if not pc.connect(): return "Failed to connect to router."
+    result = pc.pause(device)
+    return result.get("message", "Failed")
+
+@register("phone_resume")
+def _phone_resume(text):
+    device = extract_param(text, r"^(?:resume|enable|turn\s+on|unblock|restore)\s+(?:internet\s+(?:for\s+)?)?(.+?)(?:'s\s+(?:wifi|internet|network))?$")
+    if not device: return "Which device should I resume?"
+    pc = _get_phone_controller()
+    if not pc: return "Phone controller not available."
+    if not pc.connect(): return "Failed to connect to router."
+    result = pc.resume(device)
+    return result.get("message", "Failed")
+
+@register("phone_kick")
+def _phone_kick(text):
+    device = extract_param(text, r"^(?:kick|disconnect|remove)\s+(.+?)\s+(?:from\s+(?:wifi|network|internet))?$")
+    if not device: return "Which device should I kick?"
+    pc = _get_phone_controller()
+    if not pc: return "Phone controller not available."
+    if not pc.connect(): return "Failed to connect to router."
+    result = pc.kick(device)
+    return result.get("message", "Failed")
+
+@register("phone_block")
+def _phone_block(text):
+    device = extract_param(text, r"^(?:permanently\s+)?block\s+(.+?)(?:'s\s+(?:wifi|internet|network))?$")
+    if not device: return "Which device should I block?"
+    pc = _get_phone_controller()
+    if not pc: return "Phone controller not available."
+    if not pc.connect(): return "Failed to connect to router."
+    result = pc.block(device)
+    return result.get("message", "Failed")
+
+@register("phone_unblock")
+def _phone_unblock(text):
+    device = extract_param(text, r"^(?:unblock|allow)\s+(.+?)$")
+    if not device: return "Which device should I unblock?"
+    pc = _get_phone_controller()
+    if not pc: return "Phone controller not available."
+    if not pc.connect(): return "Failed to connect to router."
+    result = pc.unblock(device)
+    return result.get("message", "Failed")
+
+@register("phone_throttle")
+def _phone_throttle(text):
+    device = extract_param(text, r"^(?:throttle|limit|slow)\s+(.+?)(?:'s\s+(?:wifi|internet|network|bandwidth))?$")
+    if not device: return "Which device should I throttle?"
+    pc = _get_phone_controller()
+    if not pc: return "Phone controller not available."
+    if not pc.connect(): return "Failed to connect to router."
+    result = pc.throttle(device, up_kbps=100, down_kbps=100)
+    return result.get("message", "Failed")
+
+@register("phone_info")
+def _phone_info(text):
+    device = extract_param(text, r"^(?:what|show)\s+(?:info(?:rmation)?\s+(?:about|on|for)\s+)?(.+?)(?:'s\s+(?:device|phone|connection))?$")
+    if not device: return "Which device?"
+    pc = _get_phone_controller()
+    if not pc: return "Phone controller not available."
+    if not pc.connect(): return "Failed to connect to router."
+    info = pc.get_info(device)
+    if "error" in info: return info["error"]
+    return (f"Device: {info['name']}\n"
+            f"IP: {info['ip']}\n"
+            f"MAC: {info['mac']}\n"
+            f"Type: {info['type']}\n"
+            f"Status: {'Online' if info.get('is_home') else info.get('state', 'Unknown')}")
+
+@register("phone_scan")
+def _phone_scan(_):
+    pc = _get_phone_controller()
+    if not pc: return "Phone controller not available."
+    if not pc.connect(): return "Failed to connect to router."
+    devices = pc.scan()
+    if not devices: return "No devices found."
+    result = f"Devices on network ({len(devices)}):\n"
+    for d in devices[:20]:
+        name = d.get("name", "Unknown")
+        ip = d.get("ip", "?")
+        mac = d.get("mac", "?")
+        result += f"  • {name} ({ip}) — {mac}\n"
+    return result
 
 
 _MAC_VENDORS: dict[str, str] | None = None
@@ -1863,7 +1607,7 @@ def _network_scan_quick(_):
         # Ping sweep fallback (limited to a few hosts)
         try:
             import socket
-            local_ip = "192.168.1.1"
+            local_ip = os.environ.get("JARVIS_LOCAL_SUBNET", "") or "127.0.0.1"
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(1)
             s.connect(("8.8.8.8", 80))
@@ -1902,6 +1646,124 @@ def _network_scan_deep(_):
     result = _network_scan_quick(_)
     if result.startswith("No devices"):
         return result
+
+
+# ── ADB Phone Control Actions ─────────────────────────────────────────
+
+def _get_adb_controller():
+    """Get ADB controller from config."""
+    try:
+        from phone_controller import PhoneController
+        config_file = Path(__file__).parent / "data" / "phone_controller" / "config.json"
+        if config_file.exists():
+            import json
+            with open(config_file) as f:
+                config = json.load(f)
+            phone_ip = config.get("phone_ip", "")
+            if phone_ip:
+                return PhoneController(controller_type="adb", phone_ip=phone_ip)
+        # Try auto-detect from ARP
+        import subprocess
+        result = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=10)
+        for line in result.stdout.splitlines():
+            if "android" in line.lower() or "samsung" in line.lower() or "pixel" in line.lower():
+                match = re.search(r"(\d+\.\d+\.\d+\.\d+)", line)
+                if match:
+                    return PhoneController(controller_type="adb", phone_ip=match.group(1))
+    except Exception:
+        pass
+    return None
+
+@register("adb_power_off")
+def _adb_power_off(_):
+    pc = _get_adb_controller()
+    if not pc or not pc.adb: return "No ADB device configured. Set phone_ip in config."
+    if not pc.adb.connect(): return "Failed to connect to phone."
+    pc.adb.power_off()
+    return "Phone powering off..."
+
+@register("adb_reboot")
+def _adb_reboot(_):
+    pc = _get_adb_controller()
+    if not pc or not pc.adb: return "No ADB device configured."
+    if not pc.adb.connect(): return "Failed to connect to phone."
+    pc.adb.reboot()
+    return "Phone rebooting..."
+
+@register("adb_lock")
+def _adb_lock(_):
+    pc = _get_adb_controller()
+    if not pc or not pc.adb: return "No ADB device configured."
+    if not pc.adb.connect(): return "Failed to connect to phone."
+    pc.adb.lock_screen()
+    return "Phone locked."
+
+@register("adb_unlock")
+def _adb_unlock(_):
+    pc = _get_adb_controller()
+    if not pc or not pc.adb: return "No ADB device configured."
+    if not pc.adb.connect(): return "Failed to connect to phone."
+    pc.adb.unlock_screen()
+    return "Phone unlocked."
+
+@register("adb_screenshot")
+def _adb_screenshot(_):
+    pc = _get_adb_controller()
+    if not pc or not pc.adb: return "No ADB device configured."
+    if not pc.adb.connect(): return "Failed to connect to phone."
+    path = os.path.join(os.environ.get("JARVIS_OUTPUT_DIR", "."), "phone_screenshot.png")
+    pc.adb.screenshot(path)
+    return f"Screenshot saved: {path}"
+
+@register("adb_battery")
+def _adb_battery(_):
+    pc = _get_adb_controller()
+    if not pc or not pc.adb: return "No ADB device configured."
+    if not pc.adb.connect(): return "Failed to connect to phone."
+    level = pc.adb.get_battery_level()
+    return f"Phone battery: {level}%"
+
+@register("adb_wifi")
+def _adb_wifi(text):
+    pc = _get_adb_controller()
+    if not pc or not pc.adb: return "No ADB device configured."
+    if not pc.adb.connect(): return "Failed to connect to phone."
+    if "off" in text.lower():
+        pc.adb.disable_wifi()
+        return "WiFi turned off on phone."
+    else:
+        pc.adb.enable_wifi()
+        return "WiFi turned on on phone."
+
+@register("adb_airplane")
+def _adb_airplane(text):
+    pc = _get_adb_controller()
+    if not pc or not pc.adb: return "No ADB device configured."
+    if not pc.adb.connect(): return "Failed to connect to phone."
+    if "off" in text.lower():
+        pc.adb.airplane_mode_off()
+        return "Airplane mode disabled on phone."
+    else:
+        pc.adb.airplane_mode_on()
+        return "Airplane mode enabled on phone."
+
+@register("adb_launch_app")
+def _adb_launch_app(text):
+    pc = _get_adb_controller()
+    if not pc or not pc.adb: return "No ADB device configured."
+    app_name = extract_param(text, r"^(?:open|launch)\s+(.+?)\s+(?:on\s+)?(?:my\s+)?(?:phone|device)$")
+    if not app_name: return "Which app?"
+    # Common app package mappings
+    app_packages = {
+        "chrome": "com.android.chrome", "youtube": "com.google.android.youtube",
+        "maps": "com.google.android.apps.maps", "camera": "com.android.camera",
+        "settings": "com.android.settings", "phone": "com.android.dialer",
+        "messages": "com.android.mms", "gallery": "com.android.gallery3d",
+    }
+    package = app_packages.get(app_name.lower(), f"com.android.{app_name.lower()}")
+    if not pc.adb.connect(): return "Failed to connect to phone."
+    pc.adb.launch_app(package)
+    return f"Launched {app_name} on phone."
     return result + "\nRun scan_network on Windows for detailed port info."
 
 
@@ -1909,7 +1771,7 @@ def _network_scan_deep(_):
 def _net_scan_deep(_):
     """Deep network scan: ARP + hostname + MAC vendor + port scan common ports + OS guess."""
     subnet = _ps("(Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'Wi-Fi','Ethernet' -ErrorAction SilentlyContinue).IPAddress")
-    if not subnet: subnet = "192.168.1.1"
+    if not subnet: subnet = os.environ.get("JARVIS_LOCAL_SUBNET", "") or "127.0.0.1"
     base = ".".join(subnet.split(".")[:3])
 
     arp = _ps("arp -a")
@@ -2026,7 +1888,7 @@ def _net_port_scan(text):
 def _net_shares(_):
     """Discover SMB shares on the network."""
     subnet = _ps("(Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'Wi-Fi','Ethernet' -ErrorAction SilentlyContinue).IPAddress")
-    if not subnet: subnet = "192.168.1.1"
+    if not subnet: subnet = os.environ.get("JARVIS_LOCAL_SUBNET", "") or "127.0.0.1"
     base = ".".join(subnet.split(".")[:3])
 
     arp = _ps("arp -a")
@@ -2196,66 +2058,21 @@ def _taskmgr(_): _ps('Start-Process "taskmgr.exe"'); return "Task Manager opened
 # ── Windows / Settings Panels ──────────────────────────────────────
 
 # ── Web App Launcher (PWA-first approach) ─────────────────────
-WEB_APPS = {
-    "spotify": "https://open.spotify.com",
-    "music": "https://open.spotify.com",
-    "word": "https://word.office.com",
-    "excel": "https://excel.office.com",
-    "powerpoint": "https://powerpoint.office.com",
-    "onenote": "https://onenote.com",
-    "outlook": "https://outlook.live.com",
-    "email": "https://mail.google.com", "gmail": "https://mail.google.com",
-    "mail": "https://mail.google.com",
-    "calendar": "https://calendar.google.com",
-    "drive": "https://drive.google.com", "google drive": "https://drive.google.com",
-    "cloud": "https://drive.google.com",
-    "docs": "https://docs.google.com",
-    "sheets": "https://sheets.google.com",
-    "slides": "https://slides.google.com",
-    "youtube": "https://youtube.com", "yt": "https://youtube.com",
-    "github": "https://github.com", "repos": "https://github.com",
-    "code": "https://github.com",
-    "discord": "https://discord.com/app", "chat": "https://discord.com/app",
-    "slack": "https://slack.com",
-    "teams": "https://teams.microsoft.com",
-    "vscode": "https://vscode.dev",
-    "browser": "https://google.com",
-    "chrome": "https://google.com",
-    "whatsapp": "https://web.whatsapp.com",
-    "telegram": "https://web.telegram.org",
-    "chatgpt": "https://chatgpt.com",
-    "claude": "https://claude.ai",
-    "perplexity": "https://perplexity.ai",
-    "notion": "https://notion.so",
-    "trello": "https://trello.com",
-    "figma": "https://figma.com",
-    "canva": "https://canva.com",
-    "copilot": "https://copilot.microsoft.com",
-    "gemini": "https://gemini.google.com",
-    "maps": "https://maps.google.com",
-    "news": "https://news.google.com",
-    "translate": "https://translate.google.com",
-    "meet": "https://meet.google.com",
-    "zoom": "https://zoom.us",
-    "netflix": "https://netflix.com",
-    "youtube music": "https://music.youtube.com",
-}
+# Web app and native app mappings loaded from JSON config at runtime — no hardcoded values.
+_WEB_APPS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web_apps.json")
 
-def _launch_web_app(name: str) -> str:
-    """Launch any app as a PWA — tries native protocol, Chrome app mode, then browser."""
-    url = WEB_APPS.get(name.lower())
-    if url:
-        _ps(f'Start-Process "chrome.exe" -ArgumentList "--app={url}" 2>$null; if(-not$?){{Start-Process "microsoft-edge:{url}" 2>$null; if(-not$?){{Start-Process "{url}"}}}}')
-        return f"Opening {name} web app..."
-    # Try native
-    native_cmd = APP_MAP_LEGACY.get(name.lower(), "")
-    qname = name.replace(" ", "+")
-    if native_cmd:
-        _ps(f'Start-Process "{native_cmd}" 2>$null; if(-not$?){{Start-Process "https://google.com/search?q={qname}+web"}}')
-        return f"Opening {name}..."
-    _ps(f'Start-Process "https://google.com/search?q={qname}"')
-    return f"Searching for {name}..."
+def _load_web_apps() -> dict:
+    """Load web app URL/label mappings from web_apps.json."""
+    try:
+        with open(_WEB_APPS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("apps", {})
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
+WEB_APPS: dict = {k.lower(): v for k, v in _load_web_apps().items()}
+
+# Native app command mappings (name -> launch command)
 APP_MAP_LEGACY = {
     "terminal": "powershell.exe", "cmd": "cmd.exe", "powershell": "powershell.exe",
     "console": "powershell.exe",
@@ -2270,6 +2087,22 @@ APP_MAP_LEGACY = {
     "registry editor": "regedit.exe", "regedit": "regedit.exe",
 }
 
+def _launch_web_app(name: str) -> str:
+    """Launch any app as a PWA — tries native protocol, Chrome app mode, then browser."""
+    entry = WEB_APPS.get(name.lower())
+    url = entry.get("url") if isinstance(entry, dict) else None
+    if url:
+        _ps(f'Start-Process "chrome.exe" -ArgumentList "--app={url}" 2>$null; if(-not$?){{Start-Process "microsoft-edge:{url}" 2>$null; if(-not$?){{Start-Process "{url}"}}}}')
+        return f"Opening {name} web app..."
+    # Try native
+    native_cmd = APP_MAP_LEGACY.get(name.lower(), "")
+    qname = name.replace(" ", "+")
+    if native_cmd:
+        _ps(f'Start-Process "{native_cmd}" 2>$null; if(-not$?){{Start-Process "https://google.com/search?q={qname}+web"}}')
+        return f"Opening {name}..."
+    _ps(f'Start-Process "https://google.com/search?q={qname}"')
+    return f"Searching for {name}..."
+
 @register("settings")
 def _settings(_): _ps('Start-Process "ms-settings:"'); return "Settings opened."
 @register("control_panel")
@@ -2280,7 +2113,41 @@ def _device_manager(_): _ps('Start-Process "devmgmt.msc"'); return "Device Manag
 def _reg_edit(_): _ps('Start-Process "regedit.exe"'); return "Registry Editor opened."
 
 @register("browser")
-def _browser(_): _launch_web_app("browser"); return "Browser opened."
+def _browser(text):
+    """Open browser with optional URL and Chrome profile.
+    Supports: browser, browser outlook.com, browser --profile=<ProfileName> outlook.com
+    """
+    import re as _re
+    lower = text.lower().strip()
+
+    # Extract profile flag: --profile=Name or --profile-directory="Name"
+    profile = None
+    profile_match = _re.search(r'--profile(?:-directory)?[=\s]+["\']?(\w[\w\s]*?)["\']?(?:\s|$)', lower)
+    if profile_match:
+        profile = profile_match.group(1).strip()
+
+    # Extract URL: anything that looks like a URL or domain
+    url = None
+    url_match = _re.search(r'(https?://\S+|(?:[\w-]+\.)+(?:com|org|net|edu|gov|co\.\w+))', text, _re.IGNORECASE)
+    if url_match:
+        url = url_match.group(1)
+        if not url.startswith("http"):
+            url = "https://" + url
+
+    # Build Chrome command
+    if profile:
+        # Find Chrome profile directory path
+        chrome_cmd = f'chrome.exe --profile-directory="{profile}"'
+        if url:
+            chrome_cmd += f' "{url}"'
+        _ps(f'Start-Process "{chrome_cmd}" 2>$null; if(-not$?){{Start-Process "msedge.exe" -ArgumentList "{url or ""}"}}')
+        return f"Opening in Chrome profile '{profile}'" + (f" → {url}" if url else "") + "..."
+    elif url:
+        _ps(f'Start-Process "chrome.exe" --argument-list "--app={url}" 2>$null; if(-not$?){{Start-Process "{url}"}}')
+        return f"Opening {url}..."
+    else:
+        _launch_web_app("browser")
+        return "Browser opened."
 
 @register("email")
 def _email(_): _launch_web_app("email"); return "Opening email..."
@@ -2587,23 +2454,50 @@ def _search(text):
 
 @register("fetch_search")
 def _fetch(text):
-    """Fetch REAL web search results using DuckDuckGo (returns actual data, not just opens browser)."""
-    from duckduckgo_search import DDGS
+    """Fetch REAL web search results from multiple sources — Google, Bing, DuckDuckGo, Wikipedia."""
+    try:
+        from universal_search import universal_search, shopping_search, travel_search
+    except ImportError:
+        # Fallback if universal_search not available
+        return _fetch_legacy(text)
+
     q = (extract_param(text, r"(?:fetch|get|read|search)\s+(?:search\s+)?(?:results\s+)?(?:for\s+)?(.+?)$") or text).strip()
     if not q or q.lower() in ["search", "fetch", "get", ""]:
         q = text.replace("fetch", "").replace("search", "").replace("get", "").strip()
     if not q: return "What should I search for?"
+
+    lower_q = q.lower()
+
+    # Detect search type
+    if any(kw in lower_q for kw in ["buy", "price", "cheap", "deal", "shop", "cost", "how much"]):
+        return shopping_search(q)
+    elif any(kw in lower_q for kw in ["flight", "hotel", "holiday", "travel", "vacation", "trip", "resort", "airbnb"]):
+        return travel_search(q)
+    else:
+        return universal_search(q)
+
+
+def _fetch_legacy(text):
+    """Fallback search using Wikipedia only."""
+    import urllib.request, urllib.parse, re, json as _json
+    q = text.strip()
+    if not q: return "What should I search for?"
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(q, max_results=8))
-        if results:
-            lines = [f"📌 {r['title']}\n   {r['body'][:200]}\n   {r['href']}" for r in results]
-            return f"Search results for '{q}':\n\n" + "\n\n".join(lines)
-        return f"No results found for '{q}'."
-    except ImportError:
-        return "DuckDuckGo search library not installed."
-    except Exception as e:
-        return f"Search error: {str(e)[:150]}"
+        url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(q)
+        req = urllib.request.Request(url, headers={"User-Agent": "JARVIS/1.0"})
+        resp = urllib.request.urlopen(req, timeout=8)
+        data = _json.loads(resp.read().decode())
+        extract = data.get("extract", "")
+        if extract:
+            return "📌 **" + data.get("title", q) + "**\n\n" + extract
+    except Exception:
+        pass
+    try:
+        _ps('Start-Process "https://google.com/search?q=' + _uq(q) + '"')
+        return 'I opened Google for "' + q + '" — check your browser.'
+    except Exception:
+        return "Couldn't find results for '" + q + "'."
+
 
 @register("search_youtube")
 def _search_youtube(text):
@@ -3813,6 +3707,12 @@ def _device_scan(text):
 def _read_file(text):
     path = text.replace("read file", "").replace("read", "").strip() or text
     path = os.path.expanduser(path)
+    # Path restriction: only allow reads within allowed directories
+    blocked_roots = ["/etc", "/root", "/boot", "/sys", "/proc", "/dev", os.path.expanduser("~/.ssh")]
+    real = os.path.realpath(path)
+    for blocked in blocked_roots:
+        if real.startswith(os.path.realpath(blocked)):
+            return "BLOCKED: access to this path is restricted"
     if not os.path.isfile(path): return f"File not found: {path}"
     try:
         with open(path, "r", errors="replace") as f:
@@ -3831,6 +3731,12 @@ def _write_file(text):
         if len(parts) < 2: return "Usage: write_file path::content"
         path, content = parts
     path = os.path.expanduser(path.strip())
+    # Path restriction: block writes to system directories
+    blocked_roots = ["/etc", "/root", "/boot", "/sys", "/proc", "/dev", os.path.expanduser("~/.ssh"), os.path.expanduser("~/.config")]
+    real = os.path.realpath(path)
+    for blocked in blocked_roots:
+        if real.startswith(os.path.realpath(blocked)):
+            return "BLOCKED: writing to this path is restricted"
     try:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w") as f:
@@ -3873,11 +3779,15 @@ if sys.platform == "darwin":
     import subprocess as _sp
 
     def _mac_run(cmd: str, timeout=15) -> str:
-        try:
-            r = _sp.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
-            return (r.stdout or r.stderr or f"exit {r.returncode}").strip()
-        except Exception as e:
-            return f"Error: {e}"
+        from headless_worker import get_headless_worker
+        worker = get_headless_worker()
+        result = worker.execute_command("default", cmd, timeout=timeout)
+        if result.get("blocked"):
+            return f"BLOCKED: {result.get('block_reason', 'Security policy violation')}"
+        if result.get("timed_out"):
+            return "Command timed out"
+        out = result.get("stdout", "") or result.get("stderr", "") or f"exit {result.get('exit_code', -1)}"
+        return out.strip()[:2000]
 
     @register("screenshot")
     def _mac_screenshot(_): return _mac_run("screencapture -x ~/Desktop/jarvis_screenshot.png 2>/dev/null; echo 'Saved to Desktop/'")
@@ -4068,7 +3978,8 @@ if sys.platform == "darwin":
     @register("run_python")
     def _mac_run_python(text):
         code = text.replace("run python", "").replace("run_python", "").strip() or text
-        return _mac_run(f"python3 -c '{code.replace(chr(39), chr(39)+'\\'+chr(39)+chr(39))}'", timeout=30)
+        escaped_code = code.replace(chr(39), chr(39) + chr(92) + chr(39) + chr(39))
+        return _mac_run(f"python3 -c '{escaped_code}'", timeout=30)
 
     @register("run_shell")
     def _mac_run_shell(text):
@@ -4114,7 +4025,9 @@ if sys.platform == "darwin":
         try:
             with _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM) as s:
                 s.setsockopt(_sock.SOL_SOCKET, _sock.SO_BROADCAST, 1)
-                s.sendto(packet, ("192.168.0.255", 9))
+                env_subnet = os.environ.get("JARVIS_LOCAL_SUBNET", "").strip()
+                if env_subnet:
+                    s.sendto(packet, (f"{env_subnet}.255", 9))
                 s.sendto(packet, ("255.255.255.255", 9))
             return f"WoL packet sent to {mac}"
         except Exception as e:
@@ -4584,9 +4497,13 @@ if sys.platform == "darwin":
         scan = _mac_cognitive_scan(None)
         try:
             import urllib.request
+            from config import get_config as _get_cfg
+            hf_url = os.environ.get("HF_API", "") or _get_cfg().get_deployment_url()
+            if not hf_url:
+                return "[INSIGHT] Environment scanned. All systems nominal."
             payload = json.dumps({"text": f"Analyze this environment scan and produce ONE concise, useful insight (1 sentence):\n{scan[:800]}",
                                   "user_id": "jarvis", "tier": "free"}).encode()
-            req = urllib.request.Request(f"{_mac_run('echo $HF_API')}/api/text/chat", data=payload,
+            req = urllib.request.Request(f"{hf_url}/api/text/chat", data=payload,
                                           headers={"Content-Type": "application/json"}, method="POST")
             with urllib.request.urlopen(req, timeout=15) as r:
                 resp = json.loads(r.read())
@@ -4661,8 +4578,11 @@ elif sys.platform == "linux":
 
     def _linux_run(cmd: str, timeout=15) -> str:
         try:
-            r = _sp.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
-            return (r.stdout or r.stderr or f"exit {r.returncode}").strip()
+            from execution_vault import vaulted_run
+            vr = vaulted_run(cmd, timeout=timeout)
+            if vr.blocked:
+                return f"BLOCKED: {vr.block_reason}"
+            return (vr.stdout or vr.stderr or f"exit {vr.exit_code}").strip()
         except Exception as e:
             return f"Error: {e}"
 
@@ -4943,3 +4863,228 @@ def _headless_screenshot(_):
         return {"ok": False, "error": "No frame"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  VIRTUAL DESKTOP ISOLATED TASKS — actually work, not skeletons
+# ═══════════════════════════════════════════════════════════════════
+
+@register("desktop_browse")
+def _desktop_browse(text):
+    """Browse a URL on an isolated virtual desktop (doesn't disturb user)."""
+    # Strip "in background/isolation/virtual desktop" suffixes
+    clean = re.sub(r'\s+in\s+(?:the\s+)?(?:background|isolation|virtual\s+desktop)\s*$', '', text, flags=re.I).strip()
+    clean = re.sub(r'\s*(?:on\s+an?\s+)?(?:isolated\s+)?(?:virtual\s+)?desktop\s*$', '', clean).strip()
+
+    url_match = re.search(r"(?:https?://\S+|www\.\S+)", clean)
+    url = url_match.group(0) if url_match else ""
+    if not url:
+        # Try to extract a search query
+        q = extract_param(clean, r"(?:browse|open|go\s+to|navigate)\s+(.+)$")
+        if q:
+            if not q.startswith("http"):
+                q = "https://www.google.com/search?q=" + __import__('urllib.parse', fromlist=['quote']).quote(q)
+            url = q
+    if not url:
+        return "What should I browse? Give me a URL or search query."
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.browse_url(url)
+        return result.message
+    except Exception as e:
+        return f"Browse failed: {e}"
+
+
+@register("desktop_document")
+def _desktop_document(text):
+    """Create a Word document on an isolated virtual desktop."""
+    clean = re.sub(r'\s+in\s+(?:the\s+)?(?:background|isolation|virtual\s+desktop)\s*$', '', text, flags=re.I).strip()
+    clean = re.sub(r'\s*(?:on\s+an?\s+)?(?:isolated\s+)?(?:virtual\s+)?desktop\s*$', '', clean).strip()
+    title_match = re.search(r"(?:create|make|write|new)\s+(?:a\s+)?(?:document|doc|word|essay|report|letter)\s+(?:about|on|titled|called|named)?\s*(.+?)$", clean, re.I)
+    title = title_match.group(1).strip() if title_match else "Document"
+    content_match = re.search(r"(?:with|containing|content|about|on)\s+(.+)$", clean, re.I)
+    content = content_match.group(1).strip() if content_match else ""
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.create_document(title, content)
+        return result.message
+    except Exception as e:
+        return f"Document creation failed: {e}"
+
+
+@register("desktop_spreadsheet")
+def _desktop_spreadsheet(text):
+    """Create an Excel spreadsheet on an isolated virtual desktop."""
+    clean = re.sub(r'\s+in\s+(?:the\s+)?(?:background|isolation|virtual\s+desktop)\s*$', '', text, flags=re.I).strip()
+    clean = re.sub(r'\s*(?:on\s+an?\s+)?(?:isolated\s+)?(?:virtual\s+)?desktop\s*$', '', clean).strip()
+    title_match = re.search(r"(?:create|make|new)\s+(?:spreadsheet|excel|sheet|workbook)\s+(?:called|named|titled)?\s*(.+?)$", clean, re.I)
+    title = title_match.group(1).strip() if title_match else "Spreadsheet"
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.create_spreadsheet(title)
+        return result.message
+    except Exception as e:
+        return f"Spreadsheet creation failed: {e}"
+
+
+@register("desktop_ppt")
+def _desktop_ppt(text):
+    """Create a PowerPoint presentation on an isolated virtual desktop."""
+    clean = re.sub(r'\s+in\s+(?:the\s+)?(?:background|isolation|virtual\s+desktop)\s*$', '', text, flags=re.I).strip()
+    clean = re.sub(r'\s*(?:on\s+an?\s+)?(?:isolated\s+)?(?:virtual\s+)?desktop\s*$', '', clean).strip()
+    title_match = re.search(r"(?:create|make|new)\s+(?:presentation|ppt|powerpoint|slideshow)\s+(?:called|named|titled)?\s*(.+?)$", clean, re.I)
+    title = title_match.group(1).strip() if title_match else "Presentation"
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.create_presentation(title)
+        return result.message
+    except Exception as e:
+        return f"Presentation creation failed: {e}"
+
+
+@register("desktop_email")
+def _desktop_email(text):
+    """Send an email on an isolated virtual desktop."""
+    clean = re.sub(r'\s+in\s+(?:the\s+)?(?:background|isolation|virtual\s+desktop)\s*$', '', text, flags=re.I).strip()
+    clean = re.sub(r'\s*(?:on\s+an?\s+)?(?:isolated\s+)?(?:virtual\s+)?desktop\s*$', '', clean).strip()
+    to_match = re.search(r"(?:to|send)\s+(\S+@\S+)", clean)
+    to = to_match.group(1) if to_match else ""
+    subj_match = re.search(r"(?:subject|about)\s+(.+?)(?:\s+(?:body|message|content|saying)|$)", clean, re.I)
+    subject = subj_match.group(1).strip() if subj_match else "Message from JARVIS"
+    body_match = re.search(r"(?:body|message|content|saying)\s+(.+)$", clean, re.I)
+    body = body_match.group(1).strip() if body_match else ""
+    if not to:
+        return "Who should I email? Give me an email address."
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.send_email(to, subject, body)
+        return result.message
+    except Exception as e:
+        return f"Email failed: {e}"
+
+
+@register("desktop_research")
+def _desktop_research(text):
+    """Research a topic on an isolated virtual desktop."""
+    clean = re.sub(r'\s+in\s+(?:the\s+)?(?:background|isolation|virtual\s+desktop)\s*$', '', text, flags=re.I).strip()
+    clean = re.sub(r'\s*(?:on\s+an?\s+)?(?:isolated\s+)?(?:virtual\s+)?desktop\s*$', '', clean).strip()
+    query = extract_param(clean, r"(?:research|investigate|look\s+into|find\s+out\s+about)\s+(.+)$")
+    if not query:
+        query = clean.replace("research", "").replace("investigate", "").strip()
+    if not query:
+        return "What should I research?"
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.research_topic(query)
+        return result.message
+    except Exception as e:
+        return f"Research failed: {e}"
+
+
+@register("desktop_open_app_bg")
+def _desktop_open_app_bg(text):
+    """Open an app on an isolated virtual desktop."""
+    clean = re.sub(r'\s+in\s+(?:the\s+)?(?:background|isolation|virtual\s+desktop)\s*$', '', text, flags=re.I).strip()
+    clean = re.sub(r'\s*(?:on\s+an?\s+)?(?:isolated\s+)?(?:virtual\s+)?desktop\s*$', '', clean).strip()
+    app_match = re.search(r"(?:open|launch|start|run)\s+(.+?)(?:\s+in\s+(?:the\s+)?(?:background|isolation|virtual|desktop)|$)", clean, re.I)
+    app_name = app_match.group(1).strip() if app_match else ""
+    if not app_name:
+        return "What app should I open?"
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.open_app_isolated(app_name)
+        return result.message
+    except Exception as e:
+        return f"Failed to open {app_name}: {e}"
+
+
+@register("desktop_do_task")
+def _desktop_do_task(text):
+    """Execute a multi-step task on an isolated virtual desktop.
+    
+    Parse the user's intent and build appropriate steps.
+    This is the general-purpose 'do anything in background' action.
+    """
+    # Strip "in background/isolation" suffixes
+    clean = re.sub(r'\s+in\s+(?:the\s+)?(?:background|isolation|virtual\s+desktop)\s*$', '', text, flags=re.I).strip()
+    clean = re.sub(r'\s*(?:on\s+an?\s+)?(?:isolated\s+)?(?:virtual\s+)?desktop\s*$', '', clean).strip()
+    text_lower = clean.lower()
+
+    # Build steps based on intent
+    steps = []
+
+    # Detect what the user wants
+    if any(w in text_lower for w in ["browse", "open website", "go to http", "open http", "open google", "open youtube"]):
+        url_match = re.search(r"(https?://\S+|www\.\S+)", text)
+        url = url_match.group(0) if url_match else ""
+        if not url:
+            q = text_lower.replace("browse", "").replace("open", "").replace("go to", "").strip()
+            if q:
+                import urllib.parse
+                url = "https://www.google.com/search?q=" + urllib.parse.quote(q)
+        if url:
+            steps.append({"action": "launch", "params": {"app": "chrome", "args": [url], "wait": 3}})
+
+    elif any(w in text_lower for w in ["write", "create document", "word", "essay", "report", "letter"]):
+        title = extract_param(text, r"(?:create|write|make)\s+(?:a\s+)?(?:document|doc|word|essay|report|letter)\s+(?:about|on|titled|called)?\s*(.+?)$") or "Document"
+        content = extract_param(text, r"(?:about|on|containing|with)\s+(.+)$") or ""
+        steps.append({"action": "word_create", "params": {"title": title, "content": content}})
+
+    elif any(w in text_lower for w in ["excel", "spreadsheet", "table", "data"]):
+        title = extract_param(text, r"(?:create|make|new)\s+(?:excel|spreadsheet|table)\s+(?:called|named)?\s*(.+?)$") or "Data"
+        steps.append({"action": "excel_create", "params": {"title": title}})
+
+    elif any(w in text_lower for w in ["email", "send mail", "compose"]):
+        to_match = re.search(r"(\S+@\S+)", text)
+        to = to_match.group(1) if to_match else ""
+        body = extract_param(text, r"(?:saying|body|content|message)\s+(.+)$") or ""
+        if to:
+            steps.append({"action": "email", "params": {"to": to, "subject": "Message from JARVIS", "body": body}})
+
+    elif any(w in text_lower for w in ["powerpoint", "presentation", "ppt", "slides"]):
+        title = extract_param(text, r"(?:create|make|new)\s+(?:presentation|ppt|powerpoint)\s+(?:called|named)?\s*(.+?)$") or "Presentation"
+        try:
+            from virtual_desktop_engine import get_engine
+            engine = get_engine()
+            result = engine.create_presentation(title)
+            steps.append({"action": "desktop_ppt", "params": {"text": text}, "description": f"Create presentation '{title}'"})
+            steps[-1]["result"] = result.message
+        except Exception:
+            steps.append({"action": "desktop_ppt", "params": {"text": text}, "description": f"Create presentation '{title}'"})
+
+    elif any(w in text_lower for w in ["notepad", "text file", "notes"]):
+        content = extract_param(text, r"(?:write|type|put|note)\s+(.+)$") or ""
+        steps.append({"action": "launch", "params": {"app": "notepad", "wait": 1}})
+        if content:
+            steps.append({"action": "type", "params": {"text": content}})
+
+    elif any(w in text_lower for w in ["research", "search", "find", "look up", "investigate"]):
+        query = extract_param(text, r"(?:research|search|find|look up|investigate)\s+(.+)$") or text
+        import urllib.parse
+        url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
+        steps.append({"action": "launch", "params": {"app": "chrome", "args": [url], "wait": 3}})
+
+    elif any(w in text_lower for w in ["blender", "3d model", "render"]):
+        steps.append({"action": "launch", "params": {"app": "blender", "wait": 3}})
+
+    else:
+        # Generic: open a terminal or browser
+        steps.append({"action": "launch", "params": {"app": "cmd", "wait": 1}})
+
+    if not steps:
+        return "I'm not sure what to do. Try: 'browse google.com', 'create document about X', or 'open chrome in background'."
+
+    try:
+        from virtual_desktop_engine import get_engine
+        engine = get_engine()
+        result = engine.run_custom_task(steps)
+        return result.message
+    except Exception as e:
+        return f"Task failed: {e}"

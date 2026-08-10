@@ -1,0 +1,32 @@
+{
+  "facts": [],
+  "preferences": {},
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "open outlook in chrome",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:29:09.003262"
+    },
+    {
+      "query": "open outlook in chrome",
+      "response": "Done. \u2713 open_app: Which app?\n\u2713 web_navigate: Navigated to https://google.com",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T16:29:37.574526"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T16:29:37.574526",
+  "mood_history": [
+    {
+      "mood": "thoughtful",
+      "timestamp": "2026-07-29T16:29:09.067496"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

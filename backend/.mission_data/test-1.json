@@ -1,0 +1,16 @@
+{
+  "id": "test-1",
+  "objective": "Build a website",
+  "workspace_id": "ws-123",
+  "state": "executing",
+  "steps": [],
+  "current_step": 0,
+  "artifacts": [],
+  "created_at": 1786212130.234992,
+  "started_at": 1786212130.23685,
+  "completed_at": 0.0,
+  "error": "",
+  "recovery_count": 0,
+  "last_verified_step": -1,
+  "step_results": {}
+}

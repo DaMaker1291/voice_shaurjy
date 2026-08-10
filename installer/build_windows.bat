@@ -57,7 +57,7 @@ if defined BUILD_PORTABLE (
     
     (
         echo @echo off
-        echo start https://dgfhgjhj-jarvis-ai-brain.hf.space/voice_shaurjy
+        echo start "" "%%JARVIS_WEB_URL%%"
     ) > dist\JARVIS_Portable\Open_WebUI.bat
     
     echo.

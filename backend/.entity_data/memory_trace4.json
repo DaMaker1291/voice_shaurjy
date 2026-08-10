@@ -1,0 +1,52 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:38:48.893025"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:38:49.039826"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:38:48.788746"
+    },
+    "user_name": {
+      "value": "Shaurjesh Basu",
+      "updated": "2026-07-29T17:38:48.895061"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:38:48.787728"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "Nice to meet you, Shaurjesh. I'm J.A.R.V.I.S. I've taken the liberty of learning more about you online. Here's a brief summary of what I found:\n\n**Shaurjesh Basu**\n\nShaurjesh Basu is a person with a r",
+      "action": "",
+      "timestamp": "2026-07-29T17:38:52.130573"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:38:52.130573",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:38:48.839390"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

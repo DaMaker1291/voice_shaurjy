@@ -1,0 +1,153 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T18:19:12.850720"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T18:19:13.029549"
+    },
+    {
+      "fact": "Search results for Shaurjesh Basu: Searching for \"Shaurjesh Basu\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T18:19:22.742668"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T18:19:12.745013"
+    },
+    "user_name": {
+      "value": "Shaurjesh Basu",
+      "updated": "2026-07-29T18:19:12.852733"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:19:12.743961"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "Here's what I found:\n\nI opened Google for \"my name is shaurjesh basu\" \u2014 check your browser for results.",
+      "action": "",
+      "timestamp": "2026-07-29T18:19:18.266422"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:19:19.607648"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "I've searched for \"elon musk\" to learn more about him.\n\nHere are the search results:\n\n**Elon Musk**\n- Elon Musk is a business magnate and entrepreneur who has founded or co-founded companies like PayP",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T18:19:21.365494"
+    },
+    {
+      "query": "search me on internet",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:19:21.459867"
+    },
+    {
+      "query": "search me on internet",
+      "response": "\ud83d\udd0d Searching for Shaurjesh Basu...",
+      "action": "search_self",
+      "timestamp": "2026-07-29T18:19:21.569759"
+    },
+    {
+      "query": "search deeper",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:19:21.714806"
+    },
+    {
+      "query": "search deeper",
+      "response": "\ud83d\udd0d Search the web and return results\n\ud83d\udccc **Deeper**\n\nDeeper may refer to:\n\nSource: https://en.wikipedia.org/wiki/Deeper",
+      "action": "fetch_search",
+      "timestamp": "2026-07-29T18:19:22.209309"
+    },
+    {
+      "query": "what is python",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:19:22.287440"
+    },
+    {
+      "query": "what is python",
+      "response": "I've searched for \"python programming language\" to learn more about it.\n\nHere are the search results:\n\n**Python Programming Language**\n- Python is a high-level, interpreted programming language that i",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T18:19:25.042025"
+    },
+    {
+      "query": "whats my name?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:19:25.168981"
+    },
+    {
+      "query": "whats my name?",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "",
+      "timestamp": "2026-07-29T18:19:49.304990"
+    },
+    {
+      "query": "open notepad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:19:49.469713"
+    },
+    {
+      "query": "open notepad",
+      "response": "\ud83d\udcdd Opening Notepad...\nNotepad opened.",
+      "action": "notepad",
+      "timestamp": "2026-07-29T18:19:49.594702"
+    },
+    {
+      "query": "bonjour",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:19:49.700505"
+    },
+    {
+      "query": "bonjour",
+      "response": "Good evening. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T18:19:49.805046"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T18:19:49.805046",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T18:19:12.759739"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T18:19:22.205805"
+    },
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T18:19:42.866941"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T18:19:49.592603"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

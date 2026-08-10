@@ -1,16 +1,3 @@
-"""
-J.A.R.V.I.S. Relay Agent — standalone single-file version.
-No project files needed. Just Python 3 stdlib.
-
-Speculative Local Execution: loads a tiny SLM (1.5B-3B) for instant
-intent routing, then dispatches heavy tasks to the cloud backbone.
-
-Usage:
-  curl -sSL https://dgfhgjhj-jarvis-ai-brain.hf.space/relay.py -o relay.py
-  pip install -r requirements-local.txt
-  python3 relay.py --user yourname
-"""
-
 import argparse, json, os, platform, socket, subprocess, sys, threading, time, urllib.request, urllib.error, urllib.parse, ssl, re, datetime
 
 # Add backend to path for device clients
@@ -163,7 +150,7 @@ def _urlopen(req_or_url, **kwargs):
     kwargs.setdefault("timeout", 30)
     return urllib.request.urlopen(req_or_url, **kwargs)
 
-HF_API = os.environ.get("HF_API_URL", "https://dgfhgjhj-jarvis-ai-brain.hf.space").rstrip("/")
+HF_API = os.environ.get("HF_API_URL", "").rstrip("/")
 
 def post(url, data):
     req = urllib.request.Request(url, json.dumps(data).encode(), {"Content-Type": "application/json"}, method="POST")
@@ -300,8 +287,11 @@ def _universal_scan():
 
     # Phase 3: Quick subnet scan for missed devices
     try:
-        local_ip = run("ipconfig getifaddr en0 2>/dev/null || ip -4 addr show | grep -oP '(?<=inet )\\d+\\.\\d+\\.\\d+\\.\\d+'")
-        subnet = ".".join(local_ip.strip().split(".")[:3]) if local_ip.strip() else "192.168.0"
+        env_subnet = os.environ.get("JARVIS_LOCAL_SUBNET", "").strip()
+        if not env_subnet:
+            local_ip = run("ipconfig getifaddr en0 2>/dev/null || ip -4 addr show | grep -oP '(?<=inet )\\d+\\.\\d+\\.\\d+\\.\\d+'")
+            env_subnet = ".".join(local_ip.strip().split(".")[:3]) if local_ip.strip() else ""
+        subnet = env_subnet
         # Quick port check on common IPs
         for i in [1, 2, 100, 101, 200, 254]:
             ip = f"{subnet}.{i}"
@@ -951,6 +941,92 @@ def startup_scan(user_id):
     return results
 
 
+# Device identification patterns loaded from device_patterns.json at startup
+_DEVICE_PATTERNS_STANDALONE: list[dict] = []
+
+def _load_device_patterns_standalone() -> list[dict]:
+    """Load device identification patterns from the JSON config file."""
+    patterns_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "device_patterns.json")
+    try:
+        with open(patterns_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("patterns", [])
+    except FileNotFoundError:
+        return []
+    except json.JSONDecodeError:
+        return []
+
+def _identify_device_standalone(hostname: str, ip: str, mac: str = "") -> tuple[str, str, str, str, str]:
+    """Identify device type, protocol, manufacturer, model dynamically."""
+    hl = hostname.lower()
+    for pattern in _DEVICE_PATTERNS_STANDALONE:
+        match = True
+        for field in ("match_hostname", "match_ip_suffix", "match_hostname_contains"):
+            vals = pattern.get(field, [])
+            if not vals:
+                continue
+            if field == "match_hostname":
+                for v in vals:
+                    if v not in hl:
+                        match = False
+                        break
+            elif field == "match_ip_suffix":
+                for v in vals:
+                    if not ip.endswith(v):
+                        match = False
+                        break
+            elif field == "match_hostname_contains":
+                for v in vals:
+                    if v not in hl:
+                        match = False
+                        break
+        if match:
+            return (pattern["device_type"], pattern["protocol"], pattern["manufacturer"], pattern["model"], hostname or ip)
+
+    # Fallback: generic detection based on MAC OUI
+    manufacturer = _lookup_mac_oui_standalone(mac)
+    device_type = "DEVICE"
+    protocol = "unknown"
+    model = ""
+
+    if manufacturer:
+        ml = manufacturer.lower()
+        if "apple" in ml:
+            device_type = "HUB"
+            protocol = "ssh"
+        elif "samsung" in ml or "lg" in ml:
+            device_type = "PHONE"
+            protocol = "adb"
+        elif "tp-link" in ml or "belkin" in ml:
+            device_type = "SWITCH"
+            protocol = "tapo"
+        elif "hp" in ml or "brother" in ml or "epson" in ml:
+            device_type = "PRINTER"
+            protocol = "ipp"
+
+    return (device_type, protocol, manufacturer, model, hostname or ip)
+
+
+def _lookup_mac_oui_standalone(mac: str) -> str:
+    """Look up manufacturer from MAC OUI via local cache."""
+    if not mac or len(mac) < 8:
+        return ""
+    oui = mac[:8].upper().replace(":", "-")
+    cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".oui_cache.json")
+    try:
+        if os.path.exists(cache_path):
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+            if oui in cache:
+                return cache[oui]
+    except (json.JSONDecodeError, IOError):
+        pass
+    return ""
+
+# Load device patterns on module import
+_DEVICE_PATTERNS_STANDALONE = _load_device_patterns_standalone()
+
+
 def _discover_real_devices():
     """Discover real devices on the local network via ARP."""
     import re
@@ -983,58 +1059,8 @@ def _discover_real_devices():
         model = ""
         device_name = hostname or ip
 
-        # Router/Gateway
-        if "skysr213" in hl or (ip.endswith(".1") and not hl):
-            device_type = "ROUTER"
-            protocol = "http"
-            manufacturer = "Sky"
-            model = "SR213"
-        # TP-Link Tapo Smart Plugs
-        elif "tapo" in hl or "p100" in hl or "p110" in hl or "p125" in hl:
-            device_type = "SWITCH"
-            protocol = "tapo"
-            manufacturer = "TP-Link"
-            if "p110" in hl: model = "Tapo P110"
-            elif "p100" in hl: model = "Tapo P100"
-            elif "p125" in hl: model = "Tapo P125"
-            else: model = "Tapo Smart Plug"
-        # HP Printer
-        elif "hp" in hl or "printer" in hl:
-            device_type = "PRINTER"
-            protocol = "ipp"
-            manufacturer = "HP"
-            model = "Printer"
-        # Samsung phones
-        elif "samsung" in hl or "galaxy" in hl or "note20" in hl or "s24" in hl or "gargi" in hl or "suprotim" in hl:
-            device_type = "PHONE"
-            protocol = "adb"
-            manufacturer = "Samsung"
-            if "note20" in hl: model = "Galaxy Note20"
-            elif "s24 ultra" in hl: model = "Galaxy S24 Ultra"
-            elif "s24" in hl: model = "Galaxy S24"
-        # Range extender
-        elif "re200" in hl or "extender" in hl:
-            device_type = "ROUTER"
-            protocol = "http"
-            manufacturer = "TP-Link"
-            model = "RE200"
-        # iMac / Apple
-        elif "imac" in hl or "macbook" in hl:
-            device_type = "HUB"
-            protocol = "ssh"
-            manufacturer = "Apple"
-            model = "iMac"
-        # Generic laptop
-        elif "laptop" in hl or "nbkw" in hl:
-            device_type = "HUB"
-            protocol = "ssh"
-            model = "Laptop"
-        # lwip devices (likely IoT)
-        elif "lwip" in hl:
-            device_type = "SENSOR"
-            protocol = "mqtt"
-            model = "IoT Device"
-
+        # Identify device dynamically
+        device_type, protocol, manufacturer, model, device_name = _identify_device_standalone(hostname or "", ip, mac)
         if device_type == "UNKNOWN":
             continue
 

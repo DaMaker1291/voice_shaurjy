@@ -107,6 +107,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Skip rate limiting for non-API routes and health checks
         path = request.url.path
+        # WebSocket upgrade requests must not be intercepted by BaseHTTPMiddleware
+        if request.headers.get("upgrade", "").lower() == "websocket":
+            return await call_next(request)
         if not path.startswith("/api/") or path in ("/api/health", "/health"):
             return await call_next(request)
 

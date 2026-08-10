@@ -31,8 +31,8 @@ DATA_DIR = JARVIS_DIR / "data"
 MODELS_DIR = JARVIS_DIR / "models"
 RELAY_PATH = JARVIS_DIR / "relay.py"
 
-HF_URL = "https://dgfhgjhj-jarvis-ai-brain.hf.space"
-RELAY_URL = f"{HF_URL}/relay"
+HF_URL = os.environ.get("HF_API_URL", "").rstrip("/")
+RELAY_URL = f"{HF_URL}/relay" if HF_URL else ""
 
 # ══════════════════════════════════════════════════════════════════════════
 # Terminal colors

@@ -1,0 +1,16 @@
+{
+  "id": "238af996",
+  "objective": "Stop test mission",
+  "workspace_id": "ws-test-4",
+  "state": "stopped",
+  "steps": [],
+  "current_step": 0,
+  "artifacts": [],
+  "created_at": 1786211099.350064,
+  "started_at": 0.0,
+  "completed_at": 1786211099.351137,
+  "error": "",
+  "recovery_count": 0,
+  "last_verified_step": -1,
+  "step_results": {}
+}

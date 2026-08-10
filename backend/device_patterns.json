@@ -1,0 +1,4 @@
+{
+  "patterns": [],
+  "notes": "Device identification patterns are loaded from this JSON file. By default, no hardcoded patterns are included — devices are identified dynamically by MAC OUI and IP range. Add custom patterns here as needed. Each pattern supports: match_hostname (exact), match_hostname_contains (substring), match_ip_suffix (IP ending), device_type, protocol, manufacturer, model."
+}

@@ -4,23 +4,26 @@ import { useState, useEffect } from "react";
 
 type Platform = "windows" | "mac" | "linux" | "unknown";
 
+const RELAY_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const INSTALL_HOST = process.env.NEXT_PUBLIC_INSTALL_URL || "";
+
 const INSTALL_COMMANDS: Record<Platform, { label: string; icon: string; cmd: string; note: string }> = {
   windows: {
     label: "Windows",
     icon: "🪟",
-    cmd: `irm https://dgfhgjhj-jarvis-ai-brain.hf.space/install.ps1 | iex`,
+    cmd: INSTALL_HOST ? `irm ${INSTALL_HOST}/install.ps1 | iex` : "Set env NEXT_PUBLIC_INSTALL_URL to your server",
     note: "Run in PowerShell as Administrator",
   },
   mac: {
     label: "macOS",
     icon: "🍎",
-    cmd: `curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' | python3 - --user`,
+    cmd: `curl -sL '${RELAY_BASE}/relay' | python3 - --user`,
     note: "Run in Terminal",
   },
   linux: {
     label: "Linux",
     icon: "🐧",
-    cmd: `curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' | python3 - --user`,
+    cmd: `curl -sL '${RELAY_BASE}/relay' | python3 - --user`,
     note: "Run in Terminal (may need sudo)",
   },
   unknown: {

@@ -21,25 +21,26 @@ const OS_DATA: Record<OS, { icon: string; label: string; ext: string; file: stri
   unknown: { icon: '⬡', label: 'Your OS', ext: '', file: '' },
 };
 
-const REPO = 'https://github.com/DaMaker1291/voice_shaurjy';
+const REPO = process.env.NEXT_PUBLIC_REPO_URL || 'https://github.com/DaMaker1291/voice_shaurjy';
+const INSTALL_HOST = process.env.NEXT_PUBLIC_INSTALL_URL || '';
 
 function dlUrl(os: OS): string {
-  if (os === 'windows') return 'https://dgfhgjhj-jarvis-ai-brain.hf.space/api/download/windows';
+  if (os === 'windows') return `${process.env.NEXT_PUBLIC_API_URL || ''}/api/download/windows`;
   const f = OS_DATA[os].file;
   return f ? `${REPO}/releases/latest/download/${f}` : '#';
 }
 
 const installCmds: Record<OS, { label: string; cmd: string }[]> = {
   windows: [
-    { label: 'PowerShell (one-liner)', cmd: 'irm https://dgfhgjhj-jarvis-ai-brain.hf.space/install.ps1 | iex' },
+    { label: 'PowerShell (one-liner)', cmd: INSTALL_HOST ? `irm ${INSTALL_HOST}/install.ps1 | iex` : 'Set env NEXT_PUBLIC_INSTALL_URL to your server' },
     { label: 'Build from source', cmd: `git clone ${REPO}.git && cd "voice_shaurjy/desktop" && build-windows.bat` },
   ],
   mac: [
-    { label: 'Terminal (one-liner)', cmd: `curl -fsSL https://dgfhgjhj-jarvis-ai-brain.hf.space/install.ps1 | python3` },
+    { label: 'Terminal (one-liner)', cmd: INSTALL_HOST ? `curl -fsSL ${INSTALL_HOST}/install.ps1 | python3` : 'Set env NEXT_PUBLIC_INSTALL_URL to your server' },
     { label: 'Build from source', cmd: `git clone ${REPO}.git && cd "voice_shaurjy/desktop" && npm install && npm run build:mac` },
   ],
   linux: [
-    { label: 'Terminal (one-liner)', cmd: `curl -fsSL https://dgfhgjhj-jarvis-ai-brain.hf.space/install.ps1 | python3` },
+    { label: 'Terminal (one-liner)', cmd: INSTALL_HOST ? `curl -fsSL ${INSTALL_HOST}/install.ps1 | python3` : 'Set env NEXT_PUBLIC_INSTALL_URL to your server' },
     { label: 'Build from source', cmd: `git clone ${REPO}.git && cd "voice_shaurjy/desktop" && npm install && npm run build:linux` },
   ],
   unknown: [
@@ -238,7 +239,7 @@ export default function DownloadPage() {
               <span style={{ fontSize: 12, color: '#888', fontWeight: 500 }}>
                 <span style={{ color: '#a78bfa' }}>🌐</span> Use in browser (no install)
               </span>
-              <a href="https://dgfhgjhj-jarvis-ai-brain.hf.space"
+              <a href={process.env.NEXT_PUBLIC_WEB_URL || '#'}
                 style={{
                   padding: '4px 12px',
                   background: 'rgba(167,139,250,0.1)',
@@ -283,7 +284,7 @@ export default function DownloadPage() {
         <span>© 2026 JARVIS AI — MIT License</span>
         <div style={{ display: 'flex', gap: 20 }}>
           <a href={REPO} style={{ color: '#333', textDecoration: 'none' }}>GitHub</a>
-          <a href="https://dgfhgjhj-jarvis-ai-brain.hf.space" style={{ color: '#333', textDecoration: 'none' }}>Web App</a>
+          <a href={process.env.NEXT_PUBLIC_WEB_URL || '#'} style={{ color: '#333', textDecoration: 'none' }}>Web App</a>
         </div>
       </div>
     </div>

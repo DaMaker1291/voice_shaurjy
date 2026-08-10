@@ -14,12 +14,20 @@ contextBridge.exposeInMainWorld("jarvis", {
     isMaximized: () => ipcRenderer.invoke("window-is-maximized"),
   },
 
+  // ── Overlay ──
+  hideOverlay: () => ipcRenderer.send("overlay-hide"),
+  executeOverlay: (command) => ipcRenderer.send("overlay-execute", command),
+  onOverlayFocus: (cb) => ipcRenderer.on("overlay-focus", () => cb()),
+
   // ── Backend ──
   backend: {
     status: () => ipcRenderer.invoke("backend-status"),
     restart: () => ipcRenderer.invoke("backend-restart"),
     onStatus: (cb) => ipcRenderer.on("backend-status", (_, data) => cb(data)),
   },
+
+  // ── Deployment URL (from env) ──
+  deploymentUrl: () => ipcRenderer.invoke("get-deployment-url"),
 
   // ── System Info ──
   system: {
@@ -40,7 +48,7 @@ contextBridge.exposeInMainWorld("jarvis", {
   // ── Shell ──
   shell: {
     openExternal: (url) => ipcRenderer.invoke("open-external", url),
-    openPath: (path) => ipcRenderer.invoke("open-path", path),
+    openPath: (p) => ipcRenderer.invoke("open-path", p),
   },
 
   // ── File Dialogs ──
@@ -53,6 +61,14 @@ contextBridge.exposeInMainWorld("jarvis", {
   autoLaunch: {
     get: () => ipcRenderer.invoke("auto-launch-get"),
     set: (enabled) => ipcRenderer.invoke("auto-launch-set", enabled),
+  },
+
+  // ── PiP Window ──
+  pip: {
+    toggle: () => ipcRenderer.send("pip-show"),
+    show: () => ipcRenderer.send("pip-show"),
+    onFrameRaw: (cb) => ipcRenderer.on("pip-frame-raw", (_, data) => cb(data)),
+    onFrame: (cb) => ipcRenderer.on("pip-frame", (_, data) => cb(data)),
   },
 
   // ── App Control ──

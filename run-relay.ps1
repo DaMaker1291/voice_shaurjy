@@ -27,13 +27,17 @@ try {
     & $python -m playwright install chromium
 }
 
+$hfUrl = $env:HF_API_URL
+if (-not $hfUrl) { $hfUrl = "http://localhost:8000" }
+
 Write-Host "[RELAY] Starting agent..." -ForegroundColor Green
-Write-Host "[RELAY] Server: https://dgfhgjhj-jarvis-ai-brain.hf.space" -ForegroundColor Green
+Write-Host "[RELAY] Server: $hfUrl" -ForegroundColor Green
 Write-Host "[RELAY] User ID: local" -ForegroundColor Green
 Write-Host ""
 Write-Host "Commands will be processed on THIS computer." -ForegroundColor Yellow
 Write-Host "Close this window to stop the agent." -ForegroundColor Yellow
 Write-Host ""
 
+if ($env:HF_API_URL) { $env:HF_API_URL = $hfUrl }
 & $python relay_agent.py --user local
 Read-Host "Press Enter to exit"

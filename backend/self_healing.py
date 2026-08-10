@@ -118,13 +118,7 @@ class SelfHealingEngine:
             return self._repair_cache[error_hash]
 
         try:
-            from groq import Groq
-            import os as _os
-            api_key = _os.getenv("GROQ_API_KEY", "")
-            if not api_key:
-                return self._generate_repair_regex(error_msg, stack_trace, original_code)
-
-            client = Groq(api_key=api_key)
+            from groq_agent import call as llm_call
             system = """You are a Python repair engineer. Given a failed script's error and stack trace,
 generate a CORRECTED version of the script. Rules:
 1. Return ONLY valid Python code (no markdown, no explanation)
@@ -143,21 +137,18 @@ Error: {error_msg}
 Stack trace:
 {stack_trace}
 
-{f'Context: {context}' if context else ''}
+{context or ''}
 
 Generate the repaired Python script with a run() function."""
 
-            response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user_msg},
-                ],
-                temperature=0.2,
+            code = llm_call(
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": user_msg}],
                 max_tokens=1000,
+                temperature=0.2,
             )
-
-            code = response.choices[0].message.content.strip()
+            if not code:
+                return self._generate_repair_regex(error_msg, stack_trace, original_code)
+            code = code.strip()
             # Strip markdown code fences if present
             if code.startswith("```"):
                 lines = code.split("\n")

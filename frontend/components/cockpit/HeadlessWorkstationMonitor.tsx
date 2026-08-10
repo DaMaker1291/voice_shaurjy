@@ -27,6 +27,8 @@ export default function HeadlessWorkstationMonitor() {
   const [launchApp, setLaunchApp] = useState("");
   const [launchCmd, setLaunchCmd] = useState("");
   const [error, setError] = useState("");
+  const [interactive, setInteractive] = useState(false);
+  const [typeBuffer, setTypeBuffer] = useState("");
 
   const base = BASE;
   const wsBase = base.replace("http", "ws");
@@ -34,7 +36,7 @@ export default function HeadlessWorkstationMonitor() {
   const connectWs = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     try {
-      const ws = new WebSocket(`${wsBase}/api/headless/ws/stream`);
+      const ws = new WebSocket(`${wsBase}/api/headless/ws/stream?fps=30&quality=60&session_id=default`);
       wsRef.current = ws;
 
       ws.onopen = () => setConnected(true);
@@ -50,7 +52,8 @@ export default function HeadlessWorkstationMonitor() {
             const ctx = canvas.getContext("2d");
             if (!ctx) return;
             const bytes = Uint8Array.from(atob(msg.data), c => c.charCodeAt(0));
-            const blob = new Blob([bytes], { type: "image/png" });
+            // JPEG frames from the isolated desktop (backend sends "jpeg")
+            const blob = new Blob([bytes], { type: msg.format === "jpeg" ? "image/jpeg" : "image/png" });
             const img = new Image();
             img.onload = () => {
               ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -126,6 +129,43 @@ export default function HeadlessWorkstationMonitor() {
 
   const isRunning = session?.state === "running";
 
+  // Forward a click on the preview canvas to the isolated desktop.
+  // Coordinates are normalized to the backend's capture resolution (1920x1080),
+  // so the remote mouse clicks land exactly where the user clicked on the preview.
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!interactive || !isRunning) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 1920;
+    const y = ((e.clientY - rect.top) / rect.height) * 1080;
+    sendWs({ cmd: "click", x: Math.round(x), y: Math.round(y), button: 1 });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!interactive || !isRunning) return;
+    if (e.key === "Enter") {
+      sendWs({ cmd: "key", key: "Return" });
+    } else if (e.key === "Escape") {
+      sendWs({ cmd: "key", key: "Escape" });
+    } else if (e.key === "Tab") {
+      sendWs({ cmd: "key", key: "Tab" });
+    } else if (e.key === "Backspace") {
+      sendWs({ cmd: "key", key: "Backspace" });
+    } else if (e.key === " ") {
+      sendWs({ cmd: "key", key: "space" });
+    } else if (e.key.length === 1) {
+      sendWs({ cmd: "type", text: e.key });
+    }
+  };
+
+  const flushTypeBuffer = () => {
+    if (typeBuffer.trim()) {
+      sendWs({ cmd: "type", text: typeBuffer });
+      setTypeBuffer("");
+    }
+  };
+
   return (
     <div style={{
       background: "linear-gradient(135deg, #0d0f12 0%, #12151a 100%)",
@@ -164,9 +204,14 @@ export default function HeadlessWorkstationMonitor() {
       </div>
 
       {/* Canvas viewport */}
-      <div style={{ flex: 1, position: "relative", background: "#000", minHeight: 0 }}>
+      <div
+        style={{ flex: 1, position: "relative", background: "#000", minHeight: 0, outline: "none" }}
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        onClick={(e) => { if (interactive && (e.target as HTMLElement).tagName === "CANVAS") handleCanvasClick(e as any); }}
+      >
         <canvas ref={canvasRef} width={960} height={540}
-          style={{ width: "100%", height: "100%", objectFit: "contain", opacity: isRunning ? 1 : 0.3 }} />
+          style={{ width: "100%", height: "100%", objectFit: "contain", opacity: isRunning ? 1 : 0.3, cursor: interactive ? "crosshair" : "default" }} />
 
         {!isRunning && (
           <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
@@ -179,7 +224,7 @@ export default function HeadlessWorkstationMonitor() {
               color: "var(--neon-green)", fontFamily: "var(--font-mono)",
               fontSize: 9, cursor: "pointer", letterSpacing: "0.06em",
             }}>
-              PROVISION VIRTUAL DISPLAY (:1)
+              PROVISION ISOLATED DESKTOP (:1)
             </button>
             {error && (
               <div style={{ fontSize: 8, fontFamily: "var(--font-mono)", color: "#FF3333", textAlign: "center", maxWidth: 300 }}>
@@ -197,6 +242,21 @@ export default function HeadlessWorkstationMonitor() {
             border: "1px solid rgba(0,255,102,0.2)",
           }}>
             <span style={{ fontSize: 8, fontFamily: "var(--font-mono)", color: "#00FF66" }}>{currentTask}</span>
+          </div>
+        )}
+
+        {/* Interactive passthrough indicator */}
+        {isRunning && (
+          <div style={{ position: "absolute", bottom: 8, left: 8, display: "flex", alignItems: "center", gap: 6 }}>
+            <button onClick={() => setInteractive(v => !v)} style={{
+              padding: "3px 10px", borderRadius: 3,
+              background: interactive ? "rgba(255,179,0,0.15)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${interactive ? "rgba(255,179,0,0.5)" : "rgba(255,255,255,0.15)"}`,
+              color: interactive ? "#FFB300" : "var(--text-muted)",
+              fontFamily: "var(--font-mono)", fontSize: 7, cursor: "pointer", letterSpacing: "0.05em",
+            }}>
+              {interactive ? "◉ MANUAL CONTROL" : "○ VIEW ONLY"}
+            </button>
           </div>
         )}
       </div>
@@ -252,13 +312,14 @@ export default function HeadlessWorkstationMonitor() {
               LAUNCH
             </button>
           </div>
-          {/* Quick launch buttons */}
+          {/* Quick launch buttons — Windows-appropriate presets */}
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             {[
-              { name: "Chrome", cmd: "google-chrome --headless" },
-              { name: "Excel", cmd: "libreoffice --calc --norestore" },
-              { name: "Terminal", cmd: "xterm" },
-              { name: "Blender", cmd: "blender --background" },
+              { name: "Chrome", cmd: "chrome" },
+              { name: "Notepad", cmd: "notepad" },
+              { name: "Excel", cmd: "excel" },
+              { name: "Word", cmd: "word" },
+              { name: "Terminal", cmd: "cmd" },
             ].map(app => (
               <button key={app.name} onClick={() => { setLaunchApp(app.name); setLaunchCmd(app.cmd); }}
                 style={{
@@ -270,13 +331,34 @@ export default function HeadlessWorkstationMonitor() {
               </button>
             ))}
           </div>
+          {/* Keyboard passthrough buffer (manual control) */}
+          {interactive && (
+            <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+              <input
+                value={typeBuffer} onChange={e => setTypeBuffer(e.target.value)}
+                placeholder="Type into isolated desktop" onKeyDown={e => e.key === "Enter" && flushTypeBuffer()}
+                style={{
+                  flex: 1, padding: "4px 8px", borderRadius: 3, border: "1px solid rgba(255,179,0,0.3)",
+                  background: "var(--surface)", color: "var(--text-primary)", fontSize: 9,
+                  fontFamily: "var(--font-mono)", outline: "none",
+                }}
+              />
+              <button onClick={flushTypeBuffer} style={{
+                padding: "4px 10px", borderRadius: 3, border: "1px solid rgba(255,179,0,0.4)",
+                background: "rgba(255,179,0,0.1)", color: "#FFB300",
+                fontSize: 8, fontFamily: "var(--font-mono)", cursor: "pointer",
+              }}>
+                SEND
+              </button>
+            </div>
+          )}
           {isRunning && (
             <button onClick={stopSession} style={{
               marginTop: 6, width: "100%", padding: "4px 0", borderRadius: 3,
               border: "1px solid rgba(255,51,51,0.2)", background: "rgba(255,51,51,0.08)",
               color: "#FF3333", fontSize: 8, fontFamily: "var(--font-mono)", cursor: "pointer",
             }}>
-              STOP VIRTUAL DISPLAY
+              STOP ISOLATED DESKTOP
             </button>
           )}
         </div>

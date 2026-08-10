@@ -1,0 +1,167 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:47:56.845497"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:47:57.018901"
+    },
+    {
+      "fact": "Search results for Shaurjesh Basu: Searching for \"Shaurjesh Basu\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:48:02.698518"
+    },
+    {
+      "fact": "User's name is Feeling Sad",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:48:28.429394"
+    },
+    {
+      "fact": "Search results about Feeling Sad: Searching for \"Feeling Sad information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:48:28.465713"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:47:56.740515"
+    },
+    "user_name": {
+      "value": "Feeling Sad",
+      "updated": "2026-07-29T17:48:28.430406"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:47:56.739201"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "Shaurjesh Basu. Nice to meet you. I've taken note of your name. I'll make sure to remember it for our future interactions. \n\nTo confirm, I've just made a note in your memory:\n\n`Preferences: name=shaur",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:00.478698"
+    },
+    {
+      "query": "whats my name?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:01.681007"
+    },
+    {
+      "query": "whats my name?",
+      "response": "Your name is **Shaurjesh Basu**.",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:02.546115"
+    },
+    {
+      "query": "search me on internet",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:02.589891"
+    },
+    {
+      "query": "search me on internet",
+      "response": "\ud83d\udd0d Searching for Shaurjesh Basu...",
+      "action": "search_self",
+      "timestamp": "2026-07-29T17:48:02.696522"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:02.731427"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T17:48:27.822827"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:27.869249"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"weather in london\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T17:48:27.980106"
+    },
+    {
+      "query": "open notepad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:28.015035"
+    },
+    {
+      "query": "open notepad",
+      "response": "\ud83d\udcdd Opening Notepad...\nNotepad opened.",
+      "action": "notepad",
+      "timestamp": "2026-07-29T17:48:28.121916"
+    },
+    {
+      "query": "take a screenshot",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:28.168658"
+    },
+    {
+      "query": "take a screenshot",
+      "response": "\ud83d\udcf8 Taking screenshot...\nScreenshot saved to Desktop.",
+      "action": "screenshot",
+      "timestamp": "2026-07-29T17:48:28.275990"
+    },
+    {
+      "query": "im feeling sad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:28.327433"
+    },
+    {
+      "query": "im feeling sad",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:28.645947"
+    },
+    {
+      "query": "bonjour",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:28.689573"
+    },
+    {
+      "query": "bonjour",
+      "response": "Good evening. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T17:48:28.793027"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:48:28.793027",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:47:56.807395"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T17:48:27.974090"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

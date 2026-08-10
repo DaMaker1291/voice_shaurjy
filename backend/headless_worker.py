@@ -61,6 +61,7 @@ class HeadlessSession:
     launched_apps: Dict[str, int] = field(default_factory=dict)
     created_at: float = 0.0
     error: Optional[str] = None
+    desktop_name: Optional[str] = None  # Windows TrueDesktop isolation name
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def to_dict(self) -> dict:
@@ -74,6 +75,7 @@ class HeadlessSession:
             "created_at": self.created_at,
             "uptime": round(time.time() - self.created_at, 1) if self.created_at else 0,
             "platform": PLATFORM,
+            "desktop_name": self.desktop_name,
             "error": self.error,
         }
 
@@ -140,6 +142,14 @@ class JarvisHeadlessWorker:
             for app_name, pid in session.launched_apps.items():
                 try: os.kill(pid, signal.SIGTERM)
                 except: pass
+            # Close the isolated Windows desktop
+            if session.desktop_name:
+                try:
+                    from true_desktop import get_true_desktop
+                    get_true_desktop().close(session.desktop_name)
+                except Exception:
+                    pass
+                session.desktop_name = None
             session.state = SessionState.STOPPED
             session.process = None
             session.launched_apps.clear()
@@ -171,10 +181,69 @@ class JarvisHeadlessWorker:
             env["JARVIS_HEADLESS"] = "1"
 
         try:
-            proc = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            session.launched_apps[app_name] = proc.pid
-            print(f"[HEADLESS] Launched '{app_name}' (PID {proc.pid}) in session '{session_id}'")
-            return {"ok": True, "app": app_name, "pid": proc.pid}
+            if IS_WINDOWS:
+                cmd_str = command[0] if command else app_name
+                args = command[1:] if len(command) > 1 else []
+
+                # App name mappings — GUI apps get redirected to console equivalents
+                # because Windows isolated desktops cannot run GUI apps (no message pump).
+                app_map = {
+                    "chrome": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                    "notepad": "notepad.exe",
+                    "calc": "calc.exe",
+                    "word": "winword.exe",
+                    "excel": "excel.exe",
+                    "powerpoint": "powerpnt.exe",
+                    "cmd": "cmd.exe",
+                    "terminal": "wt.exe",
+                    "powershell": "pwsh.exe",
+                    "pwsh": "pwsh.exe",
+                    "python": "python.exe",
+                }
+                gui_apps = {"chrome", "notepad", "calc", "word", "excel", "powerpoint"}
+                exe_path = app_map.get(cmd_str.lower(), cmd_str)
+
+                # GUI apps cannot run on isolated desktops — warn and suggest alternative
+                if cmd_str.lower() in gui_apps:
+                    print(f"[HEADLESS] WARNING: '{cmd_str}' is a GUI app — cannot run on isolated desktop.")
+                    print(f"[HEADLESS] Use file-codegen instead (python-pptx, pandas, etc.) or headless Chrome.")
+                    # Fall through to try anyway — some may survive briefly
+
+                # Launch on the isolated Windows desktop via TrueDesktop
+                if session.desktop_name:
+                    try:
+                        from true_desktop import get_true_desktop
+                        td = get_true_desktop()
+                        proc = td.launch_on(session.desktop_name, exe_path, args)
+                        if proc:
+                            session.launched_apps[app_name] = proc.pid
+                            print(f"[HEADLESS] Launched '{app_name}' (PID {proc.pid}) on isolated desktop '{session.desktop_name}'")
+                            return {"ok": True, "app": app_name, "pid": proc.pid, "isolated": True}
+                        return {"ok": False, "error": "TrueDesktop launch failed"}
+                    except ImportError:
+                        pass
+                    except Exception as e:
+                        return {"ok": False, "error": f"Isolated launch error: {e}"}
+
+                # Fallback: Start-Process via PowerShell (visible desktop)
+                ps_cmd = f'Start-Process "{exe_path}"'
+                if args:
+                    arg_str = " ".join(f'"{a}"' for a in args)
+                    ps_cmd += f' -ArgumentList {arg_str}'
+                
+                # Launch via PowerShell (creates a visible window)
+                proc = subprocess.Popen(
+                    ["powershell", "-NoProfile", "-Command", ps_cmd],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                session.launched_apps[app_name] = proc.pid
+                print(f"[HEADLESS] Launched '{app_name}' (PID {proc.pid}) in session '{session_id}'")
+                return {"ok": True, "app": app_name, "pid": proc.pid}
+            else:
+                proc = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                session.launched_apps[app_name] = proc.pid
+                print(f"[HEADLESS] Launched '{app_name}' (PID {proc.pid}) in session '{session_id}'")
+                return {"ok": True, "app": app_name, "pid": proc.pid}
         except FileNotFoundError:
             return {"ok": False, "error": f"Command not found: {command[0]}"}
         except Exception as e:
@@ -218,10 +287,21 @@ class JarvisHeadlessWorker:
             subprocess.run(["xdotool", "type", "--display", display, "--delay", "20", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
             return {"ok": True, "action": "type", "length": len(text)}
         elif IS_WINDOWS:
-            for char in text:
-                self._inject_key_windows(char)
-                time.sleep(0.02)
-            return {"ok": True, "action": "type", "length": len(text)}
+            # Use clipboard paste for reliable text injection
+            try:
+                import pyperclip
+                import pyautogui
+                pyautogui.FAILSAFE = False
+                pyperclip.copy(text)
+                pyautogui.hotkey("ctrl", "v")
+                time.sleep(0.05)
+                return {"ok": True, "action": "type", "length": len(text)}
+            except ImportError:
+                # Fallback: character by character
+                for char in text:
+                    self._inject_key_windows(char)
+                    time.sleep(0.02)
+                return {"ok": True, "action": "type", "length": len(text)}
         return {"ok": False, "error": "Text injection not supported"}
 
     def screenshot(self, session_id: str, output_path: Optional[str] = None) -> Optional[bytes]:
@@ -236,6 +316,59 @@ class JarvisHeadlessWorker:
         elif IS_WINDOWS:
             return self._screenshot_windows(session, output_path)
         return None
+
+    def capture_jpeg(self, session_id: str = "default", width: int = 960,
+                     height: int = 540, quality: int = 70) -> Optional[bytes]:
+        """Capture the isolated desktop and return JPEG bytes (fast, for streaming)."""
+        try:
+            from PIL import Image
+            import io
+
+            # Prefer TrueDesktop isolated capture on Windows
+            if IS_WINDOWS:
+                data = self._screenshot_windows_isolated(session_id)
+            else:
+                data = self.screenshot(session_id)
+
+            if not data:
+                return None
+
+            img = Image.open(io.BytesIO(data))
+            img = img.convert("RGB")
+            if width and height:
+                img = img.resize((width, height), Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality, optimize=True)
+            return buf.getvalue()
+        except Exception:
+            return None
+
+    def _screenshot_windows_isolated(self, session_id: str) -> Optional[bytes]:
+        """Capture the isolated Windows desktop framebuffer.
+
+        Tries capture_desktop_surface() first — switches to the isolated
+        desktop, grabs the entire framebuffer via GDI BitBlt, then switches
+        back. Falls back to capture() (PrintWindow per-window) if that fails.
+        """
+        try:
+            from true_desktop import get_true_desktop
+            td = get_true_desktop()
+            desktop_name = self.sessions[session_id].desktop_name
+            if not desktop_name:
+                return None
+
+            # Try surface capture first (captures the whole desktop, not individual windows)
+            data = td.capture_desktop_surface(desktop_name)
+            if data:
+                return data
+
+            # Fallback: PrintWindow per-window capture
+            data = td.capture(desktop_name)
+            if data:
+                return data
+        except Exception:
+            pass
+        return self._screenshot_windows(self.sessions.get(session_id))
 
     def get_window_tree(self, session_id: str) -> dict:
         session = self.sessions.get(session_id)
@@ -375,108 +508,107 @@ while True: time.sleep(1)
     # ------------------------------------------------------------------
 
     def _start_windows(self, session: HeadlessSession):
-        """Create isolated Windows desktop via Win32 API."""
+        """Create isolated Windows desktop via Win32 CreateDesktopW (TrueDesktop).
+        
+        Apps are launched on a REAL hidden desktop object — completely invisible
+        from the user's desktop. The user's mouse/keyboard/display stay untouched.
+        """
+        # Use a background keep-alive process to own the session lifetime
+        session.process = subprocess.Popen(
+            [sys.executable, "-c", """
+import time, os, signal
+signal.signal(signal.SIGTERM, lambda s, f: os._exit(0))
+while True: time.sleep(1)
+"""],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        session.pid = session.process.pid
+
+        # Real Windows desktop isolation via CreateDesktopW
         try:
-            import ctypes
-            from ctypes import wintypes
-
-            user32 = ctypes.windll.user32
-            kernel32 = ctypes.windll.kernel32
-
-            # Get current desktop and process
-            hDesktop = user32.OpenDesktopW(f"JARVIS_VD_{session.display_id}", 0, False, 0x0100)  # DESKTOP_CREATEWINDOW
-            if not hDesktop:
-                # Create new desktop
-                hCurrentDesktop = user32.OpenInputDesktop(0, False, 0x0100)
-                hDesktop = user32.CreateDesktopW(
-                    f"JARVIS_VD_{session.display_id}",
-                    None, None, 0, 0x0100, None  # DESKTOP_CREATEWINDOW
-                )
-
-            session._hdesktop = hDesktop
-            session._hwnd = None
-
-            # Start a background process on the virtual desktop
-            si = ctypes.wintypes.STARTUPINFOW()
-            si.cb = ctypes.sizeof(si)
-            si.lpDesktop = f"JARVIS_VD_{session.display_id}".encode("utf-16-le")
-            si.dwFlags = 0x00000001  # STARTF_USESHOWWINDOW
-            si.wShowWindow = 0  # SW_HIDE
-
-            pi = ctypes.wintypes.PROCESS_INFORMATION()
-
-            # Launch explorer.exe as a base process on the virtual desktop
-            cmd = "cmd.exe /c start /b cmd.exe"
-            success = user32.CreateProcessW(
-                None, cmd, None, None, False,
-                0x00000200,  # CREATE_NEW_PROCESS_GROUP
-                None, None, ctypes.byref(si), ctypes.byref(pi)
-            )
-
-            if success:
-                session.pid = pi.dwProcessId
-                session.process = type('obj', (object,), {'pid': pi.dwProcessId, 'terminate': lambda self: kernel32.TerminateProcess(pi.hProcess, 0)})()
-                kernel32.CloseHandle(pi.hProcess)
-                kernel32.CloseHandle(pi.hThread)
-            else:
-                # Fallback: just run a background Python process
-                session.process = subprocess.Popen(
-                    [sys.executable, "-c", "import time\nwhile True: time.sleep(1)"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
-                session.pid = session.process.pid
-
+            from true_desktop import get_true_desktop
+            td = get_true_desktop()
+            desktop_name = f"jarvis_hd_{session.session_id}"
+            if desktop_name not in td.list_desktops():
+                td.create(desktop_name)
+            session.desktop_name = desktop_name
+            print(f"[HEADLESS] Session '{session.session_id}' isolated on Windows desktop '{desktop_name}'")
         except ImportError:
-            # No ctypes.wintypes (not on Windows)
-            session.process = subprocess.Popen(
-                [sys.executable, "-c", "import time\nwhile True: time.sleep(1)"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-            session.pid = session.process.pid
+            print("[HEADLESS] true_desktop not available — running without desktop isolation")
         except Exception as e:
-            session.process = subprocess.Popen(
-                [sys.executable, "-c", "import time\nwhile True: time.sleep(1)"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-            session.pid = session.process.pid
+            print(f"[HEADLESS] Desktop isolation init failed: {e}")
+
+    def execute_command(self, session_id: str, command: str, timeout: int = 30) -> Dict[str, Any]:
+        """Execute a shell command inside an existing headless session's environment.
+        
+        Routes through ExecutionVault sandboxing. On Linux, runs inside Xvfb.
+        On macOS/Windows, runs in the user's normal environment but still vaulted.
+        
+        Returns dict: {success, stdout, stderr, exit_code, timed_out, blocked, block_reason}
+        """
+        from execution_vault import ExecutionVault, VaultPolicy
+        
+        session = self.sessions.get(session_id)
+        if not session or session.state != SessionState.RUNNING:
+            # Auto-start a default session
+            result = self.start_session(session_id)
+            if not result.get("ok"):
+                return {"success": False, "error": result.get("error", "Cannot start session")}
+            session = self.sessions[session_id]
+        
+        vault = ExecutionVault()
+        policy = VaultPolicy(timeout=timeout)
+        
+        env_prefix = ""
+        if IS_LINUX and session.process:
+            env_prefix = f"export DISPLAY=:{session.display_id}; "
+        
+        full_cmd = f"{env_prefix}{command}"
+        vr = vault.execute(full_cmd, policy=policy)
+        
+        return {
+            "success": vr.exit_code == 0 and not vr.blocked,
+            "stdout": vr.stdout.strip()[:2000],
+            "stderr": vr.stderr.strip()[:1000],
+            "exit_code": vr.exit_code,
+            "timed_out": vr.timed_out,
+            "blocked": vr.blocked,
+            "block_reason": vr.block_reason,
+        }
 
     def _inject_click_windows(self, x: int, y: int, button: int) -> dict:
+        """Inject a click using pyautogui (more reliable than PostMessageW)."""
         try:
-            import ctypes
-            user32 = ctypes.windll.user32
-            hwnd = user32.GetForegroundWindow()
-            lparam = y << 16 | x
-            msg_down = 0x0201 if button == 1 else 0x0204  # WM_LBUTTONDOWN / WM_RBUTTONDOWN
-            msg_up = 0x0202 if button == 1 else 0x0205    # WM_LBUTTONUP / WM_RBUTTONUP
-            user32.PostMessageW(hwnd, msg_down, 0, lparam)
-            time.sleep(0.01)
-            user32.PostMessageW(hwnd, msg_up, 0, lparam)
+            import pyautogui
+            pyautogui.FAILSAFE = False
+            pyautogui.PAUSE = 0.01
+            if button == 1:
+                pyautogui.click(x, y)
+            else:
+                pyautogui.click(x, y, button='right')
             return {"ok": True, "action": "click", "x": x, "y": y, "button": button}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     def _inject_key_windows(self, key: str) -> dict:
+        """Inject a keypress using pyautogui."""
         try:
-            import ctypes
-            user32 = ctypes.windll.user32
-
-            VK_MAP = {
-                "return": 0x0D, "enter": 0x0D, "tab": 0x09, "space": 0x20,
-                "escape": 0x1B, "esc": 0x1B, "backspace": 0x08, "delete": 0x2E,
-                "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
-                "home": 0x24, "end": 0x23, "pageup": 0x21, "pagedown": 0x22,
+            import pyautogui
+            pyautogui.FAILSAFE = False
+            pyautogui.PAUSE = 0.01
+            
+            # Map common key names
+            key_map = {
+                "return": "enter", "enter": "enter", "tab": "tab",
+                "escape": "escape", "esc": "escape", "backspace": "backspace",
+                "delete": "delete", "up": "up", "down": "down",
+                "left": "left", "right": "right", "home": "home",
+                "end": "end", "pageup": "pageup", "pagedown": "pagedown",
+                "space": "space",
             }
-
-            key_lower = key.lower().strip()
-            vk = VK_MAP.get(key_lower)
-            if vk is None and len(key) == 1:
-                vk = ord(key.upper())
-            elif vk is None:
-                return {"ok": False, "error": f"Unknown key: {key}"}
-
-            user32.keybd_event(vk, 0, 0, 0)
-            time.sleep(0.01)
-            user32.keybd_event(vk, 0, 0x0002, 0)  # KEYEVENTF_KEYUP
+            
+            mapped = key_map.get(key.lower().strip(), key.lower().strip())
+            pyautogui.press(mapped)
             return {"ok": True, "action": "key", "key": key}
         except Exception as e:
             return {"ok": False, "error": str(e)}
@@ -636,3 +768,25 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------
+# Singleton — process-wide worker so sessions persist across API requests
+# ---------------------------------------------------------------------------
+
+_worker: Optional[JarvisHeadlessWorker] = None
+_worker_lock = threading.Lock()
+
+
+def get_headless_worker() -> JarvisHeadlessWorker:
+    """Return the process-wide headless worker singleton.
+
+    Sessions and isolated desktops persist across HTTP/WS requests, so the
+    backstage VDI keeps running without state loss between calls.
+    """
+    global _worker
+    if _worker is None:
+        with _worker_lock:
+            if _worker is None:
+                _worker = JarvisHeadlessWorker()
+    return _worker

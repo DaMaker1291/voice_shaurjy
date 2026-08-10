@@ -76,7 +76,7 @@ class ContextRelay:
             self._initialized = False
 
     def _init_windows(self):
-        """Windows: Connect to Outlook via COM."""
+        """Windows: detect Outlook COM without launching it."""
         try:
             import win32com.client
             self._calendar_source = "outlook_com"
@@ -161,11 +161,21 @@ class ContextRelay:
         self._set_cache(cache_key, events)
         return events
 
+    def _get_running_outlook(self):
+        """Get a running Outlook instance without launching it."""
+        try:
+            import win32com.client
+            outlook = win32com.client.GetActiveObject("Outlook.Application")
+            return outlook.GetNamespace("MAPI")
+        except Exception:
+            return None
+
     def _ingest_windows_calendar(self, days: int) -> List[Dict[str, Any]]:
-        """Windows Outlook calendar via COM."""
-        import win32com.client
-        outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
-        calendar = outlook.GetDefaultFolder(9)
+        """Windows Outlook calendar via COM (only if Outlook is running)."""
+        ns = self._get_running_outlook()
+        if ns is None:
+            return []
+        calendar = ns.GetDefaultFolder(9)
         items = calendar.Items
         items.IncludeRecurrences = True
         items.Sort("[Start]")
@@ -279,10 +289,11 @@ class ContextRelay:
         return emails
 
     def _ingest_windows_emails(self, limit: int) -> List[Dict[str, Any]]:
-        """Windows Outlook inbox via COM."""
-        import win32com.client
-        outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
-        inbox = outlook.GetDefaultFolder(6)
+        """Windows Outlook inbox via COM (only if Outlook is running)."""
+        ns = self._get_running_outlook()
+        if ns is None:
+            return []
+        inbox = ns.GetDefaultFolder(6)
         items = inbox.Items
         items.Sort("[ReceivedTime]", True)
         emails = []
@@ -356,10 +367,11 @@ class ContextRelay:
         return contacts
 
     def _ingest_windows_contacts(self, limit: int) -> List[Dict[str, Any]]:
-        """Windows Outlook contacts via COM."""
-        import win32com.client
-        outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
-        contacts_folder = outlook.GetDefaultFolder(10)  # olFolderContacts
+        """Windows Outlook contacts via COM (only if Outlook is running)."""
+        ns = self._get_running_outlook()
+        if ns is None:
+            return []
+        contacts_folder = ns.GetDefaultFolder(10)  # olFolderContacts
         items = contacts_folder.Items
         contacts = []
         for i in range(1, min(limit + 1, items.Count + 1)):
@@ -589,12 +601,22 @@ class ContextRelay:
         self._running = False
 
     def _sync_loop(self, interval: int):
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+        except ImportError:
+            pass
         while self._running:
             try:
                 self.get_full_context()
             except Exception as e:
                 print(f"[CONTEXT RELAY] Sync error: {e}")
             time.sleep(interval)
+        try:
+            import pythoncom
+            pythoncom.CoUninitialize()
+        except ImportError:
+            pass
 
     # ── Inject Context for Relay ────────────────────────────────────
 

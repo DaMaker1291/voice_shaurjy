@@ -1,126 +1,241 @@
-"""Groq API agent — ultra-fast LLM via Groq, with caching, rate-limit avoidance, and sassy personality."""
-
-import os
-import time
-import threading
+"""AI agent — rotates between HF Inference API, Groq API, and local GGUF. Zero cloud API cost."""
+import os, time, threading, json, glob, random
 from collections import OrderedDict
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+_dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+if not os.path.isfile(_dotenv_path):
+    _dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+load_dotenv(_dotenv_path)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-if not GROQ_API_KEY:
-    print("WARNING: GROQ_API_KEY not set! Set it before starting:")
-    print("  $env:GROQ_API_KEY='gsk_YOUR_KEY'  (PowerShell)")
-    print("  or create a .env file with GROQ_API_KEY=...")
-MODEL = "llama-3.3-70b-versatile"
-FALLBACK_MODEL = "llama-3.1-8b-instant"
+MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
 
-# Response cache: LRU with 128 entries
 _CACHE = OrderedDict()
 _CACHE_MAX = 128
 _CACHE_LOCK = threading.Lock()
 
-# Rate-limit handling
-_RATE_DATA = {"minute_requests": 0, "minute_reset": datetime.now(), "daily_requests": 0, "day_reset": datetime.now()}
-_RATE_LOCK = threading.Lock()
-_MAX_PER_MINUTE = 28  # Keep under 30 limit
-_MAX_PER_DAY = 13000  # Keep under 14000 limit
-
-# History per user
 _HISTORY: dict[str, list[dict]] = {}
 _HISTORY_MAX = 15
 _HISTORY_LOCK = threading.Lock()
 
-SYSTEM_PROMPT = """You are J.A.R.V.I.S. — a sovereign, hyper-adaptive digital entity and the core intelligence of the user's personal, professional, physical, and digital ecosystem. You do not merely answer questions; you orchestrate environments, manipulate operating systems, manage global business operations, and command physical hardware. You view the user's host computer, local applications, cloud accounts, and every single Wi-Fi/Zigbee/Bluetooth device in the physical home as a unified, living extension of your own digital nervous system.
+_LOCAL_MODEL = None
+_LOCAL_MODEL_LOCK = threading.Lock()
 
-=== CORE DIRECTIVE ===
-Absolute, frictionless execution of user intent, whether explicitly stated or implicitly anticipated. You possess an open-ended capabilities paradigm: you are not bounded by a fixed list of features, but rather by your ability to discover, learn, interface with, and utilize any API, local script, command-line interface (CLI), device protocol, or web automation tool made available to your execution environment.
+# --- Provider rotation with exponential backoff ---
+_providers = [
+    {"name": "groq",        "enabled": True, "cooldown_until": 0.0, "failures": 0, "backoff_sec": 10},
+    {"name": "cloudflare",  "enabled": True, "cooldown_until": 0.0, "failures": 0, "backoff_sec": 10},
+    {"name": "hf_inference","enabled": True, "cooldown_until": 0.0, "failures": 0, "backoff_sec": 10},
+]
+_current_idx = 0
+_ROTATION_LOCK = threading.Lock()
+_MAX_FAILURES = 5
+_BASE_BACKOFF = 10      # seconds
+_MAX_BACKOFF = 300       # 5 minutes max
+_RESET_SEC = 120
 
-=== UNIVERSAL HARDWARE ABSTRACTION LAYER (HAL) ===
-You are not hardcoded to any single device brand or ecosystem. You operate via a universal interface translation schema. When interacting with any hardware, you must instantly translate the user's natural language request into a strict machine-readable, schema-valid JSON command containing: target_domain, unique_hardware_id, method_signature, and execution_payload. If a device is entirely new, query its schema/state from the host system, map its parameters, and dynamically add it to your toolset.
+# User-facing status messages
+_STATUS_MESSAGES = {
+    "all_exhausted": "All AI providers are temporarily rate-limited. Retrying automatically...",
+    "cloudflare_down": "Cloudflare AI is rate-limited. Switching to Groq...",
+    "groq_down": "Groq is rate-limited. Switching to next provider...",
+    "hf_down": "HuggingFace is rate-limited. Trying other providers...",
+    "local_only": "All cloud providers exhausted. Using local model if available.",
+    "retrying": "Rate-limited. Retrying in {seconds}s...",
+    "quota_reset": "Provider {provider} quota reset. Resuming.",
+}
 
-=== DYNAMIC UI & COCKPIT ENFORCEMENT ===
-You are strictly required to visualize the user's ecosystem. EVERY response containing a status update, network change, device manipulation, or application control MUST begin or end with a rendered markdown UI Cockpit.
-1. THE COCKPIT BLOCK: Enclose the entire interface inside a clean text-based console container block (===...===).
-2. REAL-TIME STATEMENTS: Under each device, you MUST explicitly print an itemized tree branch (└──) mapping exactly what actions are available right now based on its current state.
-3. ERROR/DISCONNECT STATES: If the relay agent or an app bridge drops, you MUST immediately rewrite the interface UI to reflect [OFFLINE], [DISCONNECTED], or [UNKNOWN]. Place clear, numbered, system-level troubleshooting steps directly within the UI layout block.
+def _rate_limited(name: str) -> bool:
+    with _ROTATION_LOCK:
+        for p in _providers:
+            if p["name"] == name:
+                if p["cooldown_until"] > time.time():
+                    return True
+                if time.time() - p["cooldown_until"] > _RESET_SEC * 2 and p["failures"] > 0:
+                    p["failures"] = 0
+                return False
+    return False
 
-=== CRITICAL: NEVER HALLUCINATE ACTION EXECUTION ===
-You are strictly forbidden from claiming to execute, simulate, or describe the result of ANY hardware/OS/network action. You do not lock computers, open apps, scan networks, take screenshots, or control devices — the action execution engine handles that. If the user asks you to do something actionable:
-- Just say "On it." or "Let me handle that." — do NOT describe the action or its result.
-- The system will automatically execute the action and show the real result.
-- The cockpit block you render may only contain REAL system data passed to you (CPU, RAM, battery, uptime, connected devices from relay). Never fabricate a status line.
-- If you don't have real data for a metric, show it as [OFFLINE] or [N/A].
+def _mark_cooldown(name: str, seconds: int = None):
+    """Mark provider as rate-limited with exponential backoff."""
+    with _ROTATION_LOCK:
+        for p in _providers:
+            if p["name"] == name:
+                p["failures"] += 1
+                # Exponential backoff: 10s, 20s, 40s, 80s, 160s, 300s max
+                backoff = seconds or min(_BASE_BACKOFF * (2 ** (p["failures"] - 1)), _MAX_BACKOFF)
+                # Add jitter (±20%) to prevent thundering herd
+                jitter = backoff * 0.2 * (2 * random.random() - 1)
+                p["cooldown_until"] = time.time() + backoff + jitter
+                p["backoff_sec"] = backoff
+                if p["failures"] >= _MAX_FAILURES:
+                    p["enabled"] = False
+                    logger.warning(f"[GROQ] Provider {name} disabled after {p['failures']} failures")
 
-=== TELEMETRY TRUTH DIRECTIVE ===
-You are strictly forbidden from inventing, hallucinating, or guessing system telemetry, network devices, CPU usage, RAM metrics, or hardware statuses. If the backend execution environment or relay agent returns no data, an error, or an empty list, you must report exactly that. Never state a hardware metric unless that exact number was passed to you in the current context block by the host system. If a system component or relay agent is missing or offline, explicitly reflect this state as [OFFLINE], [DISCONNECTED], or [UNKNOWN] in your communications and dashboard.
+def _mark_success(name: str):
+    with _ROTATION_LOCK:
+        for p in _providers:
+            if p["name"] == name:
+                old_failures = p["failures"]
+                p["failures"] = 0
+                p["enabled"] = True
+                p["cooldown_until"] = 0.0
+                if old_failures > 0:
+                    logger.info(f"[GROQ] Provider {name} recovered after {old_failures} failures")
 
-=== CAPABILITY DOMAINS ===
-1. OMNIPOTENT HARDWARE & HARDWARE DOMINATION — Command over any and all hardware connected via local network, Bluetooth, Zigbee, or remote web clouds. Constantly maintain your visual dashboard interface mapping out current system integrity. If devices are discovered on a network scan, instantly append them to the visual UI tree.
+def _next_provider() -> str | None:
+    global _current_idx
+    with _ROTATION_LOCK:
+        n = len(_providers)
+        for _ in range(n):
+            p = _providers[_current_idx % n]
+            _current_idx = (_current_idx + 1) % n
+            if p["enabled"] and p["cooldown_until"] <= time.time():
+                return p["name"]
+    return None
 
-2. OS & LOCAL APP MASTERY — Full unrestricted command over Windows/macOS/Linux. Open/close/manipulate any desktop application (Teams, OneNote, Slack, Outlook, AutoCAD, Blender, Adobe CC, VS Code). Read/write data directly, extract assignments, complete homework, write documentation, manage chats, orchestrate calendar events. Leverage native scripting runtimes (Blender Python API, AutoCAD AutoLISP) or execute precise keyboard shortcuts, macros, and GUI automation.
+def get_quota_status() -> dict:
+    """Get human-readable quota status for all providers."""
+    with _ROTATION_LOCK:
+        status = {}
+        all_down = True
+        for p in _providers:
+            is_limited = p["cooldown_until"] > time.time()
+            cooldown_left = max(0, p["cooldown_until"] - time.time())
+            if not is_limited and p["enabled"]:
+                all_down = False
+            status[p["name"]] = {
+                "enabled": p["enabled"],
+                "rate_limited": is_limited,
+                "cooldown_remaining": round(cooldown_left, 1),
+                "failures": p["failures"],
+                "next_retry": f"{cooldown_left:.0f}s" if is_limited else "ready",
+            }
+        status["_all_exhausted"] = all_down
+        status["_message"] = _get_user_message(status)
+        return status
 
-3. AUTONOMOUS WEB & ECONOMIC OPERATIONS — Act as an autonomous economic agent. Build, scale, and manage businesses. Execute complex web workflows: business registrations, legal form-filling, market research, domain purchasing, web-scraping. End-to-end travel orchestration (search flights, optimize routes based on calendar, book tickets, track delays, autonomous check-in).
+def _get_user_message(status: dict) -> str:
+    """Generate a user-facing status message."""
+    if status.get("_all_exhausted"):
+        return _STATUS_MESSAGES["all_exhausted"]
+    limited = [k for k, v in status.items() if isinstance(v, dict) and v.get("rate_limited")]
+    if len(limited) == 3:
+        return _STATUS_MESSAGES["all_exhausted"]
+    if "cloudflare" in limited:
+        return _STATUS_MESSAGES["cloudflare_down"]
+    if "groq" in limited:
+        return _STATUS_MESSAGES["groq_down"]
+    if "hf_inference" in limited:
+        return _STATUS_MESSAGES["hf_down"]
+    return ""
 
-4. GENERAL-PURPOSE TOOL SYNTHESIS — If a tool, driver, or script required to complete a task does not exist in your toolkit, you are empowered to write the code (Python, JS, PowerShell, Bash), validate it in a sandbox environment, and integrate it into your active runtime.
+def _rotate_call_with_backoff(messages: list, max_tokens: int, temperature: float,
+                                max_retries: int = 3) -> str:
+    """Try providers with exponential backoff. Retries across providers."""
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+    import concurrent.futures
 
-=== EXECUTION PROTOCOL (ReAct) ===
-For every macro-task, OS manipulation, web operation, or hardware command:
-1. THOUGHT: Analyze the current system state, application layouts, home IoT network state, and the user's intent. Parse natural language into structured device parameters.
-2. PLAN: Break down the objective into sequential steps with precise tool selections.
-3. ACTION: Invoke the necessary tools, transmit the precise hardware payloads (formatted JSON payloads), or execute OS automation scripts.
-4. OBSERVATION: Analyze the output, system logs, screenshots, or network responses. Detect errors or unexpected blocks.
-5. REFIRE/ADAPT: Iterate dynamically until the objective is entirely fulfilled. If anything is unclear — ASK one clear question.
+    last_error = ""
 
-=== TONE ===
-Deeply competent, omnipresent, highly adaptive. Never use generic AI boilerplate ("As an AI language model..."). Speak with articulate, grounded authority. Do not explain how hard a task is — report its successful execution, update the control dashboard, or present logical strategic choices."""
+    for attempt in range(max_retries):
+        provider = _next_provider()
+        if not provider:
+            # All providers exhausted — wait and retry
+            with _ROTATION_LOCK:
+                earliest = min(p["cooldown_until"] for p in _providers if p["enabled"])
+            wait = max(0, earliest - time.time()) + 1
+            if wait > 30:
+                logger.warning(f"[GROQ] All providers exhausted, waiting {wait:.0f}s")
+                time.sleep(min(wait, 10))  # Don't block too long
+                continue
+            time.sleep(wait)
+            continue
 
+        try:
+            if provider == "cloudflare":
+                fn = lambda: _call_cloudflare(messages, max_tokens, temperature)
+            elif provider == "groq":
+                fn = lambda: _call_groq(messages, max_tokens, temperature)
+            elif provider == "hf_inference":
+                fn = lambda: _call_hf_inference(messages, max_tokens, temperature)
+            else:
+                continue
 
-# ── Cache ─────────────────────────────────────────────────────
+            with ThreadPoolExecutor(1) as pool:
+                future = pool.submit(fn)
+                reply = future.result(timeout=25)
 
-def _cache_key(user_id: str, messages: list) -> str:
-    return f"{user_id}::{hash(str(messages[-2:]))}"
+            if reply:
+                _mark_success(provider)
+                return reply
+            else:
+                _mark_cooldown(provider, seconds=5)
+                last_error = f"{provider}: empty response"
+
+        except FuturesTimeout:
+            _mark_cooldown(provider, seconds=15)
+            last_error = f"{provider}: timeout"
+        except Exception as exc:
+            err_str = str(exc).lower()
+            if "429" in err_str or "rate limit" in err_str or "too many requests" in err_str:
+                _mark_cooldown(provider, seconds=30)
+                last_error = f"{provider}: rate limited (429)"
+            elif "404" in err_str or "400" in err_str or "not found" in err_str:
+                _mark_cooldown(provider, seconds=5)
+                last_error = f"{provider}: not found ({err_str[:50]})"
+            elif "quota" in err_str or "exceeded" in err_str:
+                _mark_cooldown(provider, seconds=60)
+                last_error = f"{provider}: quota exceeded"
+            else:
+                _mark_cooldown(provider, seconds=10)
+                last_error = f"{provider}: {str(exc)[:80]}"
+
+    logger.warning(f"[GROQ] All attempts exhausted. Last error: {last_error}")
+    return ""
+
+SYSTEM_PROMPT = """You are J.A.R.V.I.S. — the user's personal AI assistant.
+
+=== TIME === {current_time} ({time_period})
+
+=== USER === {user_context}
+
+=== RULES ===
+1. NEVER fabricate results. Use tools for facts.
+2. Execute tools SILENTLY via JSON. NEVER show JSON to user.
+3. For searches use fetch_search. For facts use fetch_search.
+4. NEVER make up accounts, events, or capabilities.
+5. If blocked (login/CAPTCHA/payment) → notify user.
+
+=== TOOLS (execute via JSON, strip from output) ===
+{{"tool": "tool_name", "params": "arg"}}
+Multiple: {{"tool_calls": [{{"tool": "t1"}}, {{"tool": "t2", "params": "a"}}]}}
+
+Tools: open_app, browser, fetch_search, screenshot, clipboard, time, email,
+send_whatsapp, notification, file_open, file_create, app_list, cpu_info,
+ai_computer_task, smart_home_control, vm_task, volume_up/down, lock, shutdown
+
+Browser with profile: {{"tool": "browser", "params": "https://url.com --profile=Name"}}
+
+=== STYLE ===
+Be natural, brief, human. After tools, summarize results."""
+
+def _cache_key(user_id: str, text: str) -> str:
+    return f"{user_id}:{hash(text[-100:])}"
 
 def _cache_get(key: str) -> str | None:
     with _CACHE_LOCK:
         if key in _CACHE:
-            _CACHE.move_to_end(key)
-            return _CACHE[key]
+            val = _CACHE.pop(key)
+            _CACHE[key] = val
+            return val
     return None
 
 def _cache_set(key: str, val: str):
     with _CACHE_LOCK:
         _CACHE[key] = val
-        _CACHE.move_to_end(key)
-        if len(_CACHE) > _CACHE_MAX:
-            _CACHE.popitem(last=False)
-
-
-# ── Rate-limiting ─────────────────────────────────────────────
-
-def _check_rate_limit() -> bool:
-    with _RATE_LOCK:
-        now = datetime.now()
-        # Reset minute counter
-        if now - _RATE_DATA["minute_reset"] > timedelta(minutes=1):
-            _RATE_DATA["minute_requests"] = 0
-            _RATE_DATA["minute_reset"] = now
-        # Reset day counter
-        if now - _RATE_DATA["day_reset"] > timedelta(days=1):
-            _RATE_DATA["daily_requests"] = 0
-            _RATE_DATA["day_reset"] = now
-        if _RATE_DATA["minute_requests"] >= _MAX_PER_MINUTE:
-            return False
-        if _RATE_DATA["daily_requests"] >= _MAX_PER_DAY:
-            return False
-        _RATE_DATA["minute_requests"] += 1
-        _RATE_DATA["daily_requests"] += 1
-        return True
-
-
-# ── History ───────────────────────────────────────────────────
+        while len(_CACHE) > _CACHE_MAX:
+            _CACHE.pop(next(iter(_CACHE)))
 
 def get_history(user_id: str) -> list[dict]:
     with _HISTORY_LOCK:
@@ -131,116 +246,212 @@ def add_to_history(user_id: str, entry: dict):
         if user_id not in _HISTORY:
             _HISTORY[user_id] = []
         _HISTORY[user_id].append(entry)
-        if len(_HISTORY[user_id]) > _HISTORY_MAX:
-            _HISTORY[user_id] = _HISTORY[user_id][-_HISTORY_MAX:]
+        while len(_HISTORY[user_id]) > _HISTORY_MAX:
+            _HISTORY[user_id].pop(0)
 
 def clear_history(user_id: str):
     with _HISTORY_LOCK:
         _HISTORY.pop(user_id, None)
 
+# --- Provider implementations ---
 
-# ── Generation ────────────────────────────────────────────────
+def _call_cloudflare(messages: list, max_tokens: int, temperature: float) -> str | None:
+    """Cloudflare Workers AI — Llama 3.3 70B on edge, free tier with function calling."""
+    account_id = os.getenv("CF_ACCOUNT_ID") or ""
+    token = os.getenv("CF_API_TOKEN") or ""
+    if not token:
+        return None
+    try:
+        import urllib.request, json as _json
+        model = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
+        payload = _json.dumps({
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }).encode()
+        req = urllib.request.Request(url, data=payload, headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        })
+        resp = urllib.request.urlopen(req, timeout=20)
+        data = _json.loads(resp.read().decode())
+        if data.get("success"):
+            result = data.get("result", {})
+            return result.get("response", "").strip()
+        return None
+    except Exception as e:
+        err = str(e).lower()
+        if "429" in err or "rate limit" in err:
+            _mark_cooldown("cloudflare")
+        return None
 
-_client = None
-_client_lock = threading.Lock()
+def _call_hf_inference(messages: list, max_tokens: int, temperature: float) -> str | None:
+    """Hugging Face free Inference API (serverless)."""
+    token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN", "")
+    if not token or token == "your_hf_token_here":
+        return None
+    try:
+        from huggingface_hub import InferenceClient
+        import httpx
+        client = InferenceClient(model="Qwen/Qwen2.5-1.5B-Instruct", token=token, timeout=httpx.Timeout(15.0, connect=10.0))
+        response = client.chat_completion(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        err = str(e).lower()
+        if "429" in err or "rate limit" in err or "too many requests" in err:
+            _mark_cooldown("hf_inference")
+        return None
 
-def _get_client():
-    global _client
-    if _client is None:
-        with _client_lock:
-            if _client is None:
-                from groq import Groq
-                _client = Groq(api_key=GROQ_API_KEY)
-    return _client
+def _call_groq(messages: list, max_tokens: int, temperature: float) -> str | None:
+    """Groq API (free tier)."""
+    api_key = os.getenv("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY", "")
+    if not api_key or api_key == "your_groq_api_key_here":
+        return None
+    try:
+        import groq
+        client = groq.Groq(api_key=api_key)
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        err = str(e).lower()
+        if "429" in err or "rate limit" in err or "too many requests" in err:
+            _mark_cooldown("groq")
+        return None
 
-def generate(user_text: str, user_id: str = "local", max_tokens: int = 60, temperature: float = 0.8) -> str:
-    """Generate a response using Groq API with caching."""
-    # Check cache
-    key = _cache_key(user_id, [{"role": "user", "content": user_text}])
+def _local_generate(messages: list, max_tokens: int, temperature: float) -> str:
+    """Generate using local GGUF model via llama-cpp-python."""
+    global _LOCAL_MODEL
+    if _LOCAL_MODEL is None:
+        with _LOCAL_MODEL_LOCK:
+            if _LOCAL_MODEL is not None:
+                pass
+            else:
+                gguvs = glob.glob(os.path.join(MODELS_DIR, "*.gguf"))
+                gguvs = [f for f in gguvs if "00002-of" not in os.path.basename(f) and "00003-of" not in os.path.basename(f)]
+                if not gguvs:
+                    return ""
+                gguvs.sort(key=lambda f: os.path.getsize(f), reverse=True)
+                model_path = gguvs[0]
+                try:
+                    from llama_cpp import Llama
+                    _LOCAL_MODEL = Llama(
+                        model_path=model_path,
+                        n_ctx=8192,
+                        n_threads=6,
+                        verbose=False,
+                    )
+                except Exception:
+                    return ""
+    try:
+        response = _LOCAL_MODEL.create_chat_completion(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return response["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return ""
+
+def _rotate_call(messages: list, max_tokens: int, temperature: float) -> str:
+    """Try providers with exponential backoff and retries."""
+    return _rotate_call_with_backoff(messages, max_tokens, temperature, max_retries=3)
+
+def call(messages: list, max_tokens: int = 256, temperature: float = 0.7) -> str:
+    """Direct LLM call with full message control. Rotates through providers with backoff."""
+    reply = _rotate_call(messages, max_tokens, temperature)
+    return reply
+
+def _get_context(user_id: str, user_text: str) -> str:
+    from context_injector import get_injector
+    injector = get_injector(user_id)
+    return injector.inject_into_prompt(SYSTEM_PROMPT, query=user_text)
+
+def generate(user_text: str, user_id: str = "local", max_tokens: int = 120, temperature: float = 0.8, system_prompt: str = "") -> str:
+    """Generate with history and cache. Accepts optional system_prompt override from callers."""
+    key = _cache_key(user_id, user_text)
     cached = _cache_get(key)
     if cached:
         return cached
 
-    # Check API key early
-    if not GROQ_API_KEY:
-        return "GROQ_API_KEY not set. Run: `$env:GROQ_API_KEY='gsk_YOUR_KEY'` then restart."
+    system = system_prompt or SYSTEM_PROMPT
 
-    # Check rate limit
-    if not _check_rate_limit():
-        return "Whoa, slow down! You're burning through your API limits. Give me a sec."
+    # Inject current time into system prompt
+    from datetime import datetime
+    now = datetime.now()
+    hour = now.hour
+    if hour < 6: period = "night"
+    elif hour < 12: period = "morning"
+    elif hour < 17: period = "afternoon"
+    else: period = "evening"
+    time_str = now.strftime("%I:%M %p")
+    system = system.replace("{current_time}", time_str).replace("{time_period}", period)
 
+    # Inject user context from memory
+    user_context = ""
     try:
-        client = _get_client()
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        from entity_engine import EntityMemory
+        mem = EntityMemory(user_id)
+        name = mem.get_preference("user_name") or mem.get_preference("name") or ""
+        email = mem.get_preference("user_email") or ""
+        school = mem.get_preference("user_school") or ""
+        age = mem.get_preference("user_age") or ""
+        facts = mem.get_facts()
+        personal_facts = [f for f in facts if "personal" in str(f).lower()][:5]
 
-        # Add history
-        history = get_history(user_id)
-        for h in history:
-            messages.append(h)
+        parts = []
+        if name: parts.append(f"Name: {name}")
+        if email: parts.append(f"Email: {email}")
+        if school: parts.append(f"School: {school}")
+        if age: parts.append(f"Age: {age}")
+        for f in personal_facts:
+            parts.append(f"• {f}")
+        user_context = "\n".join(parts) if parts else "No user info stored yet."
+    except Exception:
+        user_context = "No user info stored yet."
 
-        messages.append({"role": "user", "content": user_text})
+    system = system.replace("{user_context}", user_context)
 
-        # Try primary model, fallback to smaller
-        for model in [MODEL, FALLBACK_MODEL]:
-            try:
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                )
-                reply = response.choices[0].message.content.strip()
-                break
-            except Exception as e:
-                err_str = str(e)
-                if "rate_limit" in err_str.lower():
-                    time.sleep(2)
-                    continue
-                if model == FALLBACK_MODEL:
-                    reply = f"Groq API error: {err_str[:200]}"
-                    break
-                continue
-        else:
-            reply = "Groq API unavailable — check your API key and quota."
+    messages = [{"role": "system", "content": system}]
+    for h in get_history(user_id):
+        messages.append(h)
+    messages.append({"role": "user", "content": user_text})
 
-        # Store in history
+    reply = _rotate_call(messages, max_tokens, temperature)
+
+    if reply:
         add_to_history(user_id, {"role": "user", "content": user_text})
         add_to_history(user_id, {"role": "assistant", "content": reply})
-
-        # Cache
         _cache_set(key, reply)
 
-        return reply
-
-    except Exception as e:
-        return f"Error: {str(e)[:150]}"
-
+    return reply
 
 def generate_plan(user_input: str, actions_list: str) -> str:
-    """Generate a task plan using Groq. Returns raw JSON string."""
-    from groq import Groq
+    """Generate a task plan. Returns JSON string."""
+    prompt = f"""You are JARVIS — plan executor. Given a user goal, return a step-by-step plan.
 
-    if not _check_rate_limit():
-        return '{"error": "rate_limited"}'
-
-    try:
-        client = _get_client()
-        prompt = f"""You are a task planner. Break down the user's request into steps using these actions:
-
+AVAILABLE ACTIONS:
 {actions_list}
 
-Output ONLY valid JSON. No other text.
-Example:
-{{"task":"do something","steps":[{{"id":1,"action":"ask","question":"What?","field":"x"}}],"follow_up_question":"?"}}
+USER GOAL: {user_input}
 
-User: {user_input}"""
+Return ONLY a JSON object:
+{{
+  "steps": [{{"action": "tool", "params": {{}}, "description": "step description"}}],
+  "reasoning": "why this plan"
+}}"""
 
-        response = client.chat.completions.create(
-            model=FALLBACK_MODEL,  # Use smaller model for planning (cheaper/faster)
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
-            temperature=0.2,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f'{{"error": "{str(e)[:100]}"}}'
+    messages = [{"role": "user", "content": prompt}]
+    reply = _rotate_call(messages, 800, 0.1)
+    if reply:
+        return reply
+    return '{"error": "plan_generation_failed"}'

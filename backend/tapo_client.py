@@ -10,6 +10,8 @@ This is NOT a simulation. Commands execute on real hardware.
 import os
 import time
 import threading
+import json
+import socket
 from typing import Optional, Dict, List, Any
 from dataclasses import dataclass, field
 
@@ -239,23 +241,14 @@ class TapoClient:
         Discover Tapo devices on the local network.
         Tries common Tapo IPs and checks for responses.
         """
-        import socket
-
         if not ip_range:
             # Detect local subnet
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                local_ip = s.getsockname()[0]
-                s.close()
-                ip_range = ".".join(local_ip.split(".")[:3])
-            except Exception:
-                ip_range = "192.168.1"
+            ip_range = _detect_subnet()
 
         discovered = []
 
-        # Check known Tapo IPs from ARP scan
-        tapo_keywords = ["tapo", "p100", "p110", "p125", "p130", "kasa"]
+        # Check known Tapo IPs from ARP scan using device_patterns.json keywords
+        tapo_keywords = _load_tapo_keywords()
         try:
             import subprocess
             result = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=15)
@@ -284,6 +277,37 @@ class TapoClient:
 
 _tapo: Optional[TapoClient] = None
 _tapo_lock = threading.Lock()
+
+
+def _detect_subnet() -> str:
+    """Detect the local subnet prefix dynamically, with env override."""
+    env_subnet = os.environ.get("JARVIS_LOCAL_SUBNET", "").strip()
+    if env_subnet:
+        return env_subnet
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return ".".join(local_ip.split(".")[:3])
+    except Exception:
+        return ""
+
+
+def _load_tapo_keywords() -> List[str]:
+    """Load Tapo discovery keywords from device_patterns.json (fallback: generic set)."""
+    default_keywords = ["tapo", "kasa", "tp-link", "smart plug"]
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "device_patterns.json")
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        keywords = []
+        for pattern in data.get("patterns", []):
+            if pattern.get("protocol") == "tapo":
+                keywords.extend(pattern.get("match_hostname_contains", []))
+        return list(dict.fromkeys(keywords)) or default_keywords
+    except (FileNotFoundError, json.JSONDecodeError):
+        return default_keywords
 
 
 def get_tapo_client() -> TapoClient:

@@ -112,6 +112,10 @@ class AgentPool:
         self._log_event("agent_spawned", {"agent_id": agent_id, "name": name, "type": agent_type})
         return agent
 
+    def get_all(self) -> List[Agent]:
+        with self._lock:
+            return list(self._agents.values())
+
     def get_agent(self, agent_id: str) -> Optional[Agent]:
         with self._lock:
             return self._agents.get(agent_id)

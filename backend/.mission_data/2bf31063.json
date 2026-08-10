@@ -1,0 +1,16 @@
+{
+  "id": "2bf31063",
+  "objective": "Another test",
+  "workspace_id": "ws-test-2",
+  "state": "queued",
+  "steps": [],
+  "current_step": 0,
+  "artifacts": [],
+  "created_at": 1786212130.4924934,
+  "started_at": 0.0,
+  "completed_at": 0.0,
+  "error": "",
+  "recovery_count": 0,
+  "last_verified_step": -1,
+  "step_results": {}
+}

@@ -35,7 +35,7 @@ def _urlopen(req_or_url, **kwargs):
     kwargs.setdefault("timeout", 30)
     return urllib.request.urlopen(req_or_url, **kwargs)
 
-HF_API = os.environ.get("HF_API_URL", "https://dgfhgjhj-jarvis-ai-brain.hf.space").rstrip("/")
+HF_API = os.environ.get("HF_API_URL", "").rstrip("/")
 
 
 def post(url, data):
@@ -426,7 +426,8 @@ def _cognitive_scan() -> str:
     lines.append(f"Active users: {run('who')}")
     _wincmd = """osascript -e 'tell application "System Events" to get name of every process whose visible is true' 2>/dev/null"""
     lines.append(f"Open windows: {run(_wincmd)}")
-    lines.append(f"WiFi: {run('/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null | grep -E \"SSID|agrCtlRSSI|state\"')}")
+    _airport = '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null'
+    lines.append(f"WiFi: {run(_airport + ' | grep -E ' + chr(34) + 'SSID|agrCtlRSSI|state' + chr(34))}")
     lines.append(f"Battery: {run('pmset -g batt 2>/dev/null')}")
     lines.append(f"Disk: {run('df -h / | tail -1')}")
     return "\n".join(lines)

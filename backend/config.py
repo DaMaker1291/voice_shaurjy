@@ -15,40 +15,42 @@ class JARVISConfig:
     """Central configuration for all JARVIS services."""
 
     # ── Deployment ──────────────────────────────────────────────
-    DEPLOYMENT_URL: str = os.getenv(
-        "JARVIS_DEPLOYMENT_URL",
-        "https://dgfhgjhj-jarvis-ai-brain.hf.space",
-    )
+    DEPLOYMENT_URL: str = os.getenv("JARVIS_DEPLOYMENT_URL", "")
     FRONTEND_DIR: str = os.getenv("JARVIS_FRONTEND_DIR", "")
+    WINDOWS_DOWNLOAD_URL: str = os.getenv("JARVIS_WINDOWS_DOWNLOAD_URL", "")
     DEBUG: bool = os.getenv("JARVIS_DEBUG", "").lower() == "true"
 
-    # ── LLM ─────────────────────────────────────────────────────
+    # ── LLM ─────────────────────────────────────────────
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    LLM_MODEL: str = os.getenv("JARVIS_LLM_MODEL", "llama-3.3-70b-versatile")
-    LLM_FAST_MODEL: str = os.getenv("JARVIS_LLM_FAST_MODEL", "llama-3.1-8b-instant")
+    LLM_MODEL: str = os.getenv("JARVIS_LLM_MODEL", "")
+    LLM_FAST_MODEL: str = os.getenv("JARVIS_LLM_FAST_MODEL", "")
 
-    # ── LiveKit ─────────────────────────────────────────────────
+    # ── LiveKit ─────────────────────────────────────────
     LIVEKIT_URL: str = os.getenv("LIVEKIT_URL", "")
     LIVEKIT_API_KEY: str = os.getenv("LIVEKIT_API_KEY", "")
     LIVEKIT_API_SECRET: str = os.getenv("LIVEKIT_API_SECRET", "")
 
-    # ── Auth ────────────────────────────────────────────────────
-    REQUIRE_AUTH: bool = os.getenv("JARVIS_REQUIRE_AUTH", "false").lower() == "true"
+    # ── Auth ──────────────────────────────────────────────
+    REQUIRE_AUTH: bool = os.getenv("JARVIS_REQUIRE_AUTH", "").lower() == "true"
     JWT_SECRET: str = os.getenv("JARVIS_JWT_SECRET", "")
-    JWT_EXPIRY_HOURS: int = int(os.getenv("JARVIS_JWT_EXPIRY_HOURS", "72"))
-    ADMIN_USER: str = os.getenv("JARVIS_ADMIN_USER", "admin")
+    JWT_EXPIRY_HOURS: int = int(os.getenv("JARVIS_JWT_EXPIRY_HOURS", "0") or "0")
+    ADMIN_USER: str = os.getenv("JARVIS_ADMIN_USER", "")
     ADMIN_PASS: str = os.getenv("JARVIS_ADMIN_PASS", "")
 
-    # ── Rate Limiting ───────────────────────────────────────────
-    RATE_LIMIT_RPS: float = float(os.getenv("JARVIS_RATE_LIMIT_RPS", "10"))
-    RATE_LIMIT_BURST: int = int(os.getenv("JARVIS_RATE_LIMIT_BURST", "20"))
-    STRICT_RATE_LIMIT_RPS: float = float(os.getenv("JARVIS_STRICT_RATE_LIMIT_RPS", "2"))
-    STRICT_RATE_LIMIT_BURST: int = int(os.getenv("JARVIS_STRICT_RATE_LIMIT_BURST", "5"))
+    # ── Rate Limiting ─────────────────────────────────────
+    RATE_LIMIT_RPS: float = float(os.getenv("JARVIS_RATE_LIMIT_RPS", "0") or "0")
+    RATE_LIMIT_BURST: int = int(os.getenv("JARVIS_RATE_LIMIT_BURST", "0") or "0")
+    STRICT_RATE_LIMIT_RPS: float = float(os.getenv("JARVIS_STRICT_RATE_LIMIT_RPS", "0") or "0")
+    STRICT_RATE_LIMIT_BURST: int = int(os.getenv("JARVIS_STRICT_RATE_LIMIT_BURST", "0") or "0")
 
     # ── CORS ────────────────────────────────────────────────────
     ALLOWED_ORIGINS: list = field(default_factory=lambda: [
         o.strip() for o in os.getenv("JARVIS_ALLOWED_ORIGINS", "").split(",") if o.strip()
     ])
+
+    # ── Network ─────────────────────────────────────────────────
+    LOCAL_SUBNET: str = os.getenv("JARVIS_LOCAL_SUBNET", "")
+    SCREENSHOT_PATH: str = os.getenv("JARVIS_SCREENSHOT_PATH", "")
 
     # ── Smart Home ──────────────────────────────────────────────
     TAPO_USERNAME: str = os.getenv("TAPO_USERNAME", "")
@@ -64,10 +66,7 @@ class JARVISConfig:
 
     # ── Security ────────────────────────────────────────────────
     ALLOWED_DOMAINS: list = field(default_factory=lambda: [
-        d.strip() for d in os.getenv(
-            "JARVIS_ALLOWED_DOMAINS",
-            "localhost,127.0.0.1,huggingface.co,github.com,groq.com,google.com"
-        ).split(",") if d.strip()
+        d.strip() for d in os.getenv("JARVIS_ALLOWED_DOMAINS", "").split(",") if d.strip()
     ])
 
     def is_cloud(self) -> bool:

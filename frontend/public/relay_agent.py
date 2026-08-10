@@ -4,10 +4,10 @@ Polls the Hugging Face Space for actions, executes them locally,
 and reports results back.
 
 USAGE (Windows PowerShell):
-  curl.exe -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o $env:TEMP\relay.py; python $env:TEMP\relay.py --user local
+  curl.exe -sL '<YOUR_SERVER_URL>/relay' -o $env:TEMP\relay.py; python $env:TEMP\relay.py --user local
 
 USAGE (macOS/Linux):
-  curl -sL 'https://dgfhgjhj-jarvis-ai-brain.hf.space/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local
+  curl -sL '<YOUR_SERVER_URL>/relay' -o /tmp/relay.py && python3 /tmp/relay.py --user local
 """
 
 import argparse
@@ -41,10 +41,7 @@ logging.basicConfig(
 log = logging.getLogger("jarvis-relay")
 
 # ── Config ────────────────────────────────────────────────────────────────
-HF_API = os.environ.get(
-    "HF_API_URL",
-    "https://dgfhgjhj-jarvis-ai-brain.hf.space",
-).rstrip("/")
+HF_API = os.environ.get("HF_API_URL", "").rstrip("/")
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"

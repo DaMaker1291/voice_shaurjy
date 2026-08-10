@@ -84,8 +84,13 @@ class DeviceBridge:
             else:
                 result = {"status": "unsupported_protocol", "protocol": proto}
 
-            cmd.status = "success"
-            cmd.result = result
+            if isinstance(result, dict) and result.get("error"):
+                cmd.status = "failed"
+                cmd.error = str(result["error"])
+                cmd.result = result
+            else:
+                cmd.status = "success"
+                cmd.result = result
         except Exception as e:
             cmd.status = "failed"
             cmd.error = str(e)

@@ -3,7 +3,7 @@
 # ║  Windows Installer v3.0                                        ║
 # ║                                                                  ║
 # ║  USAGE (PowerShell as Admin):                                   ║
-# ║    irm https://dgfhgjhj-jarvis-ai-brain.hf.space/install | iex ║
+# ║    irm <YOUR_SERVER_URL>/install | iex                        ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 $ErrorActionPreference = "Continue"
@@ -95,7 +95,9 @@ Write-OK "Created $jarvisDir"
 Write-Step 4 $total "Downloading relay agent..."
 
 $relayPath = "$jarvisDir\relay.py"
-$hfUrl = "https://dgfhgjhj-jarvis-ai-brain.hf.space"
+$hfUrl = $env:HF_API_URL
+if (-not $hfUrl) { $hfUrl = "https://$env:HF_API_HOST" }
+if (-not $hfUrl) { Write-Warn "HF_API_URL not set — skipping relay download"; $hfUrl = "" }
 
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12

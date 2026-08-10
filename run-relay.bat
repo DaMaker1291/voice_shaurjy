@@ -30,7 +30,11 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo [RELAY] Starting agent...
-echo [RELAY] Server: https://dgfhgjhj-jarvis-ai-brain.hf.space
+if "%HF_API_URL%"=="" (
+    echo [RELAY] Server: http://localhost:8000
+) else (
+    echo [RELAY] Server: %HF_API_URL%
+)
 echo [RELAY] User ID: local
 echo.
 echo Commands will be processed on THIS computer.

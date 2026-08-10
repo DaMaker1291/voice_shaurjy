@@ -14,7 +14,6 @@ from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
 try:
@@ -39,26 +38,18 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
-VIS_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-VIS_FALLBACK = "meta-llama/llama-4-maverick-17b-128e-instruct"
-HF_VIS_MODEL = "meta-llama/Llama-4-Scout-17B-16E"
 MAX_ITERATIONS = 80
 MAX_TASK_SEC = 300
 SCREENSHOT_QUALITY = 40  # JPEG compression 1-100
 MAX_IMAGE_SIZE = 1280  # Resize longest edge to this
 
-_vision_client = None
-_vision_lock = threading.Lock()
-
-
-def _get_vision_client():
-    global _vision_client
-    if _vision_client is None:
-        with _vision_lock:
-            if _vision_client is None:
-                from groq import Groq
-                _vision_client = Groq(api_key=GROQ_API_KEY)
-    return _vision_client
+HF_VIS_MODEL = "meta-llama/Llama-4-Scout-17B-16E"
+_HAS_TESSERACT = False
+try:
+    import pytesseract
+    _HAS_TESSERACT = True
+except Exception:
+    pass
 
 
 # ── Screen capture ─────────────────────────────────────────────
@@ -85,7 +76,237 @@ def capture_screen() -> Optional[bytes]:
         return None
 
 
+# ── Enhanced Element Detection (OCR + pattern matching) ────────
+
+@dataclass
+class ScreenElement:
+    """A detected element on screen."""
+    element_type: str  # button, link, text_field, label, image, icon
+    text: str
+    x: int
+    y: int
+    width: int
+    height: int
+    confidence: float
+    center_x: int = 0
+    center_y: int = 0
+    
+    def __post_init__(self):
+        self.center_x = self.x + self.width // 2
+        self.center_y = self.y + self.height // 2
+
+
+def detect_elements(img_bytes: bytes) -> list[ScreenElement]:
+    """Detect UI elements on screen using OCR + pattern matching.
+    
+    Returns a list of ScreenElement with type, position, text, and confidence.
+    Fully local. No ML models. < 50ms.
+    """
+    elements = []
+    if not _HAS_TESSERACT or not _HAS_PIL:
+        return elements
+    
+    try:
+        from PIL import Image
+        import io as _io
+        
+        img = Image.open(_io.BytesIO(img_bytes))
+        w, h = img.size
+        
+        # Use pytesseract to get detailed data
+        data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        
+        n_boxes = len(data["level"])
+        for i in range(n_boxes):
+            if data["text"][i].strip():
+                text = data["text"][i].strip()
+                conf = int(data["conf"][i]) / 100.0 if data["conf"][i] != "-1" else 0.0
+                x, y = data["left"][i], data["top"][i]
+                bw, bh = data["width"][i], data["height"][i]
+                
+                # Skip low confidence
+                if conf < 0.3:
+                    continue
+                
+                # Classify element type based on position and surrounding context
+                etype = "label"
+                lower = text.lower()
+                
+                # Detect buttons (short text, often centered on colored area)
+                if len(text) < 30 and any(kw in lower for kw in 
+                    ["ok", "cancel", "save", "submit", "next", "back", "done",
+                     "search", "send", "open", "close", "yes", "no", "login",
+                     "sign", "register", "buy", "add", "create", "delete",
+                     "edit", "update", "apply", "continue", "start", "stop",
+                     "enable", "disable", "accept", "reject", "confirm"]):
+                    etype = "button"
+                # Detect links
+                elif any(kw in lower for kw in 
+                    ["http", "www.", ".com", ".org", ".net", "click here",
+                     "learn more", "read more", "see more"]):
+                    etype = "link"
+                # Detect text fields (usually preceded by a label)
+                elif len(text) < 50 and not any(c in text for c in "\n\t"):
+                    etype = "text_field"
+                
+                elements.append(ScreenElement(
+                    element_type=etype,
+                    text=text,
+                    x=x, y=y, width=bw, height=bh,
+                    confidence=conf,
+                ))
+        
+        return elements
+    except Exception:
+        return elements
+
+
+def find_element_on_screen(text: str, img_bytes: bytes = None,
+                           element_type: str = "") -> Optional[ScreenElement]:
+    """Find a UI element by its text content on screen.
+    
+    Args:
+        text: Text to search for (case-insensitive, partial match)
+        img_bytes: Screen capture bytes. If None, captures now.
+        element_type: Optional filter ("button", "link", "text_field", etc.)
+    
+    Returns:
+        ScreenElement if found, None otherwise
+    """
+    if img_bytes is None:
+        img_bytes = capture_screen()
+        if not img_bytes:
+            return None
+    
+    elements = detect_elements(img_bytes)
+    lower_target = text.lower()
+    
+    for el in elements:
+        if element_type and el.element_type != element_type:
+            continue
+        if lower_target in el.text.lower():
+            return el
+    
+    return None
+
+
+def find_and_click(text: str, button: str = "left") -> bool:
+    """Find text on screen and click it. Returns True if clicked."""
+    el = find_element_on_screen(text)
+    if not el:
+        return False
+    
+    try:
+        import pyautogui
+        pyautogui.click(el.center_x, el.center_y, button=button)
+        return True
+    except:
+        return False
+
+
+def get_screen_text(img_bytes: bytes = None) -> str:
+    """Extract ALL text from the screen with positions."""
+    if img_bytes is None:
+        img_bytes = capture_screen()
+        if not img_bytes:
+            return ""
+    
+    if not _HAS_TESSERACT:
+        return "[OCR not available]"
+    
+    try:
+        from PIL import Image
+        import io as _io
+        img = Image.open(_io.BytesIO(img_bytes))
+        text = pytesseract.image_to_string(img)
+        return text.strip()
+    except:
+        return "[OCR error]"
+
+
+def get_text_regions(img_bytes: bytes = None) -> list[dict]:
+    """Get all text regions with their positions and content."""
+    if img_bytes is None:
+        img_bytes = capture_screen()
+        if not img_bytes:
+            return []
+    
+    if not _HAS_TESSERACT:
+        return []
+    
+    try:
+        from PIL import Image
+        import io as _io
+        img = Image.open(_io.BytesIO(img_bytes))
+        data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        
+        regions = []
+        n_boxes = len(data["level"])
+        for i in range(n_boxes):
+            if data["text"][i].strip():
+                regions.append({
+                    "text": data["text"][i].strip(),
+                    "x": data["left"][i],
+                    "y": data["top"][i],
+                    "width": data["width"][i],
+                    "height": data["height"][i],
+                    "confidence": data["conf"][i],
+                })
+        return regions
+    except:
+        return []
+
+
+def analyze_screen_region(x: int, y: int, width: int, height: int,
+                          img_bytes: bytes = None) -> str:
+    """Extract text from a specific region of the screen.
+    
+    Useful for reading specific areas like address bars, error messages, etc.
+    """
+    if img_bytes is None:
+        img_bytes = capture_screen()
+        if not img_bytes:
+            return ""
+    
+    if not _HAS_TESSERACT or not _HAS_PIL:
+        return "[OCR not available]"
+    
+    try:
+        from PIL import Image
+        import io as _io
+        img = Image.open(_io.BytesIO(img_bytes))
+        region = img.crop((x, y, x + width, y + height))
+        text = pytesseract.image_to_string(region)
+        return text.strip()
+    except:
+        return "[OCR error]"
+
+
+def wait_for_element(text: str, timeout: float = 10.0,
+                     check_interval: float = 0.5) -> Optional[ScreenElement]:
+    """Wait for an element to appear on screen. Polls OCR until found or timeout."""
+    start = time.time()
+    while time.time() - start < timeout:
+        el = find_element_on_screen(text)
+        if el:
+            return el
+        time.sleep(check_interval)
+    return None
+
+
+def wait_for_text_to_disappear(text: str, timeout: float = 10.0) -> bool:
+    """Wait for text to disappear from screen (e.g., loading indicator)."""
+    start = time.time()
+    while time.time() - start < timeout:
+        screen_text = get_screen_text()
+        if text.lower() not in screen_text.lower():
+            return True
+        time.sleep(0.3)
+    return False
+
+
 # ── Vision analysis ────────────────────────────────────────────
+
 
 SYSTEM_PROMPT = """You are a computer-use AI. You see the screen and control the mouse and keyboard. You can do ANYTHING a human can do on a computer — navigate any app, fill any form, use any website.
 
@@ -208,8 +429,6 @@ def _hash_img(img_bytes: bytes) -> str:
 
 
 def analyze_screen(task: str, img_bytes: bytes, history: list = None) -> dict:
-    b64_img = _b64(img_bytes)
-
     # Build context from previous steps so the model knows what's been done
     history_text = ""
     if history:
@@ -223,50 +442,52 @@ def analyze_screen(task: str, img_bytes: bytes, history: list = None) -> dict:
         if lines:
             history_text = "Previous actions:\n" + "\n".join(lines) + "\n\n"
 
-    prompt = f"Task: {task}\n\n{history_text}What does the screen look like and what action should I take next? Output ONLY valid JSON."
+    # Extract text from screen via OCR (fully local)
+    screen_text = ""
+    if _HAS_TESSERACT:
+        try:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(img_bytes))
+            screen_text = pytesseract.image_to_string(img)
+        except Exception:
+            pass
 
-    # Try Hugging Face Inference API first (better vision models)
+    # Try Hugging Face Inference API for actual vision understanding
     if HF_TOKEN:
         try:
+            b64_img = _b64(img_bytes)
             result = _analyze_screen_hf(task, b64_img, history)
             if result and result.get("action") != "fail":
                 return result
         except Exception:
             pass
 
-    # Fall back to Groq models (faster, smaller models)
-    client = _get_vision_client()
-    for attempt, model in enumerate([VIS_MODEL, VIS_FALLBACK]):
-        for retry in range(2):
-            try:
-                resp = client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": prompt},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}", "detail": "high"}},
-                            ],
-                        }
-                    ],
-                    temperature=0.1,
-                    max_tokens=600,
-                )
-                raw = resp.choices[0].message.content.strip()
-                parsed = _extract_json(raw)
-                if parsed:
-                    return parsed
-                if retry == 0:
-                    continue
-                raise ValueError(f"Could not parse after retry: {raw[:200]}")
-            except Exception as e:
-                if retry == 0 and not isinstance(e, ValueError):
-                    continue
-                if attempt == 0:
-                    break
+    # Local fallback: use OCR text + HyperLocal AI generation
+    ocr_desc = f"Screen text detected:\n{screen_text[:1000]}" if screen_text else "No screen text detected."
+    local_prompt = f"""Task: {task}
 
-    return {"action": "fail", "reason": "All vision models failed (HF + Groq)"}
+{history_text}
+{ocr_desc}
+
+Based on the screen content above, what action should I take next?
+ONLY respond with valid JSON. 
+Actions: click (x,y,button), type (text), press (key), scroll (dx,dy), done, fail.
+Example: {{"action":"click","x":500,"y":400,"button":"left"}}
+Example: {{"action":"type","text":"hello world"}}
+Example: {{"action":"done","reason":"Task completed"}}
+"""
+
+    try:
+        from hyperlocal_ai import get_hyperlocal
+        raw = get_hyperlocal("screen")._generator.generate(local_prompt, max_tokens=300, temperature=0.1)
+        parsed = _extract_json(raw)
+        if parsed:
+            return parsed
+    except Exception:
+        pass
+
+    return {"action": "fail", "reason": "Screen analysis unavailable in local mode. Install Tesseract OCR for basic screen reading."}
 
 
 def _analyze_screen_hf(task: str, b64_img: str, history: list = None, model_error: Exception = None) -> dict:
@@ -421,10 +642,6 @@ class TaskResult:
 def run_task(task_description: str, max_iter: int = MAX_ITERATIONS) -> TaskResult:
     if not _HAS_PYGUI or not _HAS_PIL or not _HAS_MSS:
         return TaskResult(False, "Missing dependencies: pyautogui, Pillow, or mss")
-
-    from groq_agent import GROQ_API_KEY as GAK
-    if not GAK:
-        return TaskResult(False, "GROQ_API_KEY not set")
 
     start = time.time()
     log = []

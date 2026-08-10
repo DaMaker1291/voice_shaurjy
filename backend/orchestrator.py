@@ -3,7 +3,7 @@
 import json
 import re
 import time
-from groq_agent import generate as groq_generate
+from hyperlocal_ai import get_hyperlocal
 
 _SESSIONS: dict[str, dict] = {}
 
@@ -31,7 +31,7 @@ User: book a holiday to Paris
 User: do my homework in onenote
 {{"task":"Homework in OneNote","steps":[{{"id":1,"action":"workflow","note":"AI will generate steps for this"}}],"follow_up_question":"Starting workflow..."}}"""
 
-    reply = groq_generate(f"{instructions}\n\nUser: {user_input}", max_tokens=300)
+    reply = get_hyperlocal("orchestrator")._generator.generate(f"{instructions}\n\nUser: {user_input}", max_tokens=300)
     plan = _extract_json(reply)
 
     if not plan or "steps" not in plan:
@@ -110,7 +110,7 @@ def _process_current_step(session_id: str) -> dict:
         prompt_template = step.get("prompt", step.get("note", ""))
         for k, v in collected.items():
             prompt_template = prompt_template.replace("{" + k + "}", v)
-        result = groq_generate(prompt_template, max_tokens=200)
+        result = get_hyperlocal("orchestrator")._generator.generate(prompt_template, max_tokens=200)
         return {
             "type": "notify", "text": result,
             "step": idx + 1, "total": len(steps), "task": session["task"],
@@ -184,7 +184,7 @@ def _exec_action(action: str, params: str = "") -> str:
 def _open_url(url: str):
     import subprocess
     try:
-        subprocess.Popen(["powershell", "-Command", f'Start-Process "{url}"'], shell=True)
+        subprocess.Popen(["powershell", "-NoProfile", "-Command", f"Start-Process '{url}'"], shell=False)
     except:
         pass
 

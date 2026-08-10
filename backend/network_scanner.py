@@ -272,6 +272,8 @@ class NetworkScanner:
 
             if not ip or ip in ("255.255.255.255", "0.0.0.0", "(incomplete)"):
                 continue
+            if self._is_multicast_or_broadcast(ip):
+                continue
 
             device_id = self._make_id(ip, mac)
             manufacturer = self._lookup_oui(mac) if mac else ""
@@ -571,6 +573,9 @@ class NetworkScanner:
 
     def _get_local_subnet(self) -> str:
         """Detect the local subnet prefix (e.g., '192.168.1')."""
+        env_subnet = os.environ.get("JARVIS_LOCAL_SUBNET", "").strip()
+        if env_subnet:
+            return env_subnet
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
@@ -579,7 +584,7 @@ class NetworkScanner:
             parts = local_ip.split(".")
             return ".".join(parts[:3])
         except Exception:
-            return "192.168.1"
+            return ""
 
     def _get_local_ip(self) -> str:
         """Get the local IP address."""
@@ -596,6 +601,15 @@ class NetworkScanner:
         """Check if a string is an IP address."""
         parts = s.split(".")
         return len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts)
+
+    def _is_multicast_or_broadcast(self, ip: str) -> bool:
+        """Check if an IP is multicast (224/4), broadcast (x.x.x.255), or invalid (x.x.x.0)."""
+        parts = ip.split(".")
+        if len(parts) != 4:
+            return True
+        first = int(parts[0])
+        last = int(parts[3])
+        return first >= 224 or last in (0, 255)
 
     def _is_mac(self, s: str) -> bool:
         """Check if a string is a MAC address."""

@@ -1,0 +1,222 @@
+{
+  "summary": {
+    "total": 42,
+    "passed": 42,
+    "failed": 0,
+    "errors": 0,
+    "pass_rate": "100%"
+  },
+  "duration_seconds": 6.53,
+  "tests": [
+    {
+      "name": "MissionStateMachine: create mission",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "MissionStateMachine: state transitions",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "MissionStateMachine: action validation - valid action",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "MissionStateMachine: action validation - missing required param",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "MissionStateMachine: action validation - invalid action",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "MissionStateMachine: high risk action detection",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "MissionStateMachine: coordinate validation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "MissionStateMachine: persistence",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "MissionStateMachine: recovery count",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceManager: create workspace",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceManager: workspace persistence",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceManager: list workspaces",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceAgent: create mission",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceAgent: capability resolver - browser uses API",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceAgent: capability resolver - git uses CLI",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceAgent: capability resolver - unknown app falls back to GUI",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceAgent: capability resolver - VSCode has API",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceAgent: get mission",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceAgent: list missions",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceAgent: pause/resume mission",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceAgent: stop mission",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceVerifier: verify screenshot with content",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceVerifier: verify_file_created - file exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceVerifier: verify_file_created - file missing",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceVerifier: verify_process_running",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "LaserGate: risk assessment - low risk",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "LaserGate: risk assessment - medium risk",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "LaserGate: risk assessment - high risk",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "LaserGate: intercept low risk action",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "LaserGate: intercept high risk action",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "LaserGate: approval workflow",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "LaserGate: deny workflow",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "LaserGate: hold confirmation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "SelfHealingEngine: register and list tools",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "SelfHealingEngine: generate repair for ModuleNotFoundError",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "SelfHealingEngine: execute with healing - success on first try",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "SelfHealingEngine: stats",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "WorkspaceReplicator: profile retrieval",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Agent: JSON parser - valid array",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Agent: JSON parser - markdown wrapped",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Agent: JSON parser - partial recovery",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Config: load configuration",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

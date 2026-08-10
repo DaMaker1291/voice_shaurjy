@@ -16,22 +16,24 @@ interface OSInfo {
   installNote: string;
 }
 
+const RELAY_BASE = typeof window !== "undefined" ? BASE : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000");
+
 const OS_MAP: Record<string, OSInfo> = {
   windows: {
     platform: "windows", name: "Windows", icon: "🪟",
-    relayCmd: `curl.exe -sL '${typeof window !== "undefined" ? BASE : "https://dgfhgjhj-jarvis-ai-brain.hf.space"}/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user`,
+    relayCmd: `curl.exe -sL '${RELAY_BASE}/relay' -o $env:TEMP\\relay.py; python $env:TEMP\\relay.py --user`,
     relayCmdLabel: "PowerShell (Run as Admin)",
     installNote: "Windows Defender may ask for permission — allow it.",
   },
   mac: {
     platform: "mac", name: "macOS", icon: "🍎",
-    relayCmd: `curl -sL '${typeof window !== "undefined" ? BASE : "https://dgfhgjhj-jarvis-ai-brain.hf.space"}/relay' | python3 - --user`,
+    relayCmd: `curl -sL '${RELAY_BASE}/relay' | python3 - --user`,
     relayCmdLabel: "Terminal",
     installNote: "Grant Accessibility permissions when prompted.",
   },
   linux: {
     platform: "linux", name: "Linux", icon: "🐧",
-    relayCmd: `curl -sL '${typeof window !== "undefined" ? BASE : "https://dgfhgjhj-jarvis-ai-brain.hf.space"}/relay' | python3 - --user`,
+    relayCmd: `curl -sL '${RELAY_BASE}/relay' | python3 - --user`,
     relayCmdLabel: "Terminal",
     installNote: "May need sudo for full device access.",
   },
