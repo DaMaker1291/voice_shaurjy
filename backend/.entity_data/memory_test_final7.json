@@ -1,0 +1,137 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T18:15:13.828703"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T18:15:14.159274"
+    },
+    {
+      "fact": "Search results for Shaurjesh Basu: Searching for \"Shaurjesh Basu\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T18:15:27.671471"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T18:15:13.722629"
+    },
+    "user_name": {
+      "value": "Shaurjesh Basu",
+      "updated": "2026-07-29T18:15:13.832799"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:15:13.719163"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "I've taken note of your name.\n**Memory Updated**: User's name is now stored as Shaurjesh Basu.\n\nAlso, I've searched for \"Shaurjesh Basu information\".\n\n**Search Results**: Unfortunately, no relevant in",
+      "action": "",
+      "timestamp": "2026-07-29T18:15:23.714367"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:15:25.222769"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "I've searched for \"Elon Musk\".\n\n**Search Results**: Elon Musk is a business magnate, investor, and philanthropist. He is the founder, CEO, and CTO of SpaceX, CEO and product architect of Tesla, Inc., ",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T18:15:27.432017"
+    },
+    {
+      "query": "search me on internet",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:15:27.550917"
+    },
+    {
+      "query": "search me on internet",
+      "response": "\ud83d\udd0d Searching for Shaurjesh Basu...",
+      "action": "search_self",
+      "timestamp": "2026-07-29T18:15:27.663828"
+    },
+    {
+      "query": "search deeper",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:15:27.759053"
+    },
+    {
+      "query": "search deeper",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"deeper\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T18:15:27.896427"
+    },
+    {
+      "query": "what is python",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:15:27.977308"
+    },
+    {
+      "query": "what is python",
+      "response": "I've searched for \"python programming language\".\n\n**Search Results**: Python is a high-level, interpreted programming language that is widely used for various purposes such as web development, scienti",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T18:15:41.175636"
+    },
+    {
+      "query": "whats my name?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:15:41.260207"
+    },
+    {
+      "query": "whats my name?",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "",
+      "timestamp": "2026-07-29T18:16:04.256588"
+    },
+    {
+      "query": "tell me about tesla",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T18:16:04.355308"
+    },
+    {
+      "query": "tell me about tesla",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T18:16:04.706240"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T18:16:04.706240",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T18:15:13.647324"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T18:15:27.893879"
+    },
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T18:15:43.792061"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

@@ -1,0 +1,142 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:46:05.787759"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:46:06.425443"
+    },
+    {
+      "fact": "User's name is Feeling Sad",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:46:33.417937"
+    },
+    {
+      "fact": "Search results about Feeling Sad: Searching for \"Feeling Sad information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:46:33.463319"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:46:05.679271"
+    },
+    "user_name": {
+      "value": "Feeling Sad",
+      "updated": "2026-07-29T17:46:33.422736"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:46:05.675197"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "Hello Shaurjesh Basu! Nice to have you aboard. I've taken note of your name, and I'd like to get to know you better. I've already started searching for information about you online. \n\nHere's what I fo",
+      "action": "",
+      "timestamp": "2026-07-29T17:46:15.373076"
+    },
+    {
+      "query": "whats my name?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:46:16.797613"
+    },
+    {
+      "query": "whats my name?",
+      "response": "Your name is **Shaurjesh Basu**.",
+      "action": "",
+      "timestamp": "2026-07-29T17:46:18.162395"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:46:18.230511"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "Search results:\n- Elon Musk is a business magnate, inventor, and investor.\n- He is the CEO of SpaceX and Tesla, Inc.\n- He has been involved in various high-profile ventures, including Neuralink and Th",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T17:46:32.639104"
+    },
+    {
+      "query": "search me on internet",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:46:32.716376"
+    },
+    {
+      "query": "search me on internet",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"me on internet\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T17:46:32.879596"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:46:32.949419"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"weather in london\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T17:46:33.059641"
+    },
+    {
+      "query": "open notepad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:46:33.127855"
+    },
+    {
+      "query": "open notepad",
+      "response": "\ud83d\udcdd Opening Notepad...\nNotepad opened.",
+      "action": "notepad",
+      "timestamp": "2026-07-29T17:46:33.235894"
+    },
+    {
+      "query": "im feeling sad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:46:33.309859"
+    },
+    {
+      "query": "im feeling sad",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "",
+      "timestamp": "2026-07-29T17:47:00.357431"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:47:00.357431",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:46:05.549399"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T17:46:32.876588"
+    },
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:46:35.687823"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

@@ -1,0 +1,176 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:34:49.503895"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:34:49.883138"
+    },
+    {
+      "fact": "User's name is Feeling Sad",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:35:29.219163"
+    },
+    {
+      "fact": "Search results about Feeling Sad: Searching for \"Feeling Sad information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:35:29.325989"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:34:49.394179"
+    },
+    "user_name": {
+      "value": "Feeling Sad",
+      "updated": "2026-07-29T17:35:29.222441"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:34:49.391141"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "Nice to meet you, Shaurjesh Basu! I'm JARVIS, your personal AI assistant. I've taken note of your name and preferences. I've also searched for you online to learn more about you.\n\n**Search results abo",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:00.694629"
+    },
+    {
+      "query": "whatsapp my name?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:01.974757"
+    },
+    {
+      "query": "whatsapp my name?",
+      "response": "Opening whatsapp_open in your browser...",
+      "action": "whatsapp_open",
+      "timestamp": "2026-07-29T17:35:02.095474"
+    },
+    {
+      "query": "search me on internet",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:02.159306"
+    },
+    {
+      "query": "search me on internet",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"me on internet\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T17:35:02.322787"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:02.420636"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T17:35:23.018306"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:23.220342"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"weather in london\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T17:35:23.330793"
+    },
+    {
+      "query": "open notepad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:23.582838"
+    },
+    {
+      "query": "open notepad",
+      "response": "\ud83d\udcdd Opening Notepad...\nNotepad opened.",
+      "action": "notepad",
+      "timestamp": "2026-07-29T17:35:23.688696"
+    },
+    {
+      "query": "take a screenshot",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:23.884296"
+    },
+    {
+      "query": "take a screenshot",
+      "response": "\ud83d\udcf8 Taking screenshot...\nScreenshot saved to Desktop.",
+      "action": "screenshot",
+      "timestamp": "2026-07-29T17:35:23.992373"
+    },
+    {
+      "query": "batch rename file",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:24.171910"
+    },
+    {
+      "query": "automate data entry",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:24.461618"
+    },
+    {
+      "query": "automate data entry",
+      "response": "\ud83e\udd16 AI doing computer task...\nPartially done after 1 steps (0.5s): Screen analysis unavailable in local mode. Install Tesseract OCR for basic screen reading.",
+      "action": "ai_computer_task",
+      "timestamp": "2026-07-29T17:35:29.002687"
+    },
+    {
+      "query": "vim feeling sad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:29.114362"
+    },
+    {
+      "query": "vim feeling sad",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "",
+      "timestamp": "2026-07-29T17:35:29.460497"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:35:29.460497",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:34:49.383059"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T17:35:02.094474"
+    },
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:35:19.495649"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T17:35:23.324519"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

@@ -1,0 +1,108 @@
+[22:25:49] MEGA RUNNER STARTED
+[22:25:49] Prompt: search the web for the capital city of france, then scrape the top result, create a word document called mega_report.docx on my desktop with a heading 'France Research Report' and paste the scraped content as a paragraph, then open chrome and navigate to example.com, take a screenshot, and finally tell me what my cpu usage is right now
+[22:25:51] 
+============================================================
+[22:25:51] DURATION: 1.35s
+[22:25:51] SUCCESS: True
+[22:25:51] Steps: 2/2 done
+[22:25:51]   1. [done] create_office_file: Creating mega_report.docx
+[22:25:51]      Result: Word saved: C:\Users\supro\Downloads\CODE\voice_shaurjy\backend\test_output\mega_report.docx
+[22:25:51]   2. [done] system_monitor: Monitoring cpu usage
+[22:25:51]      Result: {
+  "cpu": {
+    "percent": 15.6,
+    "count": 12,
+    "freq": {
+      "current": 1700.0,
+      "min": 0.0,
+      "max": 1700.0
+    }
+  }
+}
+[22:25:51] ============================================================
+[22:25:51] Full result saved to C:\Users\supro\Downloads\CODE\voice_shaurjy\backend\mega_result.json
+[22:26:47] MEGA RUNNER STARTED
+[22:26:47] Prompt: search the web for the capital city of france, then scrape the top result, create a word document called mega_report.docx on my desktop with a heading 'France Research Report' and paste the scraped content as a paragraph, then open chrome and navigate to example.com, take a screenshot, and finally tell me what my cpu usage is right now
+[22:26:48] 
+============================================================
+[22:26:48] DURATION: 1.01s
+[22:26:48] SUCCESS: True
+[22:26:48] Steps: 2/2 done
+[22:26:48]   1. [done] create_office_file: Creating mega_report.docx
+[22:26:48]      Result: Word saved: C:\Users\supro\Downloads\CODE\voice_shaurjy\backend\test_output\mega_report.docx
+[22:26:48]   2. [done] system_monitor: Monitoring cpu usage
+[22:26:48]      Result: {
+  "cpu": {
+    "percent": 29.5,
+    "count": 12,
+    "freq": {
+      "current": 1700.0,
+      "min": 0.0,
+      "max": 1700.0
+    }
+  }
+}
+[22:26:48] ============================================================
+[22:26:48] Full result saved to C:\Users\supro\Downloads\CODE\voice_shaurjy\backend\mega_result.json
+[22:29:01] MEGA RUNNER STARTED
+[22:29:01] Prompt: search the web for the capital city of france, then scrape the top result, create a word document called mega_report.docx on my desktop with a heading 'France Research Report' and paste the scraped content as a paragraph, then open chrome and navigate to example.com, take a screenshot, and finally tell me what my cpu usage is right now
+[22:29:03] 
+============================================================
+[22:29:03] DURATION: 1.19s
+[22:29:03] SUCCESS: True
+[22:29:03] Steps: 2/2 done
+[22:29:03]   1. [done] create_office_file: Creating mega_report.docx
+[22:29:03]      Result: Word saved: C:\Users\supro\Downloads\CODE\voice_shaurjy\backend\test_output\mega_report.docx
+[22:29:03]   2. [done] system_monitor: Monitoring cpu usage
+[22:29:03]      Result: {
+  "cpu": {
+    "percent": 29.9,
+    "count": 12,
+    "freq": {
+      "current": 1700.0,
+      "min": 0.0,
+      "max": 1700.0
+    }
+  }
+}
+[22:29:03] ============================================================
+[22:29:03] Full result saved to C:\Users\supro\Downloads\CODE\voice_shaurjy\backend\mega_result.json
+[22:32:43] MEGA RUNNER STARTED
+[22:32:43] Prompt: search the web for the capital city of france, then scrape the top result, create a word document called mega_report.docx on my desktop with a heading 'France Research Report' and paste the scraped content as a paragraph, then open chrome and navigate to example.com, take a screenshot, and finally tell me what my cpu usage is right now
+[22:32:55] 
+============================================================
+[22:32:55] DURATION: 11.03s
+[22:32:55] SUCCESS: True
+[22:32:55] Steps: 4/7 done
+[22:32:55]   1. [done] web_search: Search the web for the capital city of France
+[22:32:55]      Result: 🔍 **Search results for 'capital city of france'** (from Wikipedia, DuckDuckGo, Google):
+
+**1. Capital city**
+   seat of government. A capital is typically a city that physically encompasses the govern
+[22:32:55]   2. [skipped] web_scrape: Scrape the top result from the web search
+[22:32:55]      Result: Skipped by planner
+[22:32:55]   3. [done] create_office_file: Create a Word document called mega_report.docx on the desktop with the scraped content
+[22:32:55]      Result: Word saved: C:\Users\supro\Downloads\CODE\voice_shaurjy\backend\test_output\mega_report.docx
+[22:32:55]   4. [skipped] open_app: Open Chrome
+[22:32:55]      Result: Skipped by planner
+[22:32:55]   5. [done] navigate_web: Navigate to example.com in Chrome
+[22:32:55]      Result: Opened: example.com
+[22:32:55]   6. [skipped] screenshot: Take a screenshot
+[22:32:55]      Result: Skipped by planner
+[22:32:55]   7. [done] system_monitor: Get the current CPU usage
+[22:32:55]      Result: {
+  "cpu": {
+    "percent": 48.2,
+    "count": 12,
+    "freq": {
+      "current": 1700.0,
+      "min": 0.0,
+      "max": 1700.0
+    }
+  },
+  "memory": {
+    "total_gb": 8.25,
+    "used_gb": 7.43,
+    
+[22:32:55] ============================================================
+[22:32:55] Full result saved to C:\Users\supro\Downloads\CODE\voice_shaurjy\backend\mega_result.json

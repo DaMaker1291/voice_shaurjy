@@ -1,0 +1,328 @@
+{
+  "facts": [],
+  "preferences": {},
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "bonjour",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:23.644239"
+    },
+    {
+      "query": "bonjour",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:23.948998"
+    },
+    {
+      "query": "bonjour!",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:23.978055"
+    },
+    {
+      "query": "bonjour!",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:24.081348"
+    },
+    {
+      "query": "bonjour",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:24.113143"
+    },
+    {
+      "query": "bonjour",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:24.216898"
+    },
+    {
+      "query": "hi",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:24.246181"
+    },
+    {
+      "query": "hi",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:24.350546"
+    },
+    {
+      "query": "hey",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:24.369816"
+    },
+    {
+      "query": "hey",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:24.471120"
+    },
+    {
+      "query": "hello",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:24.505023"
+    },
+    {
+      "query": "hello",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:24.607045"
+    },
+    {
+      "query": "yo",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:24.632516"
+    },
+    {
+      "query": "yo",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:24.736040"
+    },
+    {
+      "query": "sup",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:24.759975"
+    },
+    {
+      "query": "sup",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:24.862883"
+    },
+    {
+      "query": "hey jarvis",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:24.898786"
+    },
+    {
+      "query": "hey jarvis",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:25.000713"
+    },
+    {
+      "query": "ok jarvis",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:25.040898"
+    },
+    {
+      "query": "ok jarvis",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:25.142739"
+    },
+    {
+      "query": "good morning",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:25.190505"
+    },
+    {
+      "query": "good morning",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:25.293606"
+    },
+    {
+      "query": "good afternoon",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:25.335140"
+    },
+    {
+      "query": "good afternoon",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:25.437659"
+    },
+    {
+      "query": "good evening",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:25.480482"
+    },
+    {
+      "query": "good evening",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:25.584822"
+    },
+    {
+      "query": "hola",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:25.615464"
+    },
+    {
+      "query": "hola",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:25.718162"
+    },
+    {
+      "query": "salut",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:25.755213"
+    },
+    {
+      "query": "salut",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:25.857987"
+    },
+    {
+      "query": "ciao",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:25.885982"
+    },
+    {
+      "query": "ciao",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:25.987993"
+    },
+    {
+      "query": "namaste",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:26.030301"
+    },
+    {
+      "query": "namaste",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:26.136681"
+    },
+    {
+      "query": "salaam",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:26.181235"
+    },
+    {
+      "query": "salaam",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:26.284331"
+    },
+    {
+      "query": "aloha",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:26.337832"
+    },
+    {
+      "query": "aloha",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:26.441162"
+    },
+    {
+      "query": "hallo",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:26.500427"
+    },
+    {
+      "query": "hallo",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:26.606092"
+    },
+    {
+      "query": "merhaba",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:26.667745"
+    },
+    {
+      "query": "merhaba",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:26.776506"
+    },
+    {
+      "query": "what time is it",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:26.829853"
+    },
+    {
+      "query": "what time is it",
+      "response": "\ud83d\udd50 Time and date\nWednesday, July 29, 2026 \u2014 03:00 PM",
+      "action": "time",
+      "timestamp": "2026-07-29T15:00:27.310892"
+    },
+    {
+      "query": "open chrome",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:27.362240"
+    },
+    {
+      "query": "open chrome",
+      "response": "\ud83c\udf10 Opening browser...\nBrowser opened.",
+      "action": "browser",
+      "timestamp": "2026-07-29T15:00:27.559637"
+    },
+    {
+      "query": "how are you",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:27.608358"
+    },
+    {
+      "query": "how are you",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T15:00:27.712535"
+    },
+    {
+      "query": "what can you do",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T15:00:27.758963"
+    },
+    {
+      "query": "what can you do",
+      "response": "\ud83e\udd16 Available commands\nI control 215+ things on your PC & network. Categories:\n  System: lock, sleep, restart, shutdown, battery_status, uptime\n  Audio: vol_up, vol_down, vol_mute, vol_set, mic_toggle\n ",
+      "action": "help",
+      "timestamp": "2026-07-29T15:00:27.866780"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T15:00:27.866780",
+  "mood_history": [
+    {
+      "mood": "thoughtful",
+      "timestamp": "2026-07-29T15:00:23.947006"
+    },
+    {
+      "mood": "curious",
+      "timestamp": "2026-07-29T15:00:24.349513"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T15:00:27.306708"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

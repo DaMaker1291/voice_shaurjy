@@ -1,0 +1,48 @@
+root ::= object
+
+value ::= string | number | "true" | "false" | "null" | array | object
+
+string ::= '"' chars '"'
+
+chars ::= (escape | [^"\\])*
+
+escape ::= '\\' ["\\/bfnrt] | unicode
+
+unicode ::= 'u' hex hex hex hex
+
+hex ::= [0-9a-fA-F]
+
+number ::= '-'? int frac? exp?
+
+int ::= '0' | [1-9] [0-9]*
+
+frac ::= '.' [0-9]+
+
+exp ::= [eE] [+-]? [0-9]+
+
+array ::= '[' value (',' value)* ']'
+
+object ::= '{' pair (',' pair)* '}'
+
+pair ::= key ':' value
+
+key ::= '"' chars '"'
+
+# Root object fields in strict order
+root_object ::= '"mode"' ':' mode_val ',' '"empathy_note"' ':' empathy_val ',' '"revision_data"' ':' revision_val ',' '"reminders"' ':' reminders_val ',' '"memory_stored"' ':' bool_val ',' '"crisis_detected"' ':' bool_val ',' '"reply"' ':' string ',' '"confidence"' ':' number
+
+# mode: enum string
+mode_val ::= '"SUPPORTIVE"' | '"EDUCATIONAL"' | '"LOGISTICAL"' | '"CONVERSATIONAL"'
+
+# empathy_note: string or null
+empathy_val ::= string | "null"
+
+# revision_data: object or null
+revision_val ::= revision_obj | "null"
+revision_obj ::= '"concept"' ':' string ',' '"summary"' ':' string ',' '"quiz_question"' ':' string ',' '"answer_key"' ':'
+
+# reminders: array of strings
+reminders_val ::= '["' chars '"' (', "' chars '"')* ']'
+
+# bool: true or false
+bool_val ::= "true" | "false"

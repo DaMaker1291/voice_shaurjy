@@ -1,0 +1,74 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:24:37.756603"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:24:37.875954"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:24:37.652312"
+    },
+    "user_name": {
+      "value": "Shaurjesh Basu",
+      "updated": "2026-07-29T17:24:37.758114"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:24:37.650237"
+    },
+    {
+      "query": "whatsapp my name?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:24:37.884109"
+    },
+    {
+      "query": "search me on internet",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:24:38.035558"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:24:38.183223"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:24:38.329125"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:24:38.433512",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:24:37.696101"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T17:24:38.432501"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

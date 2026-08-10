@@ -1,0 +1,19 @@
+{
+  "entities": [
+    ["user_local", "PERSON", "Local User", {"role": "operator"}],
+    ["jarvis_system", "SYSTEM", "JARVIS", {"version": "4.0", "status": "active"}],
+    ["agent_os", "AGENT", "OS Agent", {"domain": "headless_workspace"}],
+    ["agent_hal", "AGENT", "HAL Agent", {"domain": "hardware_abstraction"}],
+    ["agent_web", "AGENT", "WEB Agent", {"domain": "browser_automation"}],
+    ["agent_core", "AGENT", "CORE Agent", {"domain": "memory_wellness"}],
+    ["relay_local", "DEVICE", "Local Relay", {"protocol": "websocket", "port": 9880}]
+  ],
+  "edges": [
+    ["user_local", "jarvis_system", "operates"],
+    ["jarvis_system", "agent_os", "manages"],
+    ["jarvis_system", "agent_hal", "manages"],
+    ["jarvis_system", "agent_web", "manages"],
+    ["jarvis_system", "agent_core", "manages"],
+    ["jarvis_system", "relay_local", "communicates_via"]
+  ]
+}

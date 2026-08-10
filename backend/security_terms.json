@@ -1,0 +1,15 @@
+{
+  "restricted_terms": [
+    "DROP TABLE",
+    "DELETE FROM",
+    "rm -rf",
+    "shutdown",
+    "format c:",
+    "mkfs",
+    "> /dev/sda",
+    "dd if=",
+    "chmod -R 777 /",
+    "wget.*|sh",
+    "curl.*|bash"
+  ]
+}

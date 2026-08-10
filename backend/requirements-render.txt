@@ -1,0 +1,41 @@
+# Core server
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-dotenv>=0.0.0
+pydantic>=2.0.0
+python-multipart>=0.0.6
+
+# LLM
+groq>=1.0.0
+
+# HTTP
+httpx>=0.27.0
+requests>=2.31.0
+aiofiles>=23.0.0
+
+# Web search
+duckduckgo_search>=8.0.0
+lxml>=5.0.0
+
+# Math / data
+numpy>=1.26.0
+
+# PDF
+pypdf>=4.0.0
+
+# System info (cross-platform)
+psutil>=5.9.0
+
+# Auth
+PyJWT>=2.8.0
+cryptography>=42.0.0
+
+# CORS
+starlette>=0.36.0
+
+# WebSocket (for headless browser)
+websocket-client>=1.6.0
+
+# TTS (fallback on cloud — Kokoro runs locally via Electron)
+edge-tts>=6.1.0
+# rebuild v2.2.0

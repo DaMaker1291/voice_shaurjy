@@ -1,0 +1,16 @@
+{
+  "id": "d09cfc75",
+  "objective": "Pause test mission",
+  "workspace_id": "ws-test-3",
+  "state": "executing",
+  "steps": [],
+  "current_step": 0,
+  "artifacts": [],
+  "created_at": 1786211063.8746247,
+  "started_at": 1786211063.8756123,
+  "completed_at": 0.0,
+  "error": "",
+  "recovery_count": 0,
+  "last_verified_step": -1,
+  "step_results": {}
+}

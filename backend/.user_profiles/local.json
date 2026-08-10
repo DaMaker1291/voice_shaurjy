@@ -1,0 +1,34 @@
+{
+  "user_id": "",
+  "first_seen": "2026-05-31T19:36:47.009378",
+  "last_seen": "2026-07-01T00:34:06.942140",
+  "session_count": 0,
+  "total_messages": 1,
+  "device": {
+    "os": "",
+    "hostname": "",
+    "ram_gb": "",
+    "cpu": "",
+    "uptime_hours": "",
+    "installed_apps": [],
+    "browsers": [],
+    "wifi": [],
+    "recent_file_types": [
+      ".png",
+      ".docx"
+    ]
+  },
+  "interests": [],
+  "personality_traits": [],
+  "communication_style": "balanced",
+  "knowledge_domains": [],
+  "recurring_topics": [],
+  "preferences": {},
+  "facts_about_user": [],
+  "recent_topics": [
+    {
+      "topic": "general",
+      "time": "2026-05-31T19:36:58.449224"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "c3773cbb",
+  "objective": "Test mission objective",
+  "workspace_id": "ws-test-1",
+  "state": "queued",
+  "steps": [],
+  "current_step": 0,
+  "artifacts": [],
+  "created_at": 1786212130.4894924,
+  "started_at": 0.0,
+  "completed_at": 0.0,
+  "error": "",
+  "recovery_count": 0,
+  "last_verified_step": -1,
+  "step_results": {}
+}

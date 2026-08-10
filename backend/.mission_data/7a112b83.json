@@ -1,0 +1,82 @@
+{
+  "id": "7a112b83",
+  "objective": "open chrome",
+  "workspace_id": "90451f52",
+  "state": "success",
+  "steps": [
+    {
+      "number": 1,
+      "action": "screenshot",
+      "description": "Take initial screenshot",
+      "params": {},
+      "status": "pending",
+      "result": "",
+      "error": "",
+      "timestamp": 0,
+      "requires_approval": false
+    },
+    {
+      "number": 2,
+      "action": "navigate_web",
+      "description": "Open browser and research objective",
+      "params": {
+        "url": "https://www.google.com"
+      },
+      "status": "pending",
+      "result": "",
+      "error": "",
+      "timestamp": 0,
+      "requires_approval": false
+    },
+    {
+      "number": 3,
+      "action": "run_command",
+      "description": "Execute workspace task",
+      "params": {
+        "cmd": "echo \"Working on: open chrome\""
+      },
+      "status": "pending",
+      "result": "",
+      "error": "",
+      "timestamp": 0,
+      "requires_approval": false
+    },
+    {
+      "number": 4,
+      "action": "screenshot",
+      "description": "Take final screenshot",
+      "params": {},
+      "status": "pending",
+      "result": "",
+      "error": "",
+      "timestamp": 0,
+      "requires_approval": false
+    }
+  ],
+  "current_step": 4,
+  "artifacts": [],
+  "created_at": 1786210539.0928338,
+  "started_at": 1786210540.396638,
+  "completed_at": 1786210844.4666853,
+  "error": "",
+  "recovery_count": 0,
+  "last_verified_step": 2,
+  "step_results": {
+    "1": {
+      "ok": true,
+      "size": 113167
+    },
+    "2": {
+      "ok": false,
+      "error": "[WinError 2] The system cannot find the file specified"
+    },
+    "3": {
+      "ok": false,
+      "error": "Approval timeout - action denied"
+    },
+    "4": {
+      "ok": false,
+      "error": "No frame"
+    }
+  }
+}

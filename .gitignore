@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.mypy_cache/
+.ruff_cache/
+
+# Binary assets (HF Space doesn't allow binary files)
+desktop/assets/*.icns
+desktop/assets/*.ico
+desktop/assets/*.bmp
+
+# Node
+node_modules/
+desktop/node_modules/
+.next/
+
+# Electron build output
+desktop/dist/
+
+# Env
+.env
+.env.local
+.env.production
+
+# Build output (tracked for HF Space deployment)
+# frontend/out/
+frontend/.next/
+pharos-nft-manager/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursor/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Data
+data/
+cache/
+tmp/
+*.db
+*.db-shm
+*.db-wal
+
+# Models
+backend/models/
+*.pt
+*.ckpt
+*.pth
+*.bin
+*.h5
+*.pkl
+*.model
+*.gguf
+
+# Media
+*.wav
+*.mp3
+*.mp4
+
+# HF Space clone
+hf-temp/
+backend/.browser_profiles/
+.scheduled_messages.json
+backend/.entity_data/memory_test.json
+backend/.env

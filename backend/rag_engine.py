@@ -1,0 +1,109 @@
+"""Local RAG engine using BAAI/bge-small-en-v1.5 embeddings + cosine search.
+No external vector DB — stores everything in local JSON."""
+
+import json
+import os
+import numpy as np
+
+_EMB = None
+_SENTENCE_TRANSFORMER_AVAILABLE = False
+SentenceTransformer = None
+
+def _check_sentence_transformers():
+    global _SENTENCE_TRANSFORMER_AVAILABLE, SentenceTransformer
+    if SentenceTransformer is not None:
+        return
+    try:
+        from sentence_transformers import SentenceTransformer as ST
+        SentenceTransformer = ST
+        _SENTENCE_TRANSFORMER_AVAILABLE = True
+    except (ImportError, OSError, Exception):
+        _SENTENCE_TRANSFORMER_AVAILABLE = False
+
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DOCS_FILE = os.path.join(DATA_DIR, "documents.json")
+EMBED_MODEL = "BAAI/bge-small-en-v1.5"
+
+
+def _embedder():
+    global _EMB
+    _check_sentence_transformers()
+    if not _SENTENCE_TRANSFORMER_AVAILABLE:
+        raise RuntimeError("sentence-transformers not installed. Run: pip install sentence-transformers torch")
+    if _EMB is None:
+        _EMB = SentenceTransformer(EMBED_MODEL)
+    return _EMB
+
+
+def _load():
+    if not os.path.exists(DOCS_FILE):
+        return {}
+    with open(DOCS_FILE) as f:
+        return json.load(f)
+
+
+def _save(docs):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(DOCS_FILE, "w") as f:
+        json.dump(docs, f)
+
+
+def embed_text(text: str) -> list[float]:
+    return _embedder().encode(text).tolist()
+
+
+def index_document(user_id: str, chunks: list[dict]):
+    docs = _load()
+    docs.setdefault(user_id, [])
+    for c in chunks:
+        vec = []
+        if _SENTENCE_TRANSFORMER_AVAILABLE:
+            try:
+                vec = embed_text(c["content"])
+            except Exception:
+                vec = []
+        docs[user_id].append({
+            "content": c["content"],
+            "metadata": c.get("metadata", {}),
+            "embedding": vec,
+        })
+    _save(docs)
+
+
+def query_context(user_id: str, query: str, top_k: int = 3) -> list[str]:
+    docs = _load()
+    entries = docs.get(user_id, [])
+    if not entries:
+        return []
+    # If embeddings exist, use cosine similarity
+    if entries[0].get("embedding"):
+        try:
+            qv = np.array(embed_text(query))
+            scores = [np.dot(qv, np.array(e["embedding"])) for e in entries]
+            idx = np.argsort(scores)[-top_k:][::-1]
+            return [
+                f"[{entries[i]['metadata'].get('source', '?')}] {entries[i]['content']}"
+                for i in idx
+            ]
+        except Exception:
+            pass
+    # Fallback: simple keyword matching
+    ql = query.lower()
+    scored = []
+    for e in entries:
+        content = e["content"].lower()
+        score = sum(1 for word in ql.split() if word in content)
+        scored.append((score, e))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [
+        f"[{e['metadata'].get('source', '?')}] {e['content']}"
+        for _, e in scored[:top_k]
+    ]
+
+
+def has_documents(user_id: str) -> bool:
+    return len(_load().get(user_id, [])) > 0
+
+
+def count_chunks(user_id: str) -> int:
+    return len(_load().get(user_id, []))

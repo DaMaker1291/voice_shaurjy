@@ -1,0 +1,179 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:50:27.995217"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:50:28.187475"
+    },
+    {
+      "fact": "Search results for Shaurjesh Basu: Searching for \"Shaurjesh Basu\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:50:35.512306"
+    },
+    {
+      "fact": "User's name is Feeling Sad",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:50:38.740719"
+    },
+    {
+      "fact": "Search results about Feeling Sad: Searching for \"Feeling Sad information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:50:38.779713"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:50:27.890541"
+    },
+    "user_name": {
+      "value": "Feeling Sad",
+      "updated": "2026-07-29T17:50:38.742710"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:27.887545"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "**JSON Block**\n```json\n\n```\n\n Searching for information about you...\n\n\u2713 search: Searching for \"Shaurjesh Basu\"...",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:32.830273"
+    },
+    {
+      "query": "whats my name?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:33.826309"
+    },
+    {
+      "query": "whats my name?",
+      "response": "Your name is **Shaurjesh Basu**.",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:35.192938"
+    },
+    {
+      "query": "search me on internet",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:35.407203"
+    },
+    {
+      "query": "search me on internet",
+      "response": "\ud83d\udd0d Searching for Shaurjesh Basu...",
+      "action": "search_self",
+      "timestamp": "2026-07-29T17:50:35.513313"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:35.607321"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "**JSON Block**\n```json\n\n```\n\nSearching for information about Elon Musk...\n\n\u2713 search: Searching for \"elon musk\"...",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T17:50:37.598673"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:37.798485"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"weather in london\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T17:50:37.914435"
+    },
+    {
+      "query": "open notepad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:38.091759"
+    },
+    {
+      "query": "open notepad",
+      "response": "\ud83d\udcdd Opening Notepad...\nNotepad opened.",
+      "action": "notepad",
+      "timestamp": "2026-07-29T17:50:38.194436"
+    },
+    {
+      "query": "take a screenshot",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:38.458167"
+    },
+    {
+      "query": "take a screenshot",
+      "response": "\ud83d\udcf8 Taking screenshot...\nScreenshot saved to Desktop.",
+      "action": "screenshot",
+      "timestamp": "2026-07-29T17:50:38.573634"
+    },
+    {
+      "query": "im feeling sad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:38.634758"
+    },
+    {
+      "query": "im feeling sad",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:56.797078"
+    },
+    {
+      "query": "bonjour",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:56.832282"
+    },
+    {
+      "query": "bonjour",
+      "response": "Good evening. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T17:50:56.937318"
+    },
+    {
+      "query": "open chrome and go to youtube",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:56.975759"
+    },
+    {
+      "query": "open chrome and go to youtube",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "",
+      "timestamp": "2026-07-29T17:50:57.195624"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:50:57.195624",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:50:27.931545"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T17:50:37.910009"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

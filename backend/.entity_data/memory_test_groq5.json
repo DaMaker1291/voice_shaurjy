@@ -1,0 +1,52 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:53:23.175890"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:53:23.334773"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:53:23.070724"
+    },
+    "user_name": {
+      "value": "Shaurjesh Basu",
+      "updated": "2026-07-29T17:53:23.177417"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:53:23.069620"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "**JSON: **\n\nSearching for information about Shaurjesh Basu...\n\n**Recent facts:**\nUser's name is Shaurjesh Basu; Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...\n\nI ha",
+      "action": "",
+      "timestamp": "2026-07-29T17:53:26.030573"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:53:26.030573",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:53:23.122170"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

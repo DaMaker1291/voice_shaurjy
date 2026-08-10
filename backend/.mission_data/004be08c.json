@@ -1,0 +1,16 @@
+{
+  "id": "004be08c",
+  "objective": "Test mission from dashboard",
+  "workspace_id": "bad3f90a",
+  "state": "queued",
+  "steps": [],
+  "current_step": 0,
+  "artifacts": [],
+  "created_at": 1786211351.2701912,
+  "started_at": 0.0,
+  "completed_at": 0.0,
+  "error": "",
+  "recovery_count": 0,
+  "last_verified_step": -1,
+  "step_results": {}
+}

@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "JARVIS Browser Bridge",
+  "version": "1.0",
+  "description": "Connects JARVIS AI to your real browser tabs",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "scripting",
+    "debugger",
+    "desktopCapture",
+    "contextMenus"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "native_messaging": {
+    "host": "com.jarvis.browser_bridge"
+  },
+  "action": {
+    "default_title": "JARVIS Connected"
+  }
+}

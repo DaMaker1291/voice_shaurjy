@@ -1,0 +1,74 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:52:05.337880"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:52:05.486745"
+    },
+    {
+      "fact": "User's name is Feeling Sad",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:52:14.673070"
+    },
+    {
+      "fact": "Search results about Feeling Sad: Searching for \"Feeling Sad information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:52:14.815574"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:52:05.232263"
+    },
+    "user_name": {
+      "value": "Feeling Sad",
+      "updated": "2026-07-29T17:52:14.675719"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:52:05.231256"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "**New Information**\nI have learned that your name is Shaurjesh Basu. I will remember this for future interactions.\n\n**Search Results**\nI am searching for more information about Shaurjesh Basu.\n\n**Sear",
+      "action": "",
+      "timestamp": "2026-07-29T17:52:12.848444"
+    },
+    {
+      "query": "im feeling sad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:52:14.558988"
+    },
+    {
+      "query": "im feeling sad",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "",
+      "timestamp": "2026-07-29T17:52:34.309529"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:52:34.309529",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:52:05.249596"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

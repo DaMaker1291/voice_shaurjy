@@ -1,0 +1,146 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:25:14.268038"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:25:14.379932"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:25:14.163993"
+    },
+    "user_name": {
+      "value": "Shaurjesh Basu",
+      "updated": "2026-07-29T17:25:14.268038"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:25:14.162979"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "**Welcome Shaurjesh Basu!**\n\nI've taken note of your name and will make sure to remember it. I'll now search for information about you online.\n\n**Searching for Shaurjesh Basu...**\n\nPlease give me a mo",
+      "action": "",
+      "timestamp": "2026-07-29T17:25:19.093795"
+    },
+    {
+      "query": "whatsapp my name?",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:25:20.651366"
+    },
+    {
+      "query": "whatsapp my name?",
+      "response": "Opening whatsapp_open in your browser...",
+      "action": "whatsapp_open",
+      "timestamp": "2026-07-29T17:25:20.771655"
+    },
+    {
+      "query": "search me on internet",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:25:20.838500"
+    },
+    {
+      "query": "search me on internet",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"me on internet\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T17:25:21.009181"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:25:21.081727"
+    },
+    {
+      "query": "who is elon musk",
+      "response": "**Elon Musk: A Visionary Entrepreneur**\n\nI've searched for information about Elon Musk and found that he's a South African-born entrepreneur, inventor, and business magnate. He's best known for his am",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T17:25:23.202202"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:25:23.282011"
+    },
+    {
+      "query": "search for weather in london",
+      "response": "\ud83d\udd0d Searching...\nSearching for \"weather in london\"...",
+      "action": "search",
+      "timestamp": "2026-07-29T17:25:23.395389"
+    },
+    {
+      "query": "open notepad",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:25:23.469406"
+    },
+    {
+      "query": "open notepad",
+      "response": "\ud83d\udcdd Opening Notepad...\nNotepad opened.",
+      "action": "notepad",
+      "timestamp": "2026-07-29T17:25:23.579670"
+    },
+    {
+      "query": "take a screenshot",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:25:23.658021"
+    },
+    {
+      "query": "take a screenshot",
+      "response": "\ud83d\udcf8 Taking screenshot...\nScreenshot saved to Desktop.",
+      "action": "screenshot",
+      "timestamp": "2026-07-29T17:25:23.785562"
+    },
+    {
+      "query": "batch rename file",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:25:23.889671"
+    },
+    {
+      "query": "automate data entry",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:25:24.057068"
+    },
+    {
+      "query": "automate data entry",
+      "response": "\ud83e\udd16 AI doing computer task...\nPartially done after 1 steps (0.6s): Screen analysis unavailable in local mode. Install Tesseract OCR for basic screen reading.",
+      "action": "ai_computer_task",
+      "timestamp": "2026-07-29T17:25:27.646476"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:25:27.646476",
+  "mood_history": [
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:25:14.217150"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T17:25:20.769069"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

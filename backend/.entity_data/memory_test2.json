@@ -1,0 +1,164 @@
+{
+  "facts": [],
+  "preferences": {},
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "hi",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T13:00:26.225234"
+    },
+    {
+      "query": "hi",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T13:00:26.333564"
+    },
+    {
+      "query": "hello",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T13:00:26.378785"
+    },
+    {
+      "query": "hello",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T13:00:26.481156"
+    },
+    {
+      "query": "hey jarvis",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T13:00:26.522974"
+    },
+    {
+      "query": "hey jarvis",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T13:00:26.627332"
+    },
+    {
+      "query": "good morning",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T13:00:26.670929"
+    },
+    {
+      "query": "good morning",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T13:00:26.774020"
+    },
+    {
+      "query": "yo",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T13:00:26.805781"
+    },
+    {
+      "query": "yo",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T13:00:26.909071"
+    },
+    {
+      "query": "sup",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T13:00:27.006848"
+    },
+    {
+      "query": "sup",
+      "response": "Good afternoon. I'm here \u2014 what do you need?",
+      "action": "greeting",
+      "timestamp": "2026-07-29T13:00:27.110006"
+    },
+    {
+      "query": "open outlook in chrome",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:28:12.402135"
+    },
+    {
+      "query": "open outlook in chrome",
+      "response": "Done. \u2713 open_app: Which app?\n\u2713 browser: Browser opened.",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T16:28:15.462446"
+    },
+    {
+      "query": "can you open outlook in chrome with my word file",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:28:16.323521"
+    },
+    {
+      "query": "can you open outlook in chrome with my word file",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T16:28:32.507742"
+    },
+    {
+      "query": "open chrome and go to youtube",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:28:32.545600"
+    },
+    {
+      "query": "open chrome and go to youtube",
+      "response": "[Local generation unavailable - llama-cpp-python not installed]",
+      "action": "",
+      "timestamp": "2026-07-29T16:28:32.764499"
+    },
+    {
+      "query": "screenshot",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:28:32.796501"
+    },
+    {
+      "query": "screenshot",
+      "response": "\ud83d\udcf8 Taking screenshot...\nScreenshot saved to Desktop.",
+      "action": "screenshot",
+      "timestamp": "2026-07-29T16:28:32.905088"
+    },
+    {
+      "query": "turn on the lights",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:28:33.029729"
+    },
+    {
+      "query": "turn on the lights",
+      "response": "\ud83c\udfe0 Controlling device...\nAction 'smart_home_control' not implemented",
+      "action": "smart_home_control",
+      "timestamp": "2026-07-29T16:28:33.131341"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T16:28:33.131341",
+  "mood_history": [
+    {
+      "mood": "tired",
+      "timestamp": "2026-07-29T13:00:26.278666"
+    },
+    {
+      "mood": "curious",
+      "timestamp": "2026-07-29T13:00:26.331780"
+    },
+    {
+      "mood": "thoughtful",
+      "timestamp": "2026-07-29T16:28:12.456809"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T16:28:32.903137"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

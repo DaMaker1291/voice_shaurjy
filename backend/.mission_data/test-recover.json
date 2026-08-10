@@ -1,0 +1,16 @@
+{
+  "id": "test-recover",
+  "objective": "Test recovery",
+  "workspace_id": "ws-999",
+  "state": "recovering",
+  "steps": [],
+  "current_step": 0,
+  "artifacts": [],
+  "created_at": 1786212130.257993,
+  "started_at": 1786212130.257993,
+  "completed_at": 0.0,
+  "error": "",
+  "recovery_count": 1,
+  "last_verified_step": -1,
+  "step_results": {}
+}

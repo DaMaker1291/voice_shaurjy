@@ -1,0 +1,15 @@
+# Local ML stack
+torch
+torchaudio
+transformers
+sentence-transformers
+faster-whisper
+optimum-quanto
+piper-tts
+kokoro-onnx
+soundfile
+pypdf
+livekit
+livekit-api
+numpy
+huggingface-hub

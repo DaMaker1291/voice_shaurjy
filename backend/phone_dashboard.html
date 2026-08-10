@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS — Galaxy S23 Control</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a1a; color: #c9d1d9; font-family: 'Segoe UI', Consolas, monospace; min-height: 100vh; }
+  
+  .header { background: #161b22; padding: 16px 24px; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 20px; }
+  .header h1 { color: #00ff88; font-size: 18px; font-weight: 600; }
+  .header .device { color: #8b949e; font-size: 13px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #f85149; }
+  .status-dot.online { background: #3fb950; }
+  
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; padding: 20px; max-width: 1200px; margin: 0 auto; }
+  
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+  .card h2 { color: #58a6ff; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; border-bottom: 1px solid #21262d; padding-bottom: 8px; }
+  
+  .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn { padding: 10px 16px; border: 1px solid #30363d; border-radius: 6px; background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 13px; font-family: inherit; transition: all 0.15s; text-align: center; }
+  .btn:hover { background: #30363d; border-color: #58a6ff; }
+  .btn:active { transform: scale(0.97); }
+  .btn.danger { border-color: #f85149; color: #f85149; }
+  .btn.danger:hover { background: #f8514922; }
+  .btn.success { border-color: #3fb950; color: #3fb950; }
+  .btn.success:hover { background: #3fb95022; }
+  .btn.wide { grid-column: 1 / -1; }
+  
+  .info-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: #8b949e; }
+  .info-value { color: #c9d1d9; font-weight: 500; }
+  
+  .battery-bar { height: 6px; background: #21262d; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .battery-fill { height: 100%; background: #3fb950; transition: width 0.3s; }
+  .battery-fill.low { background: #f85149; }
+  .battery-fill.med { background: #d29922; }
+  
+  .app-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .app-btn { padding: 8px 4px; border: 1px solid #30363d; border-radius: 6px; background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 11px; text-align: center; transition: all 0.15s; }
+  .app-btn:hover { background: #30363d; border-color: #58a6ff; }
+  
+  .screenshot-area { text-align: center; min-height: 100px; display: flex; align-items: center; justify-content: center; }
+  .screenshot-area img { max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid #30363d; }
+  .screenshot-area .placeholder { color: #484f58; font-size: 12px; }
+  
+  .log { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 8px; max-height: 120px; overflow-y: auto; font-size: 11px; color: #8b949e; margin-top: 8px; }
+  .log-entry { padding: 2px 0; }
+  .log-entry.ok { color: #3fb950; }
+  .log-entry.err { color: #f85149; }
+  
+  .brightness-slider, .volume-slider { width: 100%; margin: 8px 0; accent-color: #58a6ff; }
+  
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; padding: 12px; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="status-dot" id="statusDot"></div>
+  <h1>JARVIS — Galaxy S23 Control</h1>
+  <span class="device">192.168.8.186</span>
+</div>
+
+<div class="grid">
+
+  <!-- Power & Screen -->
+  <div class="card">
+    <h2>Power & Screen</h2>
+    <div class="btn-grid">
+      <button class="btn danger" onclick="adb('power_off')">⏻ Power Off</button>
+      <button class="btn" onclick="adb('reboot')">↻ Reboot</button>
+      <button class="btn success" onclick="adb('lock')">🔒 Lock</button>
+      <button class="btn success" onclick="adb('unlock')">🔓 Unlock</button>
+      <button class="btn" onclick="adb('screen_on')">☀ Screen On</button>
+      <button class="btn" onclick="adb('screen_off')">🌙 Screen Off</button>
+    </div>
+  </div>
+
+  <!-- Device Info -->
+  <div class="card">
+    <h2>Device Info</h2>
+    <div id="deviceInfo">
+      <div class="info-row"><span class="info-label">Status</span><span class="info-value" id="connStatus">Connecting...</span></div>
+      <div class="info-row"><span class="info-label">Battery</span><span class="info-value" id="batteryLevel">--</span></div>
+      <div class="battery-bar"><div class="battery-fill" id="batteryBar" style="width:0%"></div></div>
+      <div class="info-row"><span class="info-label">WiFi</span><span class="info-value" id="wifiSsid">--</span></div>
+      <div class="info-row"><span class="info-label">IP</span><span class="info-value" id="deviceIp">--</span></div>
+      <div class="info-row"><span class="info-label">Android</span><span class="info-value" id="androidVer">--</span></div>
+    </div>
+    <button class="btn wide" onclick="refreshInfo()" style="margin-top:8px">↻ Refresh Info</button>
+  </div>
+
+  <!-- Connectivity -->
+  <div class="card">
+    <h2>Connectivity</h2>
+    <div class="btn-grid">
+      <button class="btn" onclick="adb('wifi_on')">📶 WiFi On</button>
+      <button class="btn" onclick="adb('wifi_off')">📵 WiFi Off</button>
+      <button class="btn" onclick="adb('airplane_on')">✈ Airplane On</button>
+      <button class="btn" onclick="adb('airplane_off')">📡 Airplane Off</button>
+      <button class="btn" onclick="adb('data_on')">📱 Data On</button>
+      <button class="btn" onclick="adb('data_off')">📴 Data Off</button>
+    </div>
+  </div>
+
+  <!-- Volume & Brightness -->
+  <div class="card">
+    <h2>Volume & Brightness</h2>
+    <label class="info-label">Brightness</label>
+    <input type="range" class="brightness-slider" min="0" max="255" value="128" onchange="setBrightness(this.value)">
+    <label class="info-label">Volume</label>
+    <input type="range" class="volume-slider" min="0" max="15" value="8" onchange="setVolume(this.value)">
+    <button class="btn wide" onclick="adb('vibrate')" style="margin-top:8px">📳 Vibrate</button>
+  </div>
+
+  <!-- Quick Apps -->
+  <div class="card">
+    <h2>Quick Apps</h2>
+    <div class="app-grid">
+      <button class="app-btn" onclick="launch('com.android.chrome')">🌐 Chrome</button>
+      <button class="app-btn" onclick="launch('com.google.android.youtube')">▶ YouTube</button>
+      <button class="app-btn" onclick="launch('com.google.android.maps')">📍 Maps</button>
+      <button class="app-btn" onclick="launch('com.android.camera')">📷 Camera</button>
+      <button class="app-btn" onclick="launch('com.android.settings')">⚙ Settings</button>
+      <button class="app-btn" onclick="launch('com.android.dialer')">📞 Phone</button>
+      <button class="app-btn" onclick="launch('com.android.mms')">💬 Messages</button>
+      <button class="app-btn" onclick="launch('com.spotify.music')">🎵 Spotify</button>
+      <button class="app-btn" onclick="launch('com.whatsapp')">💬 WhatsApp</button>
+    </div>
+  </div>
+
+  <!-- Screenshot -->
+  <div class="card">
+    <h2>Screenshot</h2>
+    <div class="screenshot-area" id="screenshotArea">
+      <span class="placeholder">Click to capture screen</span>
+    </div>
+    <button class="btn wide" onclick="takeScreenshot()" style="margin-top:8px">📸 Take Screenshot</button>
+  </div>
+
+  <!-- Input -->
+  <div class="card">
+    <h2>Input</h2>
+    <div class="btn-grid">
+      <button class="btn" onclick="adb('home')">🏠 Home</button>
+      <button class="btn" onclick="adb('back')">⬅ Back</button>
+      <button class="btn" onclick="adb('recent')">📋 Recent</button>
+      <button class="btn" onclick="adb('enter')">↵ Enter</button>
+      <button class="btn" onclick="adb('vol_up')">🔊 Vol+</button>
+      <button class="btn" onclick="adb('vol_down')">🔉 Vol-</button>
+    </div>
+    <input type="text" id="typeInput" placeholder="Type text..." style="width:100%;margin-top:8px;padding:8px;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-family:inherit;" onkeydown="if(event.key==='Enter'){typeText(this.value);this.value=''}">
+  </div>
+
+  <!-- Log -->
+  <div class="card" style="grid-column: 1 / -1;">
+    <h2>Command Log</h2>
+    <div class="log" id="log"></div>
+  </div>
+
+</div>
+
+<script>
+const PHONE_IP = "192.168.8.186";
+let ws;
+
+function log(msg, ok = false, err = false) {
+  const el = document.getElementById("log");
+  const entry = document.createElement("div");
+  entry.className = "log-entry" + (ok ? " ok" : err ? " err" : "");
+  entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  el.prepend(entry);
+  if (el.children.length > 50) el.removeChild(el.lastChild);
+}
+
+async function adb(action) {
+  log(`→ ${action}`);
+  try {
+    const r = await fetch(`/api/adb/${action}`, { method: "POST" });
+    const d = await r.json();
+    log(`✓ ${d.message || "OK"}`, true);
+    if (action === "power_off") document.getElementById("connStatus").textContent = "Powered Off";
+  } catch (e) {
+    log(`✗ ${e.message}`, false, true);
+  }
+}
+
+async function launch(pkg) {
+  log(`→ launch ${pkg}`);
+  try {
+    const r = await fetch(`/api/adb/launch`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ package: pkg })
+    });
+    const d = await r.json();
+    log(`✓ Launched ${pkg.split(".").pop()}`, true);
+  } catch (e) {
+    log(`✗ ${e.message}`, false, true);
+  }
+}
+
+async function refreshInfo() {
+  try {
+    const r = await fetch(`/api/adb/info`);
+    const d = await r.json();
+    document.getElementById("connStatus").textContent = d.connected ? "Online" : "Offline";
+    document.getElementById("connStatus").style.color = d.connected ? "#3fb950" : "#f85149";
+    document.getElementById("statusDot").className = "status-dot" + (d.connected ? " online" : "");
+    document.getElementById("batteryLevel").textContent = d.battery + "%";
+    const bar = document.getElementById("batteryBar");
+    bar.style.width = d.battery + "%";
+    bar.className = "battery-fill" + (d.battery < 20 ? " low" : d.battery < 50 ? " med" : "");
+    document.getElementById("wifiSsid").textContent = d.ssid || "--";
+    document.getElementById("deviceIp").textContent = d.ip || "--";
+    document.getElementById("androidVer").textContent = d.android_version || "--";
+    log("Info refreshed", true);
+  } catch (e) {
+    log("Failed to refresh: " + e.message, false, true);
+  }
+}
+
+async function setBrightness(val) {
+  try {
+    await fetch(`/api/adb/brightness?level=${val}`, { method: "POST" });
+    log(`Brightness: ${val}`, true);
+  } catch (e) { log("Brightness failed", false, true); }
+}
+
+async function setVolume(val) {
+  try {
+    await fetch(`/api/adb/volume?level=${val}`, { method: "POST" });
+    log(`Volume: ${val}`, true);
+  } catch (e) { log("Volume failed", false, true); }
+}
+
+async function typeText(text) {
+  try {
+    await fetch(`/api/adb/type`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ text })
+    });
+    log(`Typed: "${text}"`, true);
+  } catch (e) { log("Type failed", false, true); }
+}
+
+async function takeScreenshot() {
+  const area = document.getElementById("screenshotArea");
+  area.innerHTML = '<span class="placeholder">Capturing...</span>';
+  try {
+    const r = await fetch(`/api/adb/screenshot`);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    area.innerHTML = `<img src="${url}" alt="Screenshot">`;
+    log("Screenshot captured", true);
+  } catch (e) {
+    area.innerHTML = '<span class="placeholder">Capture failed</span>';
+    log("Screenshot failed: " + e.message, false, true);
+  }
+}
+
+// Initial load
+refreshInfo();
+log("Dashboard ready");
+</script>
+</body>
+</html>

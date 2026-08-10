@@ -1,0 +1,63 @@
+# GBNF Grammar for JARVIS Web Agent
+# Enforces strict JSON schema for web automation and API calls
+
+root ::= space "{" space fields "}" space
+
+fields ::= field (space "," space field)*
+
+field ::= web_field | status_field | error_field | results_field
+
+web_field ::= "\"web_action_payload\":" space web_val
+status_field ::= "\"execution_status\":" space exec_val
+error_field ::= "\"error_detail\":" space (string_val | "null")
+results_field ::= "\"results_summary\":" space results_val
+
+# Web action payload
+web_val ::= "{" space web_fields "}" space
+web_fields ::= wf (space "," space wf)*
+wf ::= workflow_type | target_url | steps | auth_req | auth_prov | confirm_req | max_retries
+workflow_type ::= "\"workflow_type\":" space wf_type_val
+target_url ::= "\"target_url\":" space string_val
+steps ::= "\"steps\":" space steps_val
+auth_req ::= "\"auth_required\":" space bool_val
+auth_prov ::= "\"auth_provider\":" space (string_val | "null")
+confirm_req ::= "\"confirmation_required\":" space bool_val
+max_retries ::= "\"max_retries\":" space int_val
+
+wf_type_val ::= "\"BROWSER_AUTOMATION\"" | "\"API_CALL\"" | "\"HYBRID\""
+
+steps_val ::= "[" space (step (space "," space step)*)? space "]"
+step ::= "{" space step_fields "}" space
+step_fields ::= sf (space "," space sf)*
+sf ::= step_id | action | selector | value | api_ep | api_method | api_body
+step_id ::= "\"step_id\":" space int_val
+action ::= "\"action\":" space action_val
+selector ::= "\"selector\":" space (string_val | "null")
+value ::= "\"value\":" space (string_val | "null")
+api_ep ::= "\"api_endpoint\":" space (string_val | "null")
+api_method ::= "\"api_method\":" space method_val
+api_body ::= "\"api_body\":" space (payload_val | "null")
+
+action_val ::= "\"navigate\"" | "\"click\"" | "\"type\"" | "\"wait\"" | "\"extract\"" | "\"api_call\"" | "\"scroll\"" | "\"select\"" | "\"screenshot\""
+method_val ::= "\"GET\"" | "\"POST\"" | "\"PUT\"" | "\"DELETE\"" | "\"PATCH\"" | "null"
+
+# Execution status
+exec_val ::= "\"QUEUED\"" | "\"RUNNING\"" | "\"COMPLETED\"" | "\"FAILED\"" | "\"AUTH_REQUIRED\""
+
+# Results summary
+results_val ::= "{" space results_fields "}" space
+results_fields ::= rf (space "," space rf)*
+rf ::= extracted_data | confirm_msg
+extracted_data ::= "\"extracted_data\":" space payload_val
+confirm_msg ::= "\"confirmation_message\":" space (string_val | "null")
+
+# Primitives
+payload_val ::= "{" space (kv (space "," space kv)*)? space "}" space
+kv ::= string_val space ":" space val
+val ::= string_val | int_val | float_val | bool_val | "null" | array_val | payload_val
+array_val ::= "[" space (val (space "," space val)*)? space "]"
+int_val ::= "0" | [1-9] [0-9]*
+float_val ::= "0." [0-9]+ | [1-9] [0-9]* "." [0-9]+
+bool_val ::= "true" | "false"
+string_val ::= "\"" [^"\\]* "\""
+space ::= [ \t\n\r]*

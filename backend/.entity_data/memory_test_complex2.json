@@ -1,0 +1,72 @@
+{
+  "facts": [],
+  "preferences": {},
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "could you open outlook on the file of gragi in a new widonw",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:14:24.787957"
+    },
+    {
+      "query": "could you open outlook on the file of gragi in a new widonw",
+      "response": "Workflow error: AI failed to generate a valid workflow",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T16:14:26.055537"
+    },
+    {
+      "query": "can you open outlook in chrome with my word file",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:14:27.514014"
+    },
+    {
+      "query": "can you open outlook in chrome with my word file",
+      "response": "Workflow error: AI failed to generate a valid workflow",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T16:14:27.732317"
+    },
+    {
+      "query": "open chrome",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:14:27.761642"
+    },
+    {
+      "query": "open chrome",
+      "response": "\ud83c\udf10 Opening browser...\nBrowser opened.",
+      "action": "browser",
+      "timestamp": "2026-07-29T16:14:27.897335"
+    },
+    {
+      "query": "screenshot",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:14:27.930063"
+    },
+    {
+      "query": "screenshot",
+      "response": "\ud83d\udcf8 Taking screenshot...\nScreenshot saved to Desktop.",
+      "action": "screenshot",
+      "timestamp": "2026-07-29T16:14:28.041746"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T16:14:28.041746",
+  "mood_history": [
+    {
+      "mood": "thoughtful",
+      "timestamp": "2026-07-29T16:14:24.842841"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T16:14:24.891471"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}

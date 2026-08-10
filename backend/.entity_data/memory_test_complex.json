@@ -1,0 +1,72 @@
+{
+  "facts": [
+    {
+      "fact": "User's name is Shaurjesh Basu",
+      "category": "personal",
+      "timestamp": "2026-07-29T17:48:57.274689"
+    },
+    {
+      "fact": "Search results about Shaurjesh Basu: Searching for \"Shaurjesh Basu information\"...",
+      "category": "personal_research",
+      "timestamp": "2026-07-29T17:48:57.415735"
+    }
+  ],
+  "preferences": {
+    "name": {
+      "value": "shaurjesh basu",
+      "updated": "2026-07-29T17:48:57.166836"
+    },
+    "user_name": {
+      "value": "Shaurjesh Basu",
+      "updated": "2026-07-29T17:48:57.275695"
+    }
+  },
+  "goals": [],
+  "completed_goals": [],
+  "interactions": [
+    {
+      "query": "could you open outlook on the file of gragi in chrome in a new widonw",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T16:14:01.675458"
+    },
+    {
+      "query": "could you open outlook on the file of gragi in chrome in a new widonw",
+      "response": "Workflow error: AI failed to generate a valid workflow",
+      "action": "complex_response",
+      "timestamp": "2026-07-29T16:14:03.798992"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "",
+      "action": "",
+      "timestamp": "2026-07-29T17:48:57.165366"
+    },
+    {
+      "query": "my name is shaurjesh basu",
+      "response": "Nice to meet you, Shaurjesh Basu! I've taken note of your name and will make sure to remember it. I've also run a quick search to learn more about you, but I couldn't find any notable information as I",
+      "action": "",
+      "timestamp": "2026-07-29T17:49:01.819775"
+    }
+  ],
+  "learned_patterns": [],
+  "proactive_topics": [],
+  "personality_notes": [],
+  "last_active": "2026-07-29T17:49:01.819775",
+  "mood_history": [
+    {
+      "mood": "thoughtful",
+      "timestamp": "2026-07-29T16:14:01.739352"
+    },
+    {
+      "mood": "focused",
+      "timestamp": "2026-07-29T16:14:01.778490"
+    },
+    {
+      "mood": "excited",
+      "timestamp": "2026-07-29T17:48:57.197647"
+    }
+  ],
+  "self_reflections": [],
+  "system_observations": []
+}
