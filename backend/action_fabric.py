@@ -73,6 +73,15 @@ class PrimitiveCategory(Enum):
     APPLICATION = "application"
     MISSION = "mission"
     TRANSFER = "transfer"
+    WINDOW = "window"
+    INPUT = "input"
+    SCREEN = "screen"
+    PROCESS = "process"
+    TERMINAL = "terminal"
+    NETWORK = "network"
+    SYSTEM = "system"
+    ACCESSIBILITY = "accessibility"
+    APP_SPECIFIC = "app_specific"
 
 
 # ══════════════════════════════════════════════════════════════
@@ -184,8 +193,8 @@ class UniversalLocator:
         """Resolve a jarvis:// URI to an actual filesystem path or handle.
 
         Translates:
-            jarvis://user/desktop/report.docx → C:\Users\User\Desktop\report.docx
-            jarvis://workspace/mission-123/report.docx → ~/.jarvis/mission_worlds/mission-123/files/report.docx
+            jarvis://user/desktop/report.docx -> /Users/User/Desktop/report.docx
+            jarvis://workspace/mission-123/report.docx -> ~/.jarvis/mission_worlds/mission-123/files/report.docx
         """
         if not uri.startswith("jarvis://"):
             return uri  # Already a real path
@@ -636,6 +645,7 @@ class PrimitiveResult:
     error: str = ""
     verification: Optional[VerificationResult] = None
     duration_ms: float = 0
+    strategy_used: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -644,6 +654,7 @@ class PrimitiveResult:
             "error": self.error,
             "verification": self.verification.to_dict() if self.verification else None,
             "duration_ms": self.duration_ms,
+            "strategy_used": self.strategy_used,
         }
 
 
@@ -1493,4 +1504,754 @@ def get_object_resolver() -> ObjectResolver:
     global _resolver
     if _resolver is None:
         _resolver = ObjectResolver()
+        # Auto-index default workspace and user directories
+        try:
+            import os
+            home = os.path.expanduser("~")
+            default_ws = os.path.join(home, ".jarvis", "workspaces", "default", "files")
+            _resolver.index_workspace(default_ws)
+            _resolver.index_user_directory(os.path.join(home, "Desktop"))
+            _resolver.index_user_directory(os.path.join(home, "Documents"))
+            _resolver.index_user_directory(os.path.join(home, "Downloads"))
+            log.info(f"[OBJECT_RESOLVER] Indexed workspace and user directories")
+        except Exception as e:
+            log.debug(f"[OBJECT_RESOLVER] Auto-indexing failed: {e}")
     return _resolver
+
+
+# ══════════════════════════════════════════════════════════════
+#  UNIVERSAL ACTION REGISTRY — 94 Actions
+# ══════════════════════════════════════════════════════════════
+
+UNIVERSAL_ACTIONS = {
+    "launch_app": {"category": "application", "risk": "low", "strategies": ["cli", "api", "gui"]},
+    "close_app": {"category": "application", "risk": "medium", "strategies": ["cli", "api", "gui", "process"]},
+    "focus_app": {"category": "application", "risk": "low", "strategies": ["accessibility", "gui", "cli"]},
+    "list_apps": {"category": "application", "risk": "low", "strategies": ["process", "accessibility"]},
+    "inspect_app": {"category": "application", "risk": "low", "strategies": ["discovery"]},
+    "install_app": {"category": "application", "risk": "high", "strategies": ["cli", "api"]},
+    "uninstall_app": {"category": "application", "risk": "critical", "strategies": ["cli", "api"]},
+    "update_app": {"category": "application", "risk": "medium", "strategies": ["cli", "api"]},
+    "list_windows": {"category": "window", "risk": "low", "strategies": ["accessibility", "api"]},
+    "focus_window": {"category": "window", "risk": "low", "strategies": ["accessibility", "gui"]},
+    "move_window": {"category": "window", "risk": "low", "strategies": ["accessibility", "gui"]},
+    "resize_window": {"category": "window", "risk": "low", "strategies": ["accessibility", "gui"]},
+    "minimize_window": {"category": "window", "risk": "low", "strategies": ["accessibility", "gui", "keyboard"]},
+    "maximize_window": {"category": "window", "risk": "low", "strategies": ["accessibility", "gui", "keyboard"]},
+    "close_window": {"category": "window", "risk": "medium", "strategies": ["accessibility", "gui", "keyboard"]},
+    "click": {"category": "input", "risk": "low", "strategies": ["mouse"]},
+    "double_click": {"category": "input", "risk": "low", "strategies": ["mouse"]},
+    "right_click": {"category": "input", "risk": "low", "strategies": ["mouse"]},
+    "drag": {"category": "input", "risk": "low", "strategies": ["mouse"]},
+    "scroll": {"category": "input", "risk": "low", "strategies": ["mouse"]},
+    "type_text": {"category": "input", "risk": "low", "strategies": ["keyboard"]},
+    "press_key": {"category": "input", "risk": "low", "strategies": ["keyboard"]},
+    "hotkey": {"category": "input", "risk": "low", "strategies": ["keyboard"]},
+    "clipboard_read": {"category": "input", "risk": "low", "strategies": ["clipboard"]},
+    "clipboard_write": {"category": "input", "risk": "low", "strategies": ["clipboard"]},
+    "click_element": {"category": "input", "risk": "low", "strategies": ["semantic", "accessibility", "vision"]},
+    "fill_form": {"category": "input", "risk": "low", "strategies": ["semantic", "accessibility", "dom"]},
+    "screenshot": {"category": "screen", "risk": "low", "strategies": ["capture"]},
+    "record_screen": {"category": "screen", "risk": "low", "strategies": ["capture"]},
+    "stream_screen": {"category": "screen", "risk": "low", "strategies": ["capture"]},
+    "locate_visual": {"category": "screen", "risk": "low", "strategies": ["vision", "ocr"]},
+    "read_screen": {"category": "screen", "risk": "low", "strategies": ["ocr", "vision"]},
+    "ocr": {"category": "screen", "risk": "low", "strategies": ["ocr", "vision"]},
+    "understand_screen": {"category": "screen", "risk": "low", "strategies": ["vision", "accessibility"]},
+    "find_file": {"category": "filesystem", "risk": "low", "strategies": ["os"]},
+    "read_file": {"category": "filesystem", "risk": "low", "strategies": ["os"]},
+    "write_file": {"category": "filesystem", "risk": "low", "strategies": ["os"]},
+    "copy_file": {"category": "filesystem", "risk": "low", "strategies": ["os"]},
+    "move_file": {"category": "filesystem", "risk": "medium", "strategies": ["os"]},
+    "rename_file": {"category": "filesystem", "risk": "medium", "strategies": ["os"]},
+    "delete_file": {"category": "filesystem", "risk": "high", "strategies": ["os"]},
+    "create_directory": {"category": "filesystem", "risk": "low", "strategies": ["os"]},
+    "compress": {"category": "filesystem", "risk": "low", "strategies": ["os"]},
+    "extract": {"category": "filesystem", "risk": "low", "strategies": ["os"]},
+    "hash_file": {"category": "filesystem", "risk": "low", "strategies": ["os"]},
+    "compare_files": {"category": "filesystem", "risk": "low", "strategies": ["os"]},
+    "start_process": {"category": "process", "risk": "low", "strategies": ["subprocess"]},
+    "stop_process": {"category": "process", "risk": "medium", "strategies": ["subprocess", "signal"]},
+    "restart_process": {"category": "process", "risk": "medium", "strategies": ["subprocess"]},
+    "inspect_process": {"category": "process", "risk": "low", "strategies": ["subprocess", "psutil"]},
+    "wait_for_process": {"category": "process", "risk": "low", "strategies": ["subprocess"]},
+    "execute": {"category": "terminal", "risk": "medium", "strategies": ["subprocess"]},
+    "execute_async": {"category": "terminal", "risk": "medium", "strategies": ["subprocess"]},
+    "pipe": {"category": "terminal", "risk": "medium", "strategies": ["subprocess"]},
+    "read_stdout": {"category": "terminal", "risk": "low", "strategies": ["subprocess"]},
+    "set_env": {"category": "terminal", "risk": "low", "strategies": ["os"]},
+    "navigate": {"category": "browser", "risk": "low", "strategies": ["cdp", "playwright"]},
+    "new_tab": {"category": "browser", "risk": "low", "strategies": ["cdp", "playwright"]},
+    "close_tab": {"category": "browser", "risk": "low", "strategies": ["cdp", "playwright"]},
+    "switch_tab": {"category": "browser", "risk": "low", "strategies": ["cdp", "playwright"]},
+    "inspect_dom": {"category": "browser", "risk": "low", "strategies": ["cdp", "playwright"]},
+    "click_dom_element": {"category": "browser", "risk": "low", "strategies": ["cdp", "playwright"]},
+    "fill_dom_form": {"category": "browser", "risk": "low", "strategies": ["cdp", "playwright"]},
+    "download_file": {"category": "browser", "risk": "low", "strategies": ["cdp", "playwright"]},
+    "upload_file": {"category": "browser", "risk": "low", "strategies": ["cdp", "playwright"]},
+    "extract_page": {"category": "browser", "risk": "low", "strategies": ["cdp", "playwright"]},
+    "http_request": {"category": "network", "risk": "medium", "strategies": ["requests"]},
+    "resolve_dns": {"category": "network", "risk": "low", "strategies": ["socket"]},
+    "check_port": {"category": "network", "risk": "low", "strategies": ["socket"]},
+    "websocket_connect": {"category": "network", "risk": "medium", "strategies": ["websocket"]},
+    "discover_services": {"category": "network", "risk": "low", "strategies": ["mdns", "scan"]},
+    "system_info": {"category": "system", "risk": "low", "strategies": ["os", "psutil"]},
+    "storage_info": {"category": "system", "risk": "low", "strategies": ["os", "psutil"]},
+    "network_info": {"category": "system", "risk": "low", "strategies": ["os", "psutil"]},
+    "power_info": {"category": "system", "risk": "low", "strategies": ["os", "psutil"]},
+    "display_info": {"category": "system", "risk": "low", "strategies": ["os"]},
+    "audio_info": {"category": "system", "risk": "low", "strategies": ["os"]},
+    "set_volume": {"category": "system", "risk": "low", "strategies": ["os"]},
+    "set_brightness": {"category": "system", "risk": "low", "strategies": ["os"]},
+    "inspect_accessibility": {"category": "accessibility", "risk": "low", "strategies": ["accessibility"]},
+    "find_accessible_element": {"category": "accessibility", "risk": "low", "strategies": ["accessibility"]},
+    "invoke_accessible": {"category": "accessibility", "risk": "low", "strategies": ["accessibility"]},
+    "get_accessible_value": {"category": "accessibility", "risk": "low", "strategies": ["accessibility"]},
+    "set_accessible_value": {"category": "accessibility", "risk": "low", "strategies": ["accessibility"]},
+    "invoke_capability": {"category": "app_specific", "risk": "medium", "strategies": ["api", "cli"]},
+    "run_script": {"category": "app_specific", "risk": "medium", "strategies": ["api", "cli"]},
+    "execute_macro": {"category": "app_specific", "risk": "medium", "strategies": ["api", "cli"]},
+    "call_plugin": {"category": "app_specific", "risk": "medium", "strategies": ["api"]},
+    "get_app_state": {"category": "app_specific", "risk": "low", "strategies": ["api", "cli", "accessibility"]},
+}
+
+
+# ══════════════════════════════════════════════════════════════
+#  SEMANTIC ACTION EXECUTOR — Intent-Based, Not Coordinates
+# ══════════════════════════════════════════════════════════════
+
+class SemanticExecutor:
+    """Executes actions by intent, not coordinates.
+
+    Tries strategies in order: accessibility -> DOM -> OCR -> vision -> coordinates.
+    The agent never needs to know pixel coordinates.
+    """
+
+    def __init__(self):
+        self._fallback_chain = ["accessibility", "dom", "ocr", "vision", "coordinates"]
+
+    def execute_intent(self, intent, action_type="click", context=None):
+        import time as _time
+        start = _time.time()
+        for strategy in self._fallback_chain:
+            try:
+                result = self._try_strategy(strategy, intent, action_type, context)
+                if result and result.ok:
+                    result.strategy_used = strategy
+                    result.duration_ms = (_time.time() - start) * 1000
+                    return result
+            except Exception as e:
+                log.debug(f"[SEMANTIC] {strategy} failed: {e}")
+        return PrimitiveResult(ok=False, error=f"No strategy worked for '{intent}'",
+                               duration_ms=(_time.time() - start) * 1000)
+
+    def _try_strategy(self, strategy, intent, action_type, context):
+        if strategy == "accessibility":
+            return self._try_accessibility(intent, action_type, context)
+        elif strategy == "dom":
+            return self._try_dom(intent, action_type, context)
+        elif strategy == "ocr":
+            return self._try_ocr(intent, action_type, context)
+        elif strategy == "vision":
+            return self._try_vision(intent, action_type, context)
+        elif strategy == "coordinates":
+            return self._try_coordinates(intent, action_type, context)
+        return None
+
+    def _try_accessibility(self, intent, action_type, context):
+        from perception import get_perception
+        elem = get_perception().find_ui_element(intent)
+        if elem and elem.center != (0, 0):
+            x, y = elem.center
+            from capability_fabric import get_capability_fabric
+            fabric = get_capability_fabric()
+            if action_type == "click":
+                r = fabric.computer.click(x, y)
+                return PrimitiveResult(ok=r.ok, data={"element": elem.to_dict(), "strategy": "accessibility"}, error=r.error)
+        return None
+
+    def _try_dom(self, intent, action_type, context):
+        from capability_fabric import get_capability_fabric
+        fabric = get_capability_fabric()
+        if fabric._browser:
+            r = fabric.browser.find_and_click(intent)
+            if r.ok:
+                return PrimitiveResult(ok=True, data={"strategy": "dom"})
+        return None
+
+    def _try_ocr(self, intent, action_type, context):
+        from perception import get_perception
+        snap = get_perception().perceive(include_screenshot=True, include_ocr=True)
+        if snap.ocr_text and intent.lower() in snap.ocr_text.lower():
+            return self._try_vision(intent, action_type, context)
+        return None
+
+    def _try_vision(self, intent, action_type, context):
+        from perception import get_perception
+        elem = get_perception().find_ui_element(intent)
+        if elem and elem.center != (0, 0):
+            x, y = elem.center
+            from capability_fabric import get_capability_fabric
+            fabric = get_capability_fabric()
+            if action_type == "click":
+                r = fabric.computer.click(x, y)
+                return PrimitiveResult(ok=r.ok, data={"element": elem.to_dict(), "strategy": "vision"}, error=r.error)
+        return None
+
+    def _try_coordinates(self, intent, action_type, context):
+        from perception import get_perception
+        snap = get_perception().get_snapshot()
+        if snap and snap.screenshot_bytes:
+            vision_result = get_perception()._screenshot.analyze_with_vision(
+                snap.screenshot_bytes,
+                f"Find the UI element '{intent}'. Return only x,y coordinates."
+            )
+            import re
+            coords = re.findall(r'(\d+)[\s,]+(\d+)', vision_result)
+            if coords:
+                x, y = int(coords[0][0]), int(coords[0][1])
+                from capability_fabric import get_capability_fabric
+                fabric = get_capability_fabric()
+                if action_type == "click":
+                    r = fabric.computer.click(x, y)
+                    return PrimitiveResult(ok=r.ok, data={"coordinates": [x, y], "strategy": "vision_coordinates"}, error=r.error)
+        return None
+
+
+# ══════════════════════════════════════════════════════════════
+#  APPLICATION DISCOVERY ENGINE
+# ══════════════════════════════════════════════════════════════
+
+@dataclass
+class AppProfile:
+    name: str
+    pid: int = 0
+    capabilities: List[str] = field(default_factory=list)
+    control_methods: List[str] = field(default_factory=list)
+    has_api: bool = False
+    has_cli: bool = False
+    has_accessibility: bool = False
+    known_shortcuts: Dict[str, str] = field(default_factory=dict)
+    known_actions: List[Dict[str, Any]] = field(default_factory=list)
+    discovered_at: float = 0
+    confidence: float = 0.0
+
+    def to_dict(self):
+        return {k: v for k, v in self.__dict__.items()}
+
+
+KNOWN_APPLICATIONS = {
+    "chrome": {"capabilities": ["browse", "navigate", "tabs", "devtools", "extensions"],
+               "control_methods": ["cdp", "accessibility", "keyboard", "mouse"],
+               "has_api": True, "has_cli": True, "has_accessibility": True,
+               "shortcuts": {"new_tab": "ctrl+t", "close_tab": "ctrl+w", "devtools": "f12"}},
+    "blender": {"capabilities": ["3d", "render", "animation", "python", "scripting"],
+                "control_methods": ["python", "cli", "accessibility", "keyboard", "mouse"],
+                "has_api": True, "has_cli": True, "has_accessibility": True},
+    "visual studio code": {"capabilities": ["edit", "debug", "terminal", "extensions", "git"],
+                           "control_methods": ["cli", "api", "accessibility", "keyboard", "mouse"],
+                           "has_api": True, "has_cli": True, "has_accessibility": True},
+    "finder": {"capabilities": ["files", "navigate", "preview"],
+               "control_methods": ["accessibility", "keyboard", "mouse"],
+               "has_accessibility": True},
+    "terminal": {"capabilities": ["shell", "scripts", "processes"],
+                 "control_methods": ["cli", "keyboard"],
+                 "has_cli": True},
+    "microsoft word": {"capabilities": ["document", "formatting", "styles", "images", "tables"],
+                       "control_methods": ["accessibility", "keyboard", "mouse", "vba"],
+                       "has_api": True, "has_accessibility": True},
+    "microsoft excel": {"capabilities": ["spreadsheet", "formulas", "charts", "macros"],
+                        "control_methods": ["accessibility", "keyboard", "mouse", "vba"],
+                        "has_api": True, "has_accessibility": True},
+    "microsoft powerpoint": {"capabilities": ["presentation", "slides", "animations", "transitions"],
+                             "control_methods": ["accessibility", "keyboard", "mouse", "vba"],
+                             "has_api": True, "has_accessibility": True},
+    "photoshop": {"capabilities": ["image", "layers", "filters", "selection", "export"],
+                  "control_methods": ["accessibility", "keyboard", "mouse", "actions"],
+                  "has_accessibility": True},
+    "slack": {"capabilities": ["messaging", "channels", "files", "search"],
+              "control_methods": ["accessibility", "keyboard", "mouse"],
+              "has_accessibility": True},
+    "figma": {"capabilities": ["design", "components", "prototyping", "export"],
+              "control_methods": ["accessibility", "keyboard", "mouse"],
+              "has_accessibility": True},
+}
+
+
+class ApplicationDiscovery:
+    """Automatically discovers application capabilities."""
+
+    def __init__(self):
+        self._profiles: Dict[str, AppProfile] = {}
+
+    def discover(self, app_name: str) -> AppProfile:
+        if app_name.lower() in self._profiles:
+            return self._profiles[app_name.lower()]
+
+        profile = AppProfile(name=app_name, discovered_at=time.time())
+
+        known = KNOWN_APPLICATIONS.get(app_name.lower())
+        if known:
+            profile.capabilities = known.get("capabilities", [])
+            profile.control_methods = known.get("control_methods", [])
+            profile.has_api = known.get("has_api", False)
+            profile.has_cli = known.get("has_cli", False)
+            profile.has_accessibility = known.get("has_accessibility", False)
+            profile.known_shortcuts = known.get("shortcuts", {})
+            profile.confidence = 0.9
+
+        if shutil.which(app_name.lower()):
+            profile.has_cli = True
+            if "cli" not in profile.control_methods:
+                profile.control_methods.append("cli")
+
+        try:
+            import psutil
+            for proc in psutil.process_iter(["pid", "name"]):
+                if app_name.lower() in proc.info["name"].lower():
+                    profile.pid = proc.info["pid"]
+                    break
+        except Exception:
+            pass
+
+        for method in ["keyboard", "mouse", "vision"]:
+            if method not in profile.control_methods:
+                profile.control_methods.append(method)
+
+        self._profiles[app_name.lower()] = profile
+        log.info(f"[DISCOVERY] {app_name}: {len(profile.capabilities)} caps, {len(profile.control_methods)} methods")
+        return profile
+
+    def get_profile(self, app_name: str) -> Optional[AppProfile]:
+        return self._profiles.get(app_name.lower())
+
+    def list_profiles(self) -> List[dict]:
+        return [p.to_dict() for p in self._profiles.values()]
+
+
+# ══════════════════════════════════════════════════════════════
+#  VERIFICATION CONTRACTS — Every Action Gets Success Criteria
+# ══════════════════════════════════════════════════════════════
+
+@dataclass
+class VerificationContract:
+    """Defines success criteria for an action."""
+    action: str
+    success_conditions: List[str] = field(default_factory=list)
+    verification_methods: List[str] = field(default_factory=list)
+    timeout_s: float = 30.0
+    retry_count: int = 3
+
+    def to_dict(self):
+        return {k: v for k, v in self.__dict__.items()}
+
+
+VERIFICATION_CONTRACTS = {
+    "copy_file": VerificationContract(
+        action="copy_file",
+        success_conditions=["destination exists", "destination size == source size", "destination hash == source hash"],
+        verification_methods=["file_exists", "file_size", "file_hash"],
+    ),
+    "write_file": VerificationContract(
+        action="write_file",
+        success_conditions=["file exists", "file size > 0", "content matches"],
+        verification_methods=["file_exists", "file_size", "file_hash"],
+    ),
+    "launch_app": VerificationContract(
+        action="launch_app",
+        success_conditions=["process running", "window visible"],
+        verification_methods=["process_check", "screenshot"],
+    ),
+    "navigate": VerificationContract(
+        action="navigate",
+        success_conditions=["page loaded", "URL matches"],
+        verification_methods=["dom_check", "url_check"],
+    ),
+    "click": VerificationContract(
+        action="click",
+        success_conditions=["element responded", "state changed"],
+        verification_methods=["screenshot", "accessibility"],
+    ),
+    "execute": VerificationContract(
+        action="execute",
+        success_conditions=["exit code 0", "no error output"],
+        verification_methods=["process_exit", "stdout_check"],
+    ),
+    "delete_file": VerificationContract(
+        action="delete_file",
+        success_conditions=["file no longer exists"],
+        verification_methods=["file_exists"],
+    ),
+    "install_app": VerificationContract(
+        action="install_app",
+        success_conditions=["app launchable", "version correct"],
+        verification_methods=["launch_test", "version_check"],
+    ),
+}
+
+
+class ContractEngine:
+    """Manages verification contracts for actions."""
+
+    def __init__(self):
+        self._contracts = dict(VERIFICATION_CONTRACTS)
+
+    def get_contract(self, action: str) -> Optional[VerificationContract]:
+        return self._contracts.get(action)
+
+    def add_contract(self, contract: VerificationContract):
+        self._contracts[contract.action] = contract
+
+    def verify(self, action: str, result: PrimitiveResult) -> bool:
+        """Verify an action result against its contract."""
+        contract = self.get_contract(action)
+        if not contract:
+            return result.ok
+        if not result.ok:
+            return False
+        for method in contract.verification_methods:
+            if method == "file_exists" and result.data:
+                path = result.data.get("path") or result.data.get("destination", "")
+                if path and not os.path.exists(path):
+                    return False
+            if method == "file_size" and result.data:
+                path = result.data.get("path", "")
+                if path and os.path.exists(path) and os.path.getsize(path) == 0:
+                    return False
+        return True
+
+
+# ══════════════════════════════════════════════════════════════
+#  RECOVERY ENGINE — Failed Actions Change Strategy
+# ══════════════════════════════════════════════════════════════
+
+class RecoveryEngine:
+    """Automatically recovers from failed actions by changing strategy.
+
+    TRY -> OBSERVE -> FAILED -> DIAGNOSE -> CHANGE STRATEGY -> TRY AGAIN
+    """
+
+    def __init__(self):
+        self._max_attempts = 3
+
+    def diagnose(self, action: str, error: str, context: dict = None) -> List[dict]:
+        """Diagnose failure and suggest recovery strategies."""
+        strategies = []
+        error_lower = error.lower()
+
+        if "not found" in error_lower or "404" in error_lower:
+            strategies.append({"action": "screenshot", "description": "Reassess screen state"})
+            strategies.append({"action": "list_windows", "description": "Check open windows"})
+            strategies.append({"action": "inspect_accessibility", "description": "Scan accessibility tree"})
+
+        elif "timeout" in error_lower or "timed out" in error_lower:
+            strategies.append({"action": "wait_for_process", "description": "Wait for resource"})
+            strategies.append({"action": "screenshot", "description": "Check if resource loaded"})
+
+        elif "permission" in error_lower or "access" in error_lower or "denied" in error_lower:
+            strategies.append({"action": "press_key", "description": "Dismiss dialog"})
+            strategies.append({"action": "screenshot", "description": "Check screen after dialog"})
+
+        elif "connection" in error_lower or "network" in error_lower:
+            strategies.append({"action": "check_port", "description": "Check connectivity"})
+            strategies.append({"action": "resolve_dns", "description": "Check DNS resolution"})
+
+        elif "not responding" in error_lower or "frozen" in error_lower:
+            strategies.append({"action": "stop_process", "description": "Kill frozen process"})
+            strategies.append({"action": "restart_process", "description": "Restart application"})
+
+        else:
+            strategies = [
+                {"action": "screenshot", "description": "Reassess state"},
+                {"action": "press_key", "description": "Press Escape to clear state"},
+                {"action": "wait_for_process", "description": "Wait for UI to settle"},
+                {"action": "screenshot", "description": "Verify state after recovery"},
+            ]
+
+        return strategies
+
+    def should_retry(self, attempt: int, error: str) -> bool:
+        return attempt < self._max_attempts
+
+    def get_alternative_strategies(self, action: str) -> List[str]:
+        """Get alternative strategies for an action."""
+        action_info = UNIVERSAL_ACTIONS.get(action, {})
+        strategies = action_info.get("strategies", [])
+        alternatives = []
+        for s in strategies:
+            if s not in alternatives:
+                alternatives.append(s)
+        return alternatives
+
+
+# ══════════════════════════════════════════════════════════════
+#  SKILL COMPILER — Successful Procedures Become Reusable Skills
+# ══════════════════════════════════════════════════════════════
+
+@dataclass
+class CompiledSkill:
+    """A successfully executed procedure that can be reused."""
+    name: str
+    description: str
+    steps: List[Dict[str, Any]] = field(default_factory=list)
+    app_context: str = ""
+    success_count: int = 0
+    failure_count: int = 0
+    last_used: float = 0
+    created_at: float = 0
+    confidence: float = 1.0
+
+    def to_dict(self):
+        return {k: v for k, v in self.__dict__.items()}
+
+
+class SkillCompiler:
+    """Records successful novel procedures and makes them reusable.
+
+    After JARVIS successfully solves a new type of task, the procedure
+    is saved as a skill. Next time, JARVIS can replay the learned
+    procedure while still adapting to current context.
+    """
+
+    def __init__(self):
+        self._skills: Dict[str, CompiledSkill] = {}
+        self._load()
+
+    def _load(self):
+        try:
+            path = Path.home() / ".jarvis" / "skills.json"
+            if path.exists():
+                data = json.loads(path.read_text())
+                for name, sdata in data.items():
+                    self._skills[name] = CompiledSkill(**sdata)
+        except Exception:
+            pass
+
+    def _save(self):
+        try:
+            path = Path.home() / ".jarvis" / "skills.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            data = {name: s.to_dict() for name, s in self._skills.items()}
+            path.write_text(json.dumps(data, indent=2))
+        except Exception as e:
+            log.debug(f"[SKILL] Save failed: {e}")
+
+    def compile(self, name: str, description: str, steps: List[dict],
+                app_context: str = "") -> CompiledSkill:
+        """Record a successful procedure as a reusable skill."""
+        skill = CompiledSkill(
+            name=name,
+            description=description,
+            steps=steps,
+            app_context=app_context,
+            success_count=1,
+            created_at=time.time(),
+            last_used=time.time(),
+        )
+        self._skills[name] = skill
+        self._save()
+        log.info(f"[SKILL] Compiled: {name} ({len(steps)} steps)")
+        return skill
+
+    def record_success(self, name: str):
+        skill = self._skills.get(name)
+        if skill:
+            skill.success_count += 1
+            skill.last_used = time.time()
+            skill.confidence = min(1.0, skill.confidence + 0.05)
+            self._save()
+
+    def record_failure(self, name: str):
+        skill = self._skills.get(name)
+        if skill:
+            skill.failure_count += 1
+            skill.confidence = max(0.1, skill.confidence - 0.1)
+            self._save()
+
+    def get_skill(self, name: str) -> Optional[CompiledSkill]:
+        return self._skills.get(name)
+
+    def search(self, query: str) -> List[CompiledSkill]:
+        """Search skills by description."""
+        query_lower = query.lower()
+        return [s for s in self._skills.values()
+                if query_lower in s.name.lower() or query_lower in s.description.lower()]
+
+    def list_skills(self) -> List[dict]:
+        return [s.to_dict() for s in self._skills.values()]
+
+
+# ══════════════════════════════════════════════════════════════
+#  UNIVERSAL FABRIC SINGLETONS
+# ══════════════════════════════════════════════════════════════
+
+_semantic_executor: Optional[SemanticExecutor] = None
+_app_discovery: Optional[ApplicationDiscovery] = None
+_contract_engine: Optional[ContractEngine] = None
+_recovery_engine: Optional[RecoveryEngine] = None
+_skill_compiler: Optional[SkillCompiler] = None
+
+
+def get_semantic_executor() -> SemanticExecutor:
+    global _semantic_executor
+    if _semantic_executor is None:
+        _semantic_executor = SemanticExecutor()
+    return _semantic_executor
+
+
+def get_app_discovery() -> ApplicationDiscovery:
+    global _app_discovery
+    if _app_discovery is None:
+        _app_discovery = ApplicationDiscovery()
+    return _app_discovery
+
+
+def get_contract_engine() -> ContractEngine:
+    global _contract_engine
+    if _contract_engine is None:
+        _contract_engine = ContractEngine()
+    return _contract_engine
+
+
+def get_recovery_engine() -> RecoveryEngine:
+    global _recovery_engine
+    if _recovery_engine is None:
+        _recovery_engine = RecoveryEngine()
+    return _recovery_engine
+
+
+def get_skill_compiler() -> SkillCompiler:
+    global _skill_compiler
+    if _skill_compiler is None:
+        _skill_compiler = SkillCompiler()
+    return _skill_compiler
+
+
+# ══════════════════════════════════════════════════════════════
+#  CAPABILITY DISCOVERY — Find How To Do Anything
+# ══════════════════════════════════════════════════════════════
+
+class CapabilityDiscovery:
+    """Discovers how to accomplish tasks on unknown applications.
+
+    When JARVIS encounters an app or task it doesn't have a pre-written
+    skill for, this system discovers the execution strategy:
+      1. Check if app has a CLI → use CLI
+      2. Check if app has an API → use API
+      3. Check if app is running → use accessibility/UI automation
+      4. Check if app can be launched → launch then control
+      5. Fall back to vision-based GUI control
+    """
+
+    def __init__(self):
+        self._discovered: Dict[str, dict] = {}
+        self._capability_cache: Dict[str, List[str]] = {}
+
+    def discover_for_task(self, task_description: str) -> List[str]:
+        """Discover what capabilities are needed for a task."""
+        task_lower = task_description.lower()
+        needed = []
+
+        file_kw = ["file", "folder", "directory", "create", "write", "save", "copy", "move", "delete", "rename"]
+        web_kw = ["website", "web", "browse", "url", "http", "search online", "download"]
+        app_kw = ["open", "launch", "app", "program", "software"]
+        term_kw = ["run", "execute", "command", "terminal", "shell", "script", "install"]
+        data_kw = ["data", "spreadsheet", "excel", "csv", "database", "sql"]
+
+        if any(w in task_lower for w in file_kw):
+            needed.append("filesystem")
+        if any(w in task_lower for w in web_kw):
+            needed.append("browser")
+        if any(w in task_lower for w in app_kw):
+            needed.append("application")
+        if any(w in task_lower for w in term_kw):
+            needed.append("terminal")
+        if any(w in task_lower for w in data_kw):
+            needed.append("data_processing")
+
+        if not needed:
+            needed.append("filesystem")
+
+        return needed
+
+    def discover_app_control(self, app_name: str) -> dict:
+        """Discover how to control a specific application."""
+        app_lower = app_name.lower()
+
+        if app_lower in self._discovered:
+            return self._discovered[app_lower]
+
+        result = {
+            "app": app_name,
+            "cli": None,
+            "api": None,
+            "control_method": "vision",
+            "confidence": 0.5,
+            "steps": [],
+        }
+
+        cli_path = shutil.which(app_lower)
+        if cli_path:
+            result["cli"] = cli_path
+            result["control_method"] = "cli"
+            result["confidence"] = 0.9
+            result["steps"] = [
+                {"action": "execute", "params": {"cmd": f"{cli_path} --help"}},
+            ]
+
+        if app_lower in KNOWN_APPLICATIONS:
+            known = KNOWN_APPLICATIONS[app_lower]
+            if known.get("has_api"):
+                result["api"] = known.get("api_module")
+                result["control_method"] = "api"
+                result["confidence"] = 0.95
+            elif known.get("has_cli"):
+                result["control_method"] = "cli"
+                result["confidence"] = 0.85
+
+        if result["control_method"] == "vision":
+            result["steps"] = [
+                {"action": "screenshot", "params": {}},
+                {"action": "ocr", "params": {}},
+                {"action": "find_element", "params": {"description": app_name}},
+                {"action": "click", "params": {}},
+            ]
+
+        self._discovered[app_lower] = result
+        return result
+
+    def discover_file_operations(self, task: str) -> List[dict]:
+        """Discover file operations needed for a task."""
+        task_lower = task.lower()
+        ops = []
+
+        if any(w in task_lower for w in ["create", "write", "make", "new"]):
+            ops.append({"operation": "create", "method": "write_file"})
+        if any(w in task_lower for w in ["copy", "duplicate"]):
+            ops.append({"operation": "copy", "method": "copy_file"})
+        if any(w in task_lower for w in ["move", "relocate"]):
+            ops.append({"operation": "move", "method": "move_file"})
+        if any(w in task_lower for w in ["delete", "remove"]):
+            ops.append({"operation": "delete", "method": "delete_file"})
+        if any(w in task_lower for w in ["rename"]):
+            ops.append({"operation": "rename", "method": "rename_file"})
+        if any(w in task_lower for w in ["read", "open", "view"]):
+            ops.append({"operation": "read", "method": "read_file"})
+
+        return ops
+
+    def get_discovery(self, app_name: str) -> Optional[dict]:
+        return self._discovered.get(app_name.lower())
+
+    def list_discoveries(self) -> List[dict]:
+        return list(self._discovered.values())
+
+
+_discovery_engine: Optional[CapabilityDiscovery] = None
+
+
+def get_discovery_engine() -> CapabilityDiscovery:
+    global _discovery_engine
+    if _discovery_engine is None:
+        _discovery_engine = CapabilityDiscovery()
+    return _discovery_engine

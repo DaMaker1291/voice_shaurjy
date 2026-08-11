@@ -486,6 +486,8 @@ body.allow-scroll { overflow: auto !important; height: auto !important; width: a
 .jv-step.done { color: #00FF66; }
 .jv-step.active { color: #e8eaed; }
 .jv-step.active .jv-step-dot { animation: glow-pulse 1.2s infinite; }
+.jv-step.running { color: #00B4D8; }
+.jv-step.running .jv-step-dot { animation: glow-pulse 0.8s infinite; color: #00B4D8; }
 
 .jv-step-dot {
   width: 14px;
@@ -675,6 +677,43 @@ body.allow-scroll { overflow: auto !important; height: auto !important; width: a
 }
 
 .jv-workspace-body > div { height: 100% !important; }
+
+.jv-live-screenshot {
+  position: relative;
+  border-bottom: 1px solid #222;
+  background: #000;
+  max-height: 40vh;
+  overflow: hidden;
+}
+
+.jv-live-screenshot img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.jv-live-screenshot .jv-live-badge-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #00FF66;
+  font-family: monospace;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jv-live-screenshot .jv-live-dot-anim {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00FF66;
+  animation: glow-pulse 1.5s infinite;
+}
 
 .jv-workspace-footer {
   height: 28px;
@@ -902,6 +941,74 @@ body.allow-scroll { overflow: auto !important; height: auto !important; width: a
   margin-top: 24px;
 }
 
+.jv-evidence-timeline {
+  margin-top: 20px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.jv-evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.jv-evidence-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+  border-left: 3px solid var(--neon);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.jv-evidence-item.jv-evidence-observation {
+  border-left-color: #00B4D8;
+}
+
+.jv-evidence-item.jv-evidence-verification {
+  border-left-color: #FFD166;
+}
+
+.jv-evidence-time {
+  color: var(--text-3);
+  min-width: 70px;
+}
+
+.jv-evidence-type {
+  color: var(--neon);
+  font-weight: 600;
+  min-width: 70px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.jv-evidence-desc {
+  color: var(--text-2);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jv-evidence-status {
+  font-size: 14px;
+}
+
+.jv-evidence-status.ok {
+  color: var(--neon);
+}
+
+.jv-evidence-status.fail {
+  color: #FF4444;
+}
+
 .jv-btn-primary {
   padding: 10px 24px;
   border-radius: 8px;
@@ -987,4 +1094,245 @@ body.allow-scroll { overflow: auto !important; height: auto !important; width: a
   .jv-suggestions { flex-wrap: wrap; justify-content: center; }
   .jv-complete-stats { gap: 24px; }
   .jv-complete-stat-val { font-size: 22px; }
+}
+
+/* ── Compositor: Unified Workspace View ─────────────────────── */
+
+.jv-compositor {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  padding: 8px;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.jv-worker-window {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.2s;
+}
+
+.jv-worker-window:hover {
+  border-color: rgba(0,255,102,0.3);
+}
+
+.jv-worker-window.user-control {
+  border-color: #FFD166;
+  background: rgba(255,209,102,0.05);
+}
+
+.jv-worker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.jv-worker-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-1);
+  letter-spacing: 0.05em;
+}
+
+.jv-worker-status {
+  font-size: 8px;
+}
+
+.jv-worker-status.jv-status-running {
+  color: var(--neon);
+}
+
+.jv-worker-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.jv-activity-row {
+  display: flex;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.jv-activity-label {
+  color: var(--text-3);
+  min-width: 50px;
+}
+
+.jv-activity-val {
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jv-worker-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jv-progress-text {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--neon);
+}
+
+.jv-verify-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.jv-verify-badge.passed {
+  background: rgba(0,255,102,0.1);
+  color: var(--neon);
+}
+
+.jv-verify-badge.failed {
+  background: rgba(255,68,68,0.1);
+  color: #FF4444;
+}
+
+.jv-verify-badge.pending {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-3);
+}
+
+.jv-worker-controls {
+  margin-top: 4px;
+}
+
+.jv-btn-control, .jv-btn-return {
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.jv-btn-control:hover {
+  border-color: var(--neon);
+  color: var(--neon);
+}
+
+.jv-btn-return {
+  border-color: #FFD166;
+  color: #FFD166;
+}
+
+.jv-worker-count {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-3);
+  margin-left: 8px;
+}
+
+/* ── Timeline Bar ──────────────────────────────────────────── */
+
+.jv-timeline-bar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  overflow-x: auto;
+  border-top: 1px solid rgba(255,255,255,0.04);
+  background: rgba(0,0,0,0.2);
+}
+
+.jv-timeline-event {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.03);
+  border-left: 2px solid var(--neon);
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.jv-timeline-event.jv-tl-app-start {
+  border-left-color: var(--neon);
+}
+
+.jv-timeline-event.jv-tl-app-release {
+  border-left-color: var(--text-3);
+}
+
+.jv-timeline-event.jv-tl-action {
+  border-left-color: #00B4D8;
+}
+
+.jv-tl-time {
+  color: var(--text-3);
+}
+
+.jv-tl-app {
+  color: var(--neon);
+  font-weight: 600;
+}
+
+.jv-tl-desc {
+  color: var(--text-2);
+}
+
+/* ── Expandable Steps ──────────────────────────────────────── */
+
+.jv-step {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.jv-step:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.jv-step.expanded {
+  background: rgba(0,255,102,0.03);
+}
+
+.jv-step-detail {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.jv-step-app, .jv-step-worker, .jv-step-dur {
+  color: var(--text-3);
+}
+
+.jv-step-verify {
+  font-weight: 600;
+}
+
+.jv-step-verify.ok {
+  color: var(--neon);
+}
+
+.jv-step-verify.fail {
+  color: #FF4444;
 }

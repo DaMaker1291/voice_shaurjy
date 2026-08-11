@@ -666,6 +666,13 @@ class UniversalPerception:
         self._clipboard = ClipboardChannel()
         self._last_snapshot: Optional[PerceptionSnapshot] = None
         self._lock = threading.Lock()
+        # Continuous observation state
+        self._observe_thread: Optional[threading.Thread] = None
+        self._observe_stop: Optional[threading.Event] = None
+        self._observe_interval: float = 5.0
+        self._observe_callback = None
+        self._observe_running: bool = False
+        self._snapshot_history: List[PerceptionSnapshot] = []
 
     def perceive(self, include_screenshot: bool = True,
                 include_ocr: bool = True,
@@ -719,6 +726,10 @@ class UniversalPerception:
 
         with self._lock:
             self._last_snapshot = snapshot
+            self._snapshot_history.append(snapshot)
+            # Keep last 100 snapshots in ring buffer
+            if len(self._snapshot_history) > 100:
+                self._snapshot_history = self._snapshot_history[-100:]
 
         return snapshot
 
@@ -812,6 +823,75 @@ class UniversalPerception:
 
         return "\n".join(lines)
 
+    # ── Continuous Observation Loop ──────────────────────────────────────
+
+    def start_continuous(self, interval: float = 5.0, callback=None):
+        """Start background observation loop at fixed interval.
+
+        Continuously captures snapshots and optionally feeds them to a callback.
+        The latest snapshot is always available via get_snapshot().
+        """
+        if self._observe_thread and self._observe_thread.is_alive():
+            return  # Already running
+
+        self._observe_stop = threading.Event()
+        self._observe_interval = interval
+        self._observe_callback = callback
+        self._observe_running = True
+
+        def _loop():
+            log.info(f"[PERCEPTION] Continuous observation started (interval={interval}s)")
+            while not self._observe_stop.is_set():
+                try:
+                    snapshot = self.perceive(
+                        include_screenshot=True,
+                        include_ocr=False,
+                        include_windows=True,
+                        include_accessibility=False,
+                        include_dom=False,
+                        include_filesystem=False,
+                        include_processes=False,
+                        include_clipboard=True,
+                    )
+                    if self._observe_callback:
+                        try:
+                            self._observe_callback(snapshot)
+                        except Exception as cb_err:
+                            log.debug(f"[PERCEPTION] Callback error: {cb_err}")
+                except Exception as e:
+                    log.debug(f"[PERCEPTION] Observation cycle error: {e}")
+                self._observe_stop.wait(interval)
+            self._observe_running = False
+            log.info("[PERCEPTION] Continuous observation stopped")
+
+        self._observe_thread = threading.Thread(target=_loop, daemon=True, name="perception-observe")
+        self._observe_thread.start()
+
+    def stop_continuous(self):
+        """Stop the background observation loop."""
+        if self._observe_stop:
+            self._observe_stop.set()
+
+    def is_continuous_running(self) -> bool:
+        return self._observe_running
+
+    def get_recent_snapshots(self, count: int = 10) -> List[PerceptionSnapshot]:
+        """Get the last N perception snapshots from the observation ring buffer."""
+        with self._lock:
+            return list(self._snapshot_history[-count:])
+
+    def to_dict(self) -> dict:
+        """Export current perception state as dict."""
+        snapshot = self.get_snapshot()
+        if not snapshot:
+            return {"active": False, "continuous": self._observe_running}
+        return {
+            "active": True,
+            "continuous": self._observe_running,
+            "snapshot": snapshot.to_dict(),
+            "summary": self.get_context_summary(),
+        }
+
 
 # ── Singleton ──
 _perception: Optional[UniversalPerception] = None
@@ -822,3 +902,189 @@ def get_perception() -> UniversalPerception:
     if _perception is None:
         _perception = UniversalPerception()
     return _perception
+
+
+# ══════════════════════════════════════════════════════════════
+#  PERSISTENT WORLD MODEL
+# ══════════════════════════════════════════════════════════════
+
+@dataclass
+class AppWindow:
+    name: str
+    title: str = ""
+    pid: int = 0
+    x: int = 0
+    y: int = 0
+    width: int = 0
+    height: int = 0
+    focused: bool = False
+    minimized: bool = False
+
+@dataclass
+class BrowserTab:
+    url: str
+    title: str = ""
+    index: int = 0
+    active: bool = False
+
+@dataclass
+class KnownFile:
+    path: str
+    name: str = ""
+    size: int = 0
+    modified: float = 0
+    extension: str = ""
+    last_accessed: float = 0
+
+@dataclass
+class RunningProcess:
+    name: str
+    pid: int = 0
+    cpu: float = 0
+    memory: float = 0
+
+@dataclass
+class WorldState:
+    timestamp: float = 0
+    os_type: str = ""
+    os_version: str = ""
+    hostname: str = ""
+    active_window: str = ""
+    windows: List[AppWindow] = field(default_factory=list)
+    browser_tabs: List[BrowserTab] = field(default_factory=list)
+    known_files: List[KnownFile] = field(default_factory=list)
+    processes: List[RunningProcess] = field(default_factory=list)
+    clipboard_text: str = ""
+    last_action: str = ""
+    last_action_result: str = ""
+    mission_history: List[dict] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "timestamp": self.timestamp,
+            "os": f"{self.os_type} {self.os_version}",
+            "hostname": self.hostname,
+            "active_window": self.active_window,
+            "windows": [{"name": w.name, "title": w.title, "focused": w.focused} for w in self.windows],
+            "browser_tabs": [{"url": t.url, "title": t.title, "active": t.active} for t in self.browser_tabs],
+            "known_files": [{"path": f.path, "name": f.name, "ext": f.extension} for f in self.known_files[-50:]],
+            "processes": [{"name": p.name, "pid": p.pid} for p in self.processes[:30]],
+            "clipboard": self.clipboard_text[:200],
+            "last_action": self.last_action,
+            "mission_history": self.mission_history[-10:],
+        }
+
+
+class WorldModel:
+    """Persistent world model — everything JARVIS knows about the computer.
+
+    Updated continuously from perception snapshots.
+    Queried by the planner to understand context.
+    """
+
+    def __init__(self):
+        self._state = WorldState(timestamp=time.time())
+        self._lock = threading.Lock()
+        self._file_index: Dict[str, KnownFile] = {}
+        self._mission_log: List[dict] = []
+        self._init_os_info()
+
+    def _init_os_info(self):
+        import platform
+        self._state.os_type = platform.system()
+        self._state.os_version = platform.version()
+        self._state.hostname = platform.node()
+
+    def update_from_perception(self, snapshot: PerceptionSnapshot):
+        """Update world model from a perception snapshot."""
+        with self._lock:
+            self._state.timestamp = time.time()
+
+            if snapshot.windows:
+                self._state.windows = [
+                    AppWindow(
+                        name=w.get("name", ""), title=w.get("title", ""),
+                        pid=w.get("pid", 0), focused=w.get("focused", False),
+                        x=w.get("x", 0), y=w.get("y", 0),
+                        width=w.get("width", 0), height=w.get("height", 0),
+                    )
+                    for w in snapshot.windows
+                ]
+                focused = [w for w in self._state.windows if w.focused]
+                if focused:
+                    self._state.active_window = focused[0].name
+
+            if snapshot.filesystem and snapshot.filesystem.recent_files:
+                for f in snapshot.filesystem.recent_files:
+                    path = f.get("path", "")
+                    if path and path not in self._file_index:
+                        kf = KnownFile(
+                            path=path, name=f.get("name", ""),
+                            size=f.get("size", 0), modified=f.get("modified", 0),
+                            extension=f.get("extension", ""),
+                        )
+                        self._file_index[path] = kf
+                self._state.known_files = list(self._file_index.values())
+
+            if snapshot.processes:
+                self._state.processes = [
+                    RunningProcess(name=p.get("name", ""), pid=p.get("pid", 0))
+                    for p in snapshot.processes[:50]
+                ]
+
+            if snapshot.clipboard_text:
+                self._state.clipboard_text = snapshot.clipboard_text
+
+    def record_action(self, action: str, result: str = ""):
+        with self._lock:
+            self._state.last_action = action
+            self._state.last_action_result = result
+
+    def record_mission(self, mission_id: str, objective: str, status: str):
+        with self._lock:
+            self._mission_log.append({
+                "id": mission_id, "objective": objective,
+                "status": status, "timestamp": time.time(),
+            })
+            self._state.mission_history = self._mission_log[-20:]
+
+    def find_file(self, query: str) -> List[KnownFile]:
+        """Find files by name query."""
+        query_lower = query.lower()
+        with self._lock:
+            results = []
+            for kf in self._file_index.values():
+                if query_lower in kf.name.lower() or query_lower in kf.path.lower():
+                    results.append(kf)
+            results.sort(key=lambda f: f.modified, reverse=True)
+            return results[:10]
+
+    def get_app(self, name: str) -> Optional[AppWindow]:
+        """Get a running application by name."""
+        name_lower = name.lower()
+        with self._lock:
+            for w in self._state.windows:
+                if name_lower in w.name.lower():
+                    return w
+            return None
+
+    def is_app_running(self, name: str) -> bool:
+        return self.get_app(name) is not None
+
+    def get_state(self) -> WorldState:
+        with self._lock:
+            return self._state
+
+    def to_dict(self) -> dict:
+        with self._lock:
+            return self._state.to_dict()
+
+
+_world_model: Optional[WorldModel] = None
+
+
+def get_world_model() -> WorldModel:
+    global _world_model
+    if _world_model is None:
+        _world_model = WorldModel()
+    return _world_model

@@ -53,7 +53,7 @@ RISK_BACKEND_MAP = {
 
 def classify_task(action: str, params: dict) -> str:
     """Classify an action into a task type for routing."""
-    if action in ("web_search", "web_scrape", "navigate_web"):
+    if action in ("web_search", "web_scrape", "navigate_web", "search_web"):
         return action
     if action in ("write_file", "read_file", "create_directory"):
         return action

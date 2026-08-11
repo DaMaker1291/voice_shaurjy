@@ -10,8 +10,12 @@ import platform
 import subprocess
 import json
 import re
+import shutil
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
+
+log = logging.getLogger("hardware_detector")
 
 
 @dataclass
@@ -879,3 +883,193 @@ def refresh_hardware_profile() -> HardwareProfile:
     global _profile
     _profile = detect_hardware()
     return _profile
+
+
+# ══════════════════════════════════════════════════════════════
+#  VIRTUALIZATION DETECTION
+# ══════════════════════════════════════════════════════════════
+
+@dataclass
+class VirtualizationInfo:
+    """Detected virtualization capabilities on this machine."""
+    os: str = ""
+    # Available backends
+    wsl2: bool = False
+    hyperv: bool = False
+    virtualbox: bool = False
+    qemu: bool = False
+    docker: bool = False
+    podman: bool = False
+    qemu_kvm: bool = False
+    # macOS specific
+    apple_virtualization: bool = False
+    # Linux specific
+    firejail: bool = False
+    bubblewrap: bool = False
+    systemd_nspawn: bool = False
+    # Windows specific
+    windows_sandbox: bool = False
+    # General
+    xvfb: bool = False
+    xdotool: bool = False
+    scrot: bool = False
+    pyautogui: bool = False
+    mss: bool = False
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items()}
+
+    def available_backends(self) -> list:
+        """Return list of available backend names, ordered by preference."""
+        backends = []
+        if self.os == "Windows":
+            if self.wsl2: backends.append("wsl_xvfb")
+            if self.hyperv: backends.append("hyperv")
+            if self.windows_sandbox: backends.append("windows_sandbox")
+            if self.docker: backends.append("container")
+            if self.virtualbox: backends.append("virtualbox")
+            if self.qemu: backends.append("qemu")
+            if self.pyautogui or self.mss: backends.append("windows_native")
+        elif self.os == "Darwin":
+            if self.docker: backends.append("container")
+            if self.qemu: backends.append("qemu")
+            if self.apple_virtualization: backends.append("macos_vz")
+            if self.pyautogui or self.mss: backends.append("macos_native")
+        elif self.os == "Linux":
+            if self.docker: backends.append("container")
+            if self.podman: backends.append("container")
+            if self.qemu_kvm: backends.append("kvm")
+            if self.qemu: backends.append("qemu")
+            if self.firejail: backends.append("firejail")
+            if self.bubblewrap: backends.append("bubblewrap")
+            if self.systemd_nspawn: backends.append("nspawn")
+            if self.xvfb and (self.xdotool or self.scrot): backends.append("linux_xvfb")
+        # Universal fallbacks
+        if self.pyautogui or self.mss: backends.append("native")
+        backends.append("browser_sandbox")
+        return backends
+
+
+def detect_virtualization() -> VirtualizationInfo:
+    """Detect all available virtualization and isolation backends."""
+    info = VirtualizationInfo(os=platform.system())
+
+    def _cmd_exists(cmd: str) -> bool:
+        return shutil.which(cmd) is not None
+
+    def _run(cmd: list, timeout: int = 5) -> str:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            return r.stdout.strip()
+        except Exception:
+            return ""
+
+    if info.os == "Windows":
+        # WSL2
+        out = _run(["wsl", "--list", "--verbose"])
+        info.wsl2 = "docker-desktop" in out.lower() or "ubuntu" in out.lower() or "linux" in out.lower()
+        if not info.wsl2:
+            info.wsl2 = _cmd_exists("wsl")
+
+        # Hyper-V
+        out = _run(["powershell", "-Command", "Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All | Select-Object -ExpandProperty State"])
+        info.hyperv = "Enabled" in out
+
+        # VirtualBox
+        info.virtualbox = _cmd_exists("VBoxManage")
+
+        # QEMU
+        info.qemu = _cmd_exists("qemu-system-x86_64") or _cmd_exists("qemu-system-x86_64.exe")
+
+        # Docker
+        info.docker = _cmd_exists("docker")
+
+        # Windows Sandbox
+        out = _run(["powershell", "-Command", "Get-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM | Select-Object -ExpandProperty State"])
+        info.windows_sandbox = "Enabled" in out
+
+        # pyautogui / mss
+        try:
+            import pyautogui
+            info.pyautogui = True
+        except ImportError:
+            pass
+        try:
+            import mss
+            info.mss = True
+        except ImportError:
+            pass
+
+    elif info.os == "Darwin":
+        # Docker
+        info.docker = _cmd_exists("docker")
+
+        # QEMU
+        info.qemu = _cmd_exists("qemu-system-x86_64")
+
+        # Apple Virtualization.framework
+        out = _run(["sysctl", "-n", "hw.optional.hypervisor"])
+        info.apple_virtualization = out.strip() != "0" and out.strip() != ""
+
+        # pyautogui / mss
+        try:
+            import pyautogui
+            info.pyautogui = True
+        except ImportError:
+            pass
+        try:
+            import mss
+            info.mss = True
+        except ImportError:
+            pass
+
+    elif info.os == "Linux":
+        # Docker
+        info.docker = _cmd_exists("docker")
+
+        # Podman
+        info.podman = _cmd_exists("podman")
+
+        # QEMU/KVM
+        info.qemu = _cmd_exists("qemu-system-x86_64")
+        info.qemu_kvm = info.qemu and os.path.exists("/dev/kvm")
+
+        # Firejail
+        info.firejail = _cmd_exists("firejail")
+
+        # Bubblewrap
+        info.bubblewrap = _cmd_exists("bwrap")
+
+        # systemd-nspawn
+        info.systemd_nspawn = _cmd_exists("systemd-nspawn")
+
+        # Xvfb + xdotool + scrot
+        info.xvfb = _cmd_exists("Xvfb") or _cmd_exists("xvfb-run")
+        info.xdotool = _cmd_exists("xdotool")
+        info.scrot = _cmd_exists("scrot") or _cmd_exists("import")
+
+        # pyautogui / mss
+        try:
+            import pyautogui
+            info.pyautogui = True
+        except ImportError:
+            pass
+        try:
+            import mss
+            info.mss = True
+        except ImportError:
+            pass
+
+    log.info(f"[HW] Virtualization: {info.available_backends()}")
+    return info
+
+
+_virt_info: Optional[VirtualizationInfo] = None
+
+
+def get_virtualization_info() -> VirtualizationInfo:
+    """Get or detect virtualization capabilities."""
+    global _virt_info
+    if _virt_info is None:
+        _virt_info = detect_virtualization()
+    return _virt_info

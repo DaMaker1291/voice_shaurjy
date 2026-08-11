@@ -41,6 +41,17 @@ export default function JarvisExperience() {
   const [steps, setSteps] = useState<MissionStep[]>([]);
   const [approvalPending, setApprovalPending] = useState<any>(null);
   const [missionStats, setMissionStats] = useState<{ tasks: number; failures: number; verified: number } | null>(null);
+  const [evidenceTimeline, setEvidenceTimeline] = useState<any[]>([]);
+  // Compositor state
+  const [compositeView, setCompositeView] = useState<any>(null);
+  const [workerWindows, setWorkerWindows] = useState<any[]>([]);
+  const [appTimeline, setAppTimeline] = useState<any[]>([]);
+  const [expandedStep, setExpandedStep] = useState<number | null>(null);
+  const [stepDetails, setStepDetails] = useState<any>(null);
+  const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
+  const [liveScreenshot, setLiveScreenshot] = useState<string | null>(null);
+  const [showLiveView, setShowLiveView] = useState(false);
+  const [createdFiles, setCreatedFiles] = useState<any[]>([]);
 
   // Voice state
   const [isListening, setIsListening] = useState(false);
@@ -113,12 +124,29 @@ export default function JarvisExperience() {
         // Update steps from mission data
         if (live.steps) {
           setSteps(
-            live.steps.map((s: any, i: number) => ({
-              id: s.id || `step-${i}`,
-              label: s.description || s.label || `Step ${i + 1}`,
-              status: s.status === "done" ? "done" : s.status === "failed" ? "failed" : s.status === "running" ? "active" : "pending",
-            }))
+            live.steps.map((s: any, i: number) => {
+              let label = s.description || s.label || `Step ${i + 1}`;
+              if (s.result) {
+                try {
+                  const r = typeof s.result === "string" ? JSON.parse(s.result) : s.result;
+                  if (r.path) {
+                    const fname = r.path.split("/").pop();
+                    label += ` → ${fname}`;
+                  }
+                } catch {}
+              }
+              return {
+                id: s.id || `step-${i}`,
+                label,
+                status: s.status === "completed" || s.status === "done" ? "done" : s.status === "failed" ? "failed" : s.status === "running" ? "running" : "pending",
+              };
+            })
           );
+        }
+
+        // Track created files
+        if (live.created_files) {
+          setCreatedFiles(live.created_files);
         }
 
         // Update agent count
@@ -135,6 +163,27 @@ export default function JarvisExperience() {
             failures: live.failures || 0,
             verified: live.verified || 0,
           });
+          // Fetch evidence timeline
+          try {
+            const evRes = await safeJson(
+              await fetch(`${BASE}/api/evidence/${missionId}/timeline`)
+            );
+            if (evRes?.events) {
+              setEvidenceTimeline(evRes.events);
+            }
+          } catch {}
+
+          // Fetch composite view
+          try {
+            const compRes = await safeJson(
+              await fetch(`${BASE}/api/workspace/composite/${missionId}`)
+            );
+            if (compRes) {
+              setCompositeView(compRes);
+              setWorkerWindows(compRes.windows || []);
+              setAppTimeline(compRes.timeline || []);
+            }
+          } catch {}
         } else if (live.status === "paused") {
           setState("waiting");
         } else if (live.status === "failed" || live.status === "stopped") {
@@ -158,6 +207,23 @@ export default function JarvisExperience() {
     }, 1500);
     return () => window.clearInterval(poll);
   }, [missionId]);
+
+  // Live screenshot polling during mission execution
+  useEffect(() => {
+    if (!missionId || mode === "complete" || mode === "home") return;
+    const pollScreenshot = window.setInterval(async () => {
+      try {
+        const res = await fetch(`${BASE}/api/screen/screenshot`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.screenshot) {
+            setLiveScreenshot(data.screenshot);
+          }
+        }
+      } catch {}
+    }, 2000);
+    return () => window.clearInterval(pollScreenshot);
+  }, [missionId, mode]);
 
   // Start a mission
   async function startMission(text = input) {
@@ -286,6 +352,52 @@ export default function JarvisExperience() {
     } catch {}
   }
 
+  // Take control of a worker
+  async function handleTakeControl(workerId: string) {
+    try {
+      await safeJson(
+        await fetch(`${BASE}/api/workspace/take-control`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ worker_id: workerId }),
+        })
+      );
+      setSelectedWorker(workerId);
+    } catch {}
+  }
+
+  // Return control to JARVIS
+  async function handleReturnControl(workerId: string) {
+    try {
+      await safeJson(
+        await fetch(`${BASE}/api/workspace/return-control`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ worker_id: workerId }),
+        })
+      );
+      setSelectedWorker(null);
+    } catch {}
+  }
+
+  // Expand a mission step to see details
+  async function handleExpandStep(stepNum: number) {
+    if (expandedStep === stepNum) {
+      setExpandedStep(null);
+      setStepDetails(null);
+      return;
+    }
+    setExpandedStep(stepNum);
+    try {
+      const res = await safeJson(
+        await fetch(`${BASE}/api/workspace/step-details/${missionId}?step=${stepNum}`)
+      );
+      if (res && !res.error) {
+        setStepDetails(res);
+      }
+    } catch {}
+  }
+
   // Generate acknowledgment message
   function generateAcknowledgment(goal: string): string {
     const lower = goal.toLowerCase();
@@ -368,13 +480,65 @@ export default function JarvisExperience() {
               <span className="jv-complete-stat-label">Checks passed</span>
             </div>
           </div>
+          {evidenceTimeline.length > 0 && (
+            <div className="jv-evidence-timeline">
+              <p className="jv-panel-label">EVIDENCE TRAIL</p>
+              <div className="jv-evidence-list">
+                {evidenceTimeline.map((ev: any, i: number) => (
+                  <div key={i} className={`jv-evidence-item jv-evidence-${ev.type || "action"}`}>
+                    <span className="jv-evidence-time">
+                      {ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleTimeString() : ""}
+                    </span>
+                    <span className="jv-evidence-type">{(ev.type || "action").toUpperCase()}</span>
+                    <span className="jv-evidence-desc">{ev.description || ev.action_type || ""}</span>
+                    {ev.success !== undefined && (
+                      <span className={`jv-evidence-status ${ev.success ? "ok" : "fail"}`}>
+                        {ev.success ? "\u2713" : "\u2717"}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {createdFiles.length > 0 && (
+            <div style={{ width: "100%", maxWidth: 500, marginTop: 20 }}>
+              <p className="jv-panel-label" style={{ marginBottom: 8, fontSize: 11, color: "#00FF66", fontFamily: "monospace", letterSpacing: "0.1em" }}>CREATED FILES</p>
+              {createdFiles.map((f: any, i: number) => (
+                <div key={i} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "10px 14px", background: "#141414", border: "1px solid #222",
+                  borderRadius: 8, marginBottom: 6, fontFamily: "monospace", fontSize: 13,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ color: "#00FF66", fontSize: 16 }}>&#128196;</span>
+                    <div>
+                      <div style={{ color: "#e8e8e8", fontWeight: 600 }}>{f.name}</div>
+                      <div style={{ color: "#666", fontSize: 11, marginTop: 2 }}>{f.path}</div>
+                    </div>
+                  </div>
+                  <span style={{ color: "#888", fontSize: 12 }}>{f.size}b</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="jv-complete-actions">
-            <button className="jv-btn-primary" onClick={() => { setMode("home"); setMission(""); setProgress(0); setMissionId(""); setMissionStats(null); }}>
+            <button className="jv-btn-primary" onClick={() => { setMode("home"); setMission(""); setProgress(0); setMissionId(""); setMissionStats(null); setEvidenceTimeline([]); setCreatedFiles([]); }}>
               NEW MISSION
             </button>
-            <button className="jv-btn-ghost" onClick={() => setMode("cockpit")}>
+            <button className="jv-btn-ghost" onClick={() => { setMode("cockpit"); }}>
               VIEW RESULT
             </button>
+          </div>
+          <div className="jv-input-wrap" style={{ marginTop: 24 }}>
+            <input
+              className="jv-input"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") startMission(); }}
+              placeholder="Tell JARVIS what you need..."
+            />
+            <button className="jv-input-btn" onClick={() => startMission()}>ENTER</button>
           </div>
         </div>
       </div>
@@ -504,11 +668,14 @@ export default function JarvisExperience() {
               <h2 className="jv-mission-title">{mission || "Untitled mission"}</h2>
               <div className="jv-steps">
                 {steps.length > 0
-                  ? steps.map((step) => (
-                      <div key={step.id} className={`jv-step ${step.status}`}>
+                  ? steps.map((step, i) => (
+                      <div key={step.id} className={`jv-step ${step.status} ${expandedStep === i + 1 ? "expanded" : ""}`}
+                           onClick={() => handleExpandStep(i + 1)}>
                         <span className="jv-step-dot">
                           {step.status === "done"
                             ? "\u2713"
+                            : step.status === "running"
+                            ? "\u25CF"
                             : step.status === "active"
                             ? "\u25CF"
                             : step.status === "failed"
@@ -516,6 +683,18 @@ export default function JarvisExperience() {
                             : "\u25CB"}
                         </span>
                         {step.label}
+                        {expandedStep === i + 1 && stepDetails && (
+                          <div className="jv-step-detail">
+                            {stepDetails.app_name && <div className="jv-step-app">App: {stepDetails.app_name}</div>}
+                            {stepDetails.worker_id && <div className="jv-step-worker">Worker: {stepDetails.worker_id.split("_").slice(-1)[0]}</div>}
+                            {stepDetails.duration_ms > 0 && <div className="jv-step-dur">{Math.round(stepDetails.duration_ms)}ms</div>}
+                            {stepDetails.verification?.verified !== undefined && (
+                              <div className={`jv-step-verify ${stepDetails.verification.verified ? "ok" : "fail"}`}>
+                                {stepDetails.verification.verified ? "\u2713 Verified" : "\u2717 Not verified"}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))
                   : ["Understand", "Plan", "Create", "Verify"].map((step, i) => (
@@ -594,25 +773,142 @@ export default function JarvisExperience() {
                   <span className="jv-live-dot" /> LIVE
                 </span>
                 <span className="jv-workspace-title">JARVIS WORKSPACE</span>
+                {compositeView && (
+                  <span className="jv-worker-count">
+                    {compositeView.active_workers} worker{compositeView.active_workers !== 1 ? "s" : ""}
+                  </span>
+                )}
               </div>
               <div className="jv-workspace-body">
-                <LiveWorkspace
-                  workspaceId={workspaceId || undefined}
-                  isRunning={workspaceRunning}
-                  currentAction={
-                    state === "complete"
-                      ? "Mission complete"
-                      : progress > 65
-                      ? "Verifying evidence"
-                      : "JARVIS is working"
-                  }
-                  missionId={missionId || undefined}
-                />
+                {workerWindows.length > 0 ? (
+                  <div className="jv-compositor">
+                    {workerWindows.map((w: any) => (
+                      <div key={w.id} className={`jv-worker-window ${w.user_control ? "user-control" : ""}`}>
+                        <div className="jv-worker-header">
+                          <span className="jv-worker-title">{w.title}</span>
+                          <span className={`jv-worker-status jv-status-${w.status}`}>
+                            {w.status === "running" ? "\u25CF" : "\u25CB"}
+                          </span>
+                        </div>
+                        <div className="jv-worker-activity">
+                          {w.activity.action && (
+                            <div className="jv-activity-row">
+                              <span className="jv-activity-label">ACTION</span>
+                              <span className="jv-activity-val">{w.activity.action}</span>
+                            </div>
+                          )}
+                          {w.activity.tool && (
+                            <div className="jv-activity-row">
+                              <span className="jv-activity-label">TOOL</span>
+                              <span className="jv-activity-val">{w.activity.tool}</span>
+                            </div>
+                          )}
+                          {w.activity.object && (
+                            <div className="jv-activity-row">
+                              <span className="jv-activity-label">OBJECT</span>
+                              <span className="jv-activity-val">{w.activity.object}</span>
+                            </div>
+                          )}
+                          {w.activity.progress > 0 && (
+                            <div className="jv-worker-progress">
+                              <div className="jv-meter" style={{height: 4}}>
+                                <div className="jv-meter-fill" style={{width: `${w.activity.progress * 100}%`}} />
+                              </div>
+                              <span className="jv-progress-text">{Math.round(w.activity.progress * 100)}%</span>
+                            </div>
+                          )}
+                          {w.activity.verification && (
+                            <div className={`jv-verify-badge ${w.activity.verification}`}>
+                              {w.activity.verification === "passed" ? "\u2713 VERIFIED" : w.activity.verification === "failed" ? "\u2717 FAILED" : "\u25CB PENDING"}
+                            </div>
+                          )}
+                        </div>
+                        <div className="jv-worker-controls">
+                          {w.user_control ? (
+                            <button className="jv-btn-return" onClick={() => handleReturnControl(w.id)}>
+                              RETURN TO JARVIS
+                            </button>
+                          ) : (
+                            <button className="jv-btn-control" onClick={() => handleTakeControl(w.id)}>
+                              TAKE CONTROL
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    {liveScreenshot && (
+                      <div className="jv-live-screenshot" style={{
+                        position: "relative",
+                        borderBottom: "1px solid #222",
+                        background: "#000",
+                        maxHeight: "40vh",
+                        overflow: "hidden",
+                      }}>
+                        <img
+                          src={`data:image/jpeg;base64,${liveScreenshot}`}
+                          alt="Live screen"
+                          style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                        />
+                        <div style={{
+                          position: "absolute",
+                          top: 8,
+                          right: 8,
+                          background: "rgba(0,0,0,0.7)",
+                          padding: "4px 10px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          color: "#00FF66",
+                          fontFamily: "monospace",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}>
+                          <span style={{
+                            width: 6, height: 6, borderRadius: "50%",
+                            background: "#00FF66",
+                            animation: "pulse 1.5s infinite",
+                          }} />
+                          LIVE SCREEN
+                        </div>
+                      </div>
+                    )}
+                    <LiveWorkspace
+                      workspaceId={workspaceId || undefined}
+                      isRunning={workspaceRunning}
+                      currentAction={
+                        state === "complete"
+                          ? "Mission complete"
+                          : progress > 65
+                          ? "Verifying evidence"
+                          : "JARVIS is working"
+                      }
+                      missionId={missionId || undefined}
+                    />
+                  </>
+                )}
               </div>
+              {appTimeline.length > 0 && (
+                <div className="jv-timeline-bar">
+                  {appTimeline.map((ev: any, i: number) => (
+                    <div key={i} className={`jv-timeline-event jv-tl-${ev.event_type?.replace("_", "-")}`}>
+                      <span className="jv-tl-time">
+                        {ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : ""}
+                      </span>
+                      <span className="jv-tl-app">{ev.app_name}</span>
+                      <span className="jv-tl-desc">{ev.description?.substring(0, 40)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="jv-workspace-footer">
                 <span className="jv-footer-dot" />
                 {state === "complete"
                   ? "Mission complete"
+                  : compositeView
+                  ? `${compositeView.active_workers} workers · ${compositeView.total_workers_created} total`
                   : "JARVIS is working in its own computer"}
               </div>
             </div>

@@ -22,6 +22,7 @@ import subprocess
 from typing import Optional, Dict, List, Callable, Tuple
 from dataclasses import dataclass, field
 from mission_state import get_mission_state, validate_action
+from action_fabric import PrimitiveResult
 
 log = logging.getLogger("workspace_agent")
 
@@ -206,6 +207,65 @@ class WorkspaceAgent:
             self._missions[mission.id] = mission
         log.info(f"[AGENT] Mission created: {mission.id} - {objective[:60]}")
         return mission
+
+    def compile_and_execute(self, objective: str, workspace_id: str = "default") -> dict:
+        """Universal Task Compiler path: objective → truth conditions → capabilities → plan → execute → verify → adapt → complete.
+
+        This is the closed-loop that handles novel tasks JARVIS has never been explicitly programmed for.
+        """
+        try:
+            from mission_engine import get_task_compiler
+            compiler = get_task_compiler()
+
+            plan = compiler.compile(objective, workspace_id)
+
+            mission = self.create_mission(objective, workspace_id)
+
+            compiled_steps = []
+            for cs in plan.steps:
+                step = AgentStep(
+                    number=len(compiled_steps) + 1,
+                    action=cs.primitive,
+                    description=cs.description,
+                    params=cs.params,
+                )
+                compiled_steps.append(step)
+
+            with self._lock:
+                mission.steps = compiled_steps
+                mission.status = "ready"
+
+            result = compiler.execute(plan)
+
+            with self._lock:
+                mission.status = "completed" if result.success else "partial"
+                mission.completed_at = time.time()
+                mission.progress = 1.0
+                mission.current_action = "Task compiler complete"
+                for i, cs in enumerate(plan.steps):
+                    if i < len(mission.steps):
+                        mission.steps[i].status = cs.status
+                        mission.steps[i].result = json.dumps(cs.result) if cs.result else ""
+                        mission.steps[i].error = cs.result.get("error", "") if isinstance(cs.result, dict) else ""
+
+            return {
+                "ok": result.success,
+                "mission_id": mission.id,
+                "plan_id": plan.id,
+                "objective": objective,
+                "truth_conditions_met": f"{result.truth_conditions_met}/{result.truth_conditions_total}",
+                "steps_completed": f"{result.steps_completed}/{result.steps_total}",
+                "adaptations_made": result.adaptations_made,
+                "duration_seconds": round(result.duration_seconds, 2),
+                "artifacts": result.artifacts,
+                "compiled_skills": result.compiled_skills,
+                "environment": plan.environment,
+                "evidence": result.evidence[-10:],
+                "mission": mission.to_dict(),
+            }
+        except Exception as e:
+            log.error(f"[AGENT] Task compiler failed: {e}")
+            return {"ok": False, "error": str(e)}
 
     def plan_mission(self, mission_id: str) -> dict:
         with self._lock:
@@ -550,6 +610,30 @@ RULES:
             wm.update_action(mission.workspace_id, step.description, "working")
             self._emit(mission_id, "step_start", step.to_dict())
 
+            # ── ORCHESTRATOR: Create worker for this step ──
+            worker_id = ""
+            try:
+                from workspace_manager import get_workspace_orchestrator, TaskRequirements
+                orch = get_workspace_orchestrator()
+                req = TaskRequirements.from_goal(step.description)
+                worker = orch.create_worker(mission_id, step.action, requirements=req)
+                worker_id = worker.id
+                orch.activate_worker(worker_id)
+                orch.update_activity(worker_id, action=step.description, progress=0)
+                # Record step detail for mission inspector
+                from workspace_manager import MissionStepDetail
+                step_detail = MissionStepDetail(
+                    step_number=step.number,
+                    action=step.action,
+                    description=step.description,
+                    status="running",
+                    worker_id=worker_id,
+                    app_name=step.action,
+                )
+                orch.record_step(mission_id, step_detail)
+            except Exception as orch_err:
+                log.debug(f"[AGENT] Orchestrator worker creation failed: {orch_err}")
+
             # ── OBSERVE: Capture workspace state BEFORE executing ──
             # This is the critical ReAct OBSERVE phase — re-assess the environment
             # before acting, so the agent can adapt if the state changed.
@@ -649,12 +733,61 @@ RULES:
                 state.transition(mission_id, "executing")
                 self._emit(mission_id, "step_complete", step.to_dict())
 
+                # ── ORCHESTRATOR: Update step + release worker ──
+                try:
+                    from workspace_manager import get_workspace_orchestrator
+                    orch = get_workspace_orchestrator()
+                    orch.update_step(mission_id, step.number,
+                                    status="completed",
+                                    duration_ms=(time.time() - step.timestamp) * 1000,
+                                    verification={"verified": verified, "confidence": 0.8} if verified else {})
+                    orch.set_verification(worker_id, "passed" if verified else "failed")
+                    if worker_id:
+                        orch.release_worker(worker_id, mission_id)
+                except Exception:
+                    pass
+
+                # ── SKILL COMPILER: Record successful procedure ──
+                try:
+                    from action_fabric import get_skill_compiler, get_contract_engine
+                    compiler = get_skill_compiler()
+                    contracts = get_contract_engine()
+                    # Verify against contract
+                    contract_verified = contracts.verify(step.action, PrimitiveResult(ok=True, data=step.params))
+                    # Record as skill if novel (not a basic repeated action)
+                    skill_name = f"{step.action}_{mission.objective[:30].replace(' ', '_')}"
+                    existing = compiler.get_skill(skill_name)
+                    if existing:
+                        compiler.record_success(skill_name)
+                    elif step.action not in ("screenshot", "wait"):
+                        compiler.compile(
+                            name=skill_name,
+                            description=f"{step.description} (mission: {mission.objective[:60]})",
+                            steps=[{"action": step.action, "params": step.params, "description": step.description}],
+                            app_context=step.action,
+                        )
+                except Exception as skill_err:
+                    log.debug(f"[AGENT] Skill compilation failed: {skill_err}")
+
             except Exception as e:
                 step.status = "failed"
                 step.error = str(e)
                 log.error(f"[AGENT] Step {step.number} failed: {e}")
                 state.advance_step(mission_id, step.number, {"ok": False, "error": str(e)})
                 self._emit(mission_id, "step_error", step.to_dict())
+
+                # ── ORCHESTRATOR: Mark step failed + release worker ──
+                try:
+                    from workspace_manager import get_workspace_orchestrator
+                    orch = get_workspace_orchestrator()
+                    orch.update_step(mission_id, step.number,
+                                    status="failed",
+                                    duration_ms=(time.time() - step.timestamp) * 1000)
+                    if worker_id:
+                        orch.release_worker(worker_id, mission_id)
+                except Exception:
+                    pass
+
                 if step.error and "approval denied" in str(e).lower():
                     state.transition(mission_id, "stopped")
                     mission.status = "stopped"
@@ -699,26 +832,39 @@ RULES:
         return None
 
     def _diagnose_failure(self, step: AgentStep) -> List[dict]:
-        """Analyze step failure and return targeted recovery strategies."""
-        error_lower = step.error.lower() if step.error else ""
-        strategies = []
-        if "not found" in error_lower or "404" in error_lower:
-            strategies.append({"action": "web_search", "params": {"query": step.description}, "description": "Search for correct resource"})
-            strategies.append({"action": "screenshot", "description": "Reassess screen state"})
-        elif "timeout" in error_lower or "timed out" in error_lower:
-            strategies.append({"action": "wait", "params": {"seconds": 5}, "description": "Extended wait for slow resource"})
-            strategies.append({"action": "screenshot", "description": "Check if page loaded after wait"})
-        elif "permission" in error_lower or "access" in error_lower:
-            strategies.append({"action": "press_key", "params": {"key": "Escape"}, "description": "Dismiss permission dialog"})
-            strategies.append({"action": "screenshot", "description": "Check screen after dialog dismiss"})
-        else:
-            strategies = [
-                {"action": "screenshot", "description": "Take screenshot to reassess state"},
-                {"action": "press_key", "params": {"key": "Escape"}, "description": "Press Escape to clear dialog/state"},
-                {"action": "wait", "params": {"seconds": 3}, "description": "Wait for UI to settle"},
-                {"action": "screenshot", "description": "Verify state after recovery attempt"},
-            ]
-        return strategies
+        """Analyze step failure and return targeted recovery strategies.
+        Uses the Universal Recovery Engine for intelligent diagnosis.
+        """
+        try:
+            from action_fabric import get_recovery_engine
+            engine = get_recovery_engine()
+            strategies = engine.diagnose(step.action, step.error or "", {"step": step.to_dict()})
+            # Add params to each strategy for compatibility with _try_recover
+            for s in strategies:
+                if "params" not in s:
+                    s["params"] = {}
+            return strategies
+        except Exception:
+            # Fallback to basic diagnosis
+            error_lower = step.error.lower() if step.error else ""
+            strategies = []
+            if "not found" in error_lower or "404" in error_lower:
+                strategies.append({"action": "web_search", "params": {"query": step.description}, "description": "Search for correct resource"})
+                strategies.append({"action": "screenshot", "params": {}, "description": "Reassess screen state"})
+            elif "timeout" in error_lower or "timed out" in error_lower:
+                strategies.append({"action": "wait", "params": {"seconds": 5}, "description": "Extended wait for slow resource"})
+                strategies.append({"action": "screenshot", "params": {}, "description": "Check if page loaded after wait"})
+            elif "permission" in error_lower or "access" in error_lower:
+                strategies.append({"action": "press_key", "params": {"key": "Escape"}, "description": "Dismiss permission dialog"})
+                strategies.append({"action": "screenshot", "params": {}, "description": "Check screen after dialog dismiss"})
+            else:
+                strategies = [
+                    {"action": "screenshot", "params": {}, "description": "Take screenshot to reassess state"},
+                    {"action": "press_key", "params": {"key": "Escape"}, "description": "Press Escape to clear dialog/state"},
+                    {"action": "wait", "params": {"seconds": 3}, "description": "Wait for UI to settle"},
+                    {"action": "screenshot", "params": {}, "description": "Verify state after recovery attempt"},
+                ]
+            return strategies
 
     def _execute_step(self, mission: AgentMission, step: AgentStep, wm) -> str:
         """Execute a single step via the task router."""

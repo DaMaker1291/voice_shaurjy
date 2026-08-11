@@ -5171,6 +5171,155 @@ async def stop_mission(mission_id: str):
     return {"ok": True, "status": "stopped"}
 
 
+# ── Perception Endpoints ────────────────────────────────────────────
+
+@app.get("/api/perception")
+async def get_perception_state():
+    """Get current perception snapshot and context summary."""
+    from perception import get_perception
+    perc = get_perception()
+    return perc.to_dict()
+
+
+@app.post("/api/perception/snapshot")
+async def take_perception_snapshot(request: Request):
+    """Take a fresh perception snapshot."""
+    from perception import get_perception
+    body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+    perc = get_perception()
+    snapshot = perc.perceive(
+        include_screenshot=body.get("screenshot", True),
+        include_ocr=body.get("ocr", False),
+        include_windows=body.get("windows", True),
+        include_accessibility=body.get("accessibility", False),
+        include_dom=body.get("dom", False),
+        include_filesystem=body.get("filesystem", False),
+        include_processes=body.get("processes", False),
+        include_clipboard=body.get("clipboard", True),
+    )
+    return {"snapshot": snapshot.to_dict(), "summary": perc.get_context_summary()}
+
+
+@app.post("/api/perception/continuous/start")
+async def start_continuous_perception(request: Request):
+    """Start continuous background observation."""
+    from perception import get_perception
+    body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+    interval = body.get("interval", 5.0)
+    perc = get_perception()
+    perc.start_continuous(interval=interval)
+    return {"ok": True, "continuous": True, "interval": interval}
+
+
+@app.post("/api/perception/continuous/stop")
+async def stop_continuous_perception():
+    """Stop continuous background observation."""
+    from perception import get_perception
+    perc = get_perception()
+    perc.stop_continuous()
+    return {"ok": True, "continuous": False}
+
+
+@app.get("/api/perception/history")
+async def get_perception_history(count: int = 10):
+    """Get recent perception snapshots from the ring buffer."""
+    from perception import get_perception
+    perc = get_perception()
+    snapshots = perc.get_recent_snapshots(count)
+    return {"snapshots": [s.to_dict() for s in snapshots], "count": len(snapshots)}
+
+
+@app.get("/api/perception/ui-element")
+async def find_ui_element(text: str, role: str = None):
+    """Find a UI element by text or role using the perception system."""
+    from perception import get_perception
+    perc = get_perception()
+    elem = perc.find_ui_element(text, role)
+    if elem:
+        return {"found": True, "element": elem.to_dict()}
+    return {"found": False}
+
+
+# ── World Model ─────────────────────────────────────────────────
+
+@app.get("/api/world-model")
+async def world_model_state():
+    """Get the current world model state."""
+    from perception import get_world_model
+    wm = get_world_model()
+    return wm.to_dict()
+
+@app.get("/api/world-model/files")
+async def world_model_files(query: str = ""):
+    """Search known files in the world model."""
+    from perception import get_world_model
+    wm = get_world_model()
+    files = wm.find_file(query) if query else wm.get_state().known_files[:50]
+    return {"files": [{"path": f.path, "name": f.name, "ext": f.extension} for f in files]}
+
+@app.get("/api/world-model/apps")
+async def world_model_apps():
+    """Get running applications from the world model."""
+    from perception import get_world_model
+    wm = get_world_model()
+    state = wm.get_state()
+    return {"windows": [{"name": w.name, "title": w.title, "focused": w.focused} for w in state.windows]}
+
+@app.post("/api/world-model/sync")
+async def world_model_sync():
+    """Sync world model from current perception snapshot."""
+    from perception import get_perception, get_world_model
+    perc = get_perception()
+    wm = get_world_model()
+    snapshot = perc.perceive(
+        include_screenshot=False, include_ocr=False, include_dom=False,
+        include_accessibility=False, include_clipboard=False,
+    )
+    wm.update_from_perception(snapshot)
+    return wm.to_dict()
+
+@app.post("/api/world-model/action")
+async def world_model_record_action(body: dict):
+    """Record an action in the world model."""
+    from perception import get_world_model
+    wm = get_world_model()
+    wm.record_action(body.get("action", ""), body.get("result", ""))
+    return {"ok": True}
+
+@app.post("/api/world-model/mission")
+async def world_model_record_mission(body: dict):
+    """Record a mission in the world model."""
+    from perception import get_world_model
+    wm = get_world_model()
+    wm.record_mission(body.get("id", ""), body.get("objective", ""), body.get("status", ""))
+    return {"ok": True}
+
+
+# ── Capability Fabric Health ────────────────────────────────────────
+
+@app.get("/api/capability/health")
+async def capability_health():
+    """Get adapter health status for all capability fabric adapters."""
+    from capability_fabric import get_capability_fabric
+    fabric = get_capability_fabric()
+    status = fabric.get_status()
+    return status
+
+
+@app.get("/api/action-fabric/status")
+async def action_fabric_status():
+    """Get action fabric status — primitives, resolver, composition engine."""
+    from action_fabric import get_primitive_registry, get_object_resolver, get_composition_engine
+    registry = get_primitive_registry()
+    resolver = get_object_resolver()
+    composition = get_composition_engine()
+    return {
+        "primitives": list(registry._primitives.keys()) if hasattr(registry, '_primitives') else [],
+        "resolver": type(resolver).__name__,
+        "composition_engine": type(composition).__name__,
+    }
+
+
 # ── Voice Pipeline WebSocket ────────────────────────────────────────
 
 @app.websocket("/ws/voice")
@@ -5906,12 +6055,27 @@ async def do_anything(request: Request):
     except Exception:
         pass
 
-    # ── 3. COMPLEXITY: Route simple vs complex tasks ──
+    # ── 3. OBJECT RESOLUTION: Identify objects in the goal ──
+    resolved_objects = []
+    try:
+        from action_fabric import get_object_resolver
+        resolver = get_object_resolver()
+        resolved_objects = resolver.resolve(goal)
+        if resolved_objects:
+            intent_result["resolved_objects"] = [
+                {"name": o.name, "type": o.object_type.value if hasattr(o, 'object_type') else "unknown",
+                 "confidence": o.confidence}
+                for o in resolved_objects if hasattr(o, 'name')
+            ]
+    except Exception:
+        pass
+
+    # ── 4. COMPLEXITY: Route simple vs complex tasks ──
     from universal_task_engine import UniversalTaskEngine, execute_complex_task
     task_engine = UniversalTaskEngine()
     complexity = task_engine.classify_complexity(goal)
 
-    # ── 4. MISSION + EXECUTION ──
+    # ── 5. MISSION + EXECUTION ──
     if complexity.value in ("complex", "autonomous"):
         # Complex tasks → Full mission pipeline with DAG, evidence, verification
         try:
@@ -5962,7 +6126,7 @@ async def do_anything(request: Request):
         except Exception as e:
             log.error(f"[JARVIS] Mission pipeline failed: {e}")
 
-    # ── 5. SIMPLE TASKS: Direct execution via computer_use ──
+    # ── 6. SIMPLE TASKS: Direct execution via computer_use ──
     try:
         from computer_use import execute_goal
         result = await execute_goal(goal, safety, followup_answers)
@@ -5979,7 +6143,7 @@ async def do_anything(request: Request):
         if "output" not in result:
             result["output"] = f"Completed {result.get('steps_done', 0)} of {result.get('steps_total', 0)} steps in {result.get('duration_seconds', 0)}s."
 
-    # ── 6. EVIDENCE: Record even simple executions ──
+    # ── 7. EVIDENCE: Record even simple executions ──
     try:
         from evidence_ledger import get_evidence_ledger
         mission_id = f"exec_{int(_start)}"
@@ -6891,6 +7055,168 @@ async def workspace_status():
     return cloner.get_status()
 
 
+# ── Workspace Broker Endpoints ───────────────────────────────────────
+
+@app.get("/api/workspace/broker/system-info")
+async def broker_system_info():
+    """Get full system info: hardware + virtualization + available backends."""
+    from workspace_manager import get_workspace_broker
+    broker = get_workspace_broker()
+    return broker.get_system_info()
+
+
+@app.post("/api/workspace/broker/select")
+async def broker_select(request: Request):
+    """Select the best workspace backend for given task requirements."""
+    from workspace_manager import get_workspace_broker, TaskRequirements
+    body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+    broker = get_workspace_broker()
+
+    if "goal" in body:
+        req = TaskRequirements.from_goal(body["goal"])
+    else:
+        req = TaskRequirements(
+            browser=body.get("browser", False),
+            gui=body.get("gui", False),
+            filesystem=body.get("filesystem", True),
+            network=body.get("network", True),
+            gpu=body.get("gpu", False),
+            persistent_state=body.get("persistent_state", False),
+            windows_apps=body.get("windows_apps", False),
+            linux_apps=body.get("linux_apps", False),
+        )
+
+    decision = broker.select_backend(req)
+    return {"decision": decision.to_dict(), "requirements": req.to_dict()}
+
+
+@app.get("/api/workspace/broker/backends")
+async def broker_list_backends():
+    """List all available backends with capabilities and costs."""
+    from workspace_manager import BACKEND_CAPABILITIES, BACKEND_COSTS, BACKEND_RAM_OVERHEAD
+    from hardware_detector import get_virtualization_info
+    virt = get_virtualization_info()
+    available = virt.available_backends()
+    backends = []
+    for name in available:
+        backends.append({
+            "name": name,
+            "available": True,
+            "capabilities": BACKEND_CAPABILITIES.get(name, {}),
+            "cost": BACKEND_COSTS.get(name, 10),
+            "ram_overhead_gb": BACKEND_RAM_OVERHEAD.get(name, 1.0),
+        })
+    return {"backends": backends, "total": len(backends)}
+
+
+# ── Workspace Orchestrator Endpoints ────────────────────────────────
+
+@app.get("/api/workspace/composite/{mission_id}")
+async def workspace_composite(mission_id: str):
+    """Get the unified workspace view — compositor, timeline, semantic activity."""
+    from workspace_manager import get_workspace_orchestrator
+    orch = get_workspace_orchestrator()
+    return orch.get_composite_view(mission_id)
+
+
+@app.get("/api/workspace/timeline")
+async def workspace_timeline(mission_id: str = None, count: int = 50):
+    """Get the application timeline."""
+    from workspace_manager import get_workspace_orchestrator
+    orch = get_workspace_orchestrator()
+    return {"events": orch.get_timeline(mission_id, count)}
+
+
+@app.get("/api/workspace/timeline/summary")
+async def workspace_timeline_summary(mission_id: str = None):
+    """Get timeline summary — which apps ran and for how long."""
+    from workspace_manager import get_workspace_orchestrator
+    orch = get_workspace_orchestrator()
+    return orch.get_timeline_summary(mission_id)
+
+
+@app.post("/api/workspace/worker/create")
+async def create_worker(request: Request):
+    """Create a new execution worker for an application."""
+    from workspace_manager import get_workspace_orchestrator, TaskRequirements
+    body = await request.json()
+    orch = get_workspace_orchestrator()
+    mission_id = body.get("mission_id", "default")
+    app_name = body.get("app_name", "")
+    backend_hint = body.get("backend")
+    req = TaskRequirements.from_goal(app_name) if not backend_hint else None
+    worker = orch.create_worker(mission_id, app_name, backend_hint, req)
+    return {"ok": True, "worker": worker.to_dict()}
+
+
+@app.post("/api/workspace/worker/release")
+async def release_worker(request: Request):
+    """Release a worker and free its resources."""
+    from workspace_manager import get_workspace_orchestrator
+    body = await request.json()
+    orch = get_workspace_orchestrator()
+    worker_id = body.get("worker_id", "")
+    mission_id = body.get("mission_id", "")
+    orch.release_worker(worker_id, mission_id)
+    return {"ok": True}
+
+
+@app.post("/api/workspace/worker/activity")
+async def update_worker_activity(request: Request):
+    """Update semantic activity for a worker."""
+    from workspace_manager import get_workspace_orchestrator
+    body = await request.json()
+    orch = get_workspace_orchestrator()
+    worker_id = body.get("worker_id", "")
+    orch.update_activity(
+        worker_id,
+        action=body.get("action", ""),
+        tool=body.get("tool", ""),
+        object_name=body.get("object", ""),
+        progress=body.get("progress"),
+    )
+    return {"ok": True}
+
+
+@app.post("/api/workspace/take-control")
+async def take_control(request: Request):
+    """User takes control of a live workspace."""
+    from workspace_manager import get_workspace_orchestrator
+    body = await request.json()
+    orch = get_workspace_orchestrator()
+    worker_id = body.get("worker_id", "")
+    return orch.take_control(worker_id)
+
+
+@app.post("/api/workspace/return-control")
+async def return_control(request: Request):
+    """User returns control to JARVIS."""
+    from workspace_manager import get_workspace_orchestrator
+    body = await request.json()
+    orch = get_workspace_orchestrator()
+    worker_id = body.get("worker_id", "")
+    return orch.return_control(worker_id)
+
+
+@app.get("/api/workspace/resources")
+async def workspace_resources():
+    """Get current resource usage across all workers."""
+    from workspace_manager import get_workspace_orchestrator
+    orch = get_workspace_orchestrator()
+    return orch.get_resource_stats()
+
+
+@app.get("/api/workspace/step-details/{mission_id}")
+async def step_details(mission_id: str, step: int = None):
+    """Get detailed step information for mission inspection."""
+    from workspace_manager import get_workspace_orchestrator
+    orch = get_workspace_orchestrator()
+    result = orch.get_step_details(mission_id, step)
+    if result is None:
+        return {"error": "Step not found"}
+    return result
+
+
 # ── State Migrator Endpoints ───────────────────────────────────────────────
 
 @app.get("/api/migrator/windows")
@@ -7652,6 +7978,14 @@ async def lifespan(app):
     except Exception:
         pass
 
+    # Initialize workspace backends (NativeBackend, SandboxBackend)
+    try:
+        from workspace_backend import init_backends
+        init_backends()
+        print("[BACKENDS] Workspace backends initialized (native, sandbox)")
+    except Exception as _be_err:
+        print(f"[BACKENDS] Init failed: {_be_err}")
+
     await startup_event()
     await init_multi_tenant()
     await init_context_relay()
@@ -8056,6 +8390,307 @@ async def user_context(q: str = ""):
         return context
     except Exception as e:
         return {"error": str(e)}
+
+
+# ── Universal Fabric API ─────────────────────────────────────────────
+try:
+    from action_fabric import (
+        get_semantic_executor,
+        get_app_discovery,
+        get_contract_engine,
+        get_recovery_engine,
+        get_skill_compiler,
+    )
+
+    @app.post("/api/fabric/semantic-execute")
+    async def fabric_semantic_execute(request: Request):
+        """Execute a natural-language intent against any app via SemanticExecutor."""
+        body = await request.json()
+        intent = body.get("intent", "")
+        app_hint = body.get("app", None)
+        if not intent:
+            return {"error": "No intent provided"}
+        executor = get_semantic_executor()
+        result = await executor.execute(intent, app=app_hint)
+        return result
+
+    @app.get("/api/fabric/applications")
+    async def fabric_applications():
+        """List all known applications and auto-discover installed ones."""
+        discovery = get_app_discovery()
+        apps = discovery.list_applications()
+        return {"applications": apps, "count": len(apps)}
+
+    @app.get("/api/fabric/application/{name}")
+    async def fabric_application_detail(name: str):
+        """Get detailed profile for a specific application."""
+        discovery = get_app_discovery()
+        profile = discovery.get_profile(name)
+        if profile:
+            return {
+                "name": profile.name,
+                "process_names": profile.process_names,
+                "cli": profile.cli,
+                "control_methods": profile.control_methods,
+                "platforms": profile.platforms,
+                "capabilities": profile.capabilities,
+                "verification": profile.verification,
+                "aliases": profile.aliases,
+            }
+        return {"error": f"Application '{name}' not found"}
+
+    @app.get("/api/fabric/contracts")
+    async def fabric_contracts():
+        """List all verification contracts."""
+        engine = get_contract_engine()
+        contracts = []
+        for name, contract in engine._contracts.items():
+            contracts.append({
+                "action": name,
+                "success_criteria": contract.success_criteria,
+                "verification_methods": contract.verification_methods,
+                "timeout_seconds": contract.timeout_seconds,
+            })
+        return {"contracts": contracts, "count": len(contracts)}
+
+    @app.get("/api/fabric/recovery/stats")
+    async def fabric_recovery_stats():
+        """Get recovery engine statistics."""
+        engine = get_recovery_engine()
+        return {
+            "action_count": len(engine._action_strategies),
+            "strategies_per_action": {
+                name: len(strategies)
+                for name, strategies in engine._action_strategies.items()
+            },
+        }
+
+    @app.post("/api/fabric/recovery/diagnose")
+    async def fabric_recovery_diagnose(request: Request):
+        """Diagnose a failure and suggest recovery strategies."""
+        body = await request.json()
+        action = body.get("action", "")
+        error = body.get("error", "")
+        engine = get_recovery_engine()
+        diagnosis = engine.diagnose(action, error)
+        return diagnosis
+
+    @app.get("/api/fabric/skills")
+    async def fabric_skills():
+        """List all compiled skills."""
+        compiler = get_skill_compiler()
+        skills = compiler.list_skills()
+        return {"skills": skills, "count": len(skills)}
+
+    @app.get("/api/fabric/skills/stats")
+    async def fabric_skills_stats():
+        """Get skill compiler statistics."""
+        compiler = get_skill_compiler()
+        stats = compiler.get_stats()
+        return stats
+
+    @app.post("/api/fabric/skills/compile")
+    async def fabric_skills_compile(request: Request):
+        """Manually compile a procedure into a skill."""
+        body = await request.json()
+        compiler = get_skill_compiler()
+        skill = compiler.compile(body)
+        return {"success": True, "skill_id": skill.skill_id}
+
+    print("[FABRIC] Universal Fabric API wired in at /api/fabric/*")
+except Exception as _fabric_err:
+    print(f"[FABRIC] Not mounted: {_fabric_err}")
+
+
+# ── Capability Discovery API ────────────────────────────────────────
+try:
+    from action_fabric import get_discovery_engine
+
+    @app.post("/api/discovery/task")
+    async def discovery_for_task(request: Request):
+        """Discover capabilities needed for a task."""
+        body = await request.json()
+        task = body.get("task", "")
+        engine = get_discovery_engine()
+        caps = engine.discover_for_task(task)
+        return {"capabilities": caps}
+
+    @app.post("/api/discovery/app")
+    async def discovery_app(request: Request):
+        """Discover how to control an application."""
+        body = await request.json()
+        app_name = body.get("app", "")
+        engine = get_discovery_engine()
+        info = engine.discover_app_control(app_name)
+        return info
+
+    @app.post("/api/discovery/files")
+    async def discovery_files(request: Request):
+        """Discover file operations for a task."""
+        body = await request.json()
+        task = body.get("task", "")
+        engine = get_discovery_engine()
+        ops = engine.discover_file_operations(task)
+        return {"operations": ops}
+
+    @app.get("/api/discovery/list")
+    async def discovery_list():
+        """List all discovered capabilities."""
+        engine = get_discovery_engine()
+        return {"discoveries": engine.list_discoveries()}
+
+    print("[DISCOVERY] Capability Discovery API wired in at /api/discovery/*")
+except Exception as _disc_err:
+    print(f"[DISCOVERY] Not mounted: {_disc_err}")
+
+
+# ── Universal Task Compiler API ─────────────────────────────────────
+try:
+    from mission_engine import get_task_compiler
+
+    @app.post("/api/compiler/compile")
+    async def compiler_compile(request: Request):
+        """Compile a user objective into an executable plan with truth conditions, capabilities, and steps."""
+        body = await request.json()
+        objective = body.get("objective", "")
+        workspace_id = body.get("workspace_id", "default")
+        if not objective:
+            return {"error": "No objective provided"}
+        compiler = get_task_compiler()
+        plan = compiler.compile(objective, workspace_id)
+        return {
+            "plan_id": plan.id,
+            "objective": plan.objective,
+            "environment": plan.environment,
+            "truth_conditions": [
+                {"description": c.description, "check_method": c.check_method, "verified": c.verified}
+                for c in plan.truth_conditions
+            ],
+            "capabilities": [
+                {"name": c.name, "category": c.category, "primitives": c.primitives, "priority": c.priority}
+                for c in plan.capabilities_required
+            ],
+            "steps": [
+                {"id": s.id, "primitive": s.primitive, "description": s.description, "params": s.params}
+                for s in plan.steps
+            ],
+        }
+
+    @app.post("/api/compiler/execute")
+    async def compiler_execute(request: Request):
+        """Compile + execute a user objective in one call (closed loop)."""
+        body = await request.json()
+        objective = body.get("objective", "")
+        workspace_id = body.get("workspace_id", "default")
+        if not objective:
+            return {"error": "No objective provided"}
+        try:
+            from workspace_agent import get_workspace_agent
+            agent = get_workspace_agent()
+            result = agent.compile_and_execute(objective, workspace_id)
+            return result
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    @app.get("/api/compiler/plans")
+    async def compiler_list_plans():
+        """List all compiled plans."""
+        compiler = get_task_compiler()
+        plans = []
+        for pid, plan in compiler._plans.items():
+            plans.append({
+                "id": plan.id,
+                "objective": plan.objective,
+                "status": plan.status,
+                "environment": plan.environment,
+                "steps": len(plan.steps),
+                "truth_conditions": len(plan.truth_conditions),
+                "capabilities": len(plan.capabilities_required),
+                "created_at": plan.created_at,
+            })
+        return {"plans": plans, "count": len(plans)}
+
+    @app.get("/api/compiler/plan/{plan_id}")
+    async def compiler_get_plan(plan_id: str):
+        """Get details of a specific compiled plan."""
+        compiler = get_task_compiler()
+        plan = compiler._plans.get(plan_id)
+        if not plan:
+            return {"error": f"Plan {plan_id} not found"}
+        return {
+            "id": plan.id,
+            "objective": plan.objective,
+            "status": plan.status,
+            "environment": plan.environment,
+            "truth_conditions": [
+                {"description": c.description, "check_method": c.check_method, "verified": c.verified, "evidence": c.evidence}
+                for c in plan.truth_conditions
+            ],
+            "capabilities": [
+                {"name": c.name, "category": c.category, "primitives": c.primitives, "priority": c.priority}
+                for c in plan.capabilities_required
+            ],
+            "steps": [
+                {"id": s.id, "primitive": s.primitive, "description": s.description, "status": s.status,
+                 "strategy_used": s.strategy_used, "attempts": s.attempts, "duration_ms": s.duration_ms,
+                 "result": s.result, "truth_conditions": [t.description for t in s.truth_conditions]}
+                for s in plan.steps
+            ],
+        }
+
+    print("[COMPILER] Universal Task Compiler API wired in at /api/compiler/*")
+except Exception as _compiler_err:
+    print(f"[COMPILER] Not mounted: {_compiler_err}")
+
+
+# ── Mission Memory API ──────────────────────────────────────────────
+try:
+    from mission_engine import get_mission_memory
+
+    @app.get("/api/memory/stats")
+    async def memory_stats():
+        """Get mission memory statistics."""
+        mem = get_mission_memory()
+        return mem.get_stats()
+
+    @app.get("/api/memory/recent")
+    async def memory_recent(limit: int = 10):
+        """Get recent mission records."""
+        mem = get_mission_memory()
+        return {"records": mem.get_recent(limit)}
+
+    @app.post("/api/memory/search")
+    async def memory_search(request: Request):
+        """Search for similar past missions."""
+        body = await request.json()
+        objective = body.get("objective", "")
+        mem = get_mission_memory()
+        results = mem.find_similar(objective)
+        return {"matches": [r.to_dict() for r in results]}
+
+    @app.post("/api/memory/record")
+    async def memory_record(request: Request):
+        """Record a completed mission in memory."""
+        body = await request.json()
+        mem = get_mission_memory()
+        mem.record_mission(
+            mission_id=body.get("mission_id", ""),
+            objective=body.get("objective", ""),
+            status=body.get("status", "completed"),
+            steps_taken=body.get("steps_taken", 0),
+            steps_succeeded=body.get("steps_succeeded", 0),
+            duration_s=body.get("duration_s", 0),
+            error_summary=body.get("error_summary", ""),
+            truth_conditions_met=body.get("truth_conditions_met", 0),
+            truth_conditions_total=body.get("truth_conditions_total", 0),
+            capabilities_used=body.get("capabilities_used", []),
+            procedures_learned=body.get("procedures_learned", []),
+        )
+        return {"ok": True}
+
+    print("[MEMORY] Mission Memory API wired in at /api/memory/*")
+except Exception as _mem_err:
+    print(f"[MEMORY] Not mounted: {_mem_err}")
 
 
 # ── Local Run (Electron mode) ─────────────

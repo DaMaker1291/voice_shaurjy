@@ -145,7 +145,7 @@ class NativeBackend(WorkspaceBackend):
                 return self._launch_app(params.get("name", ""), params.get("command", []))
             elif action == "screenshot":
                 return self._screenshot()
-            elif action == "web_search":
+            elif action in ("web_search", "search_web"):
                 return self._web_search(params.get("query", ""))
             elif action == "web_scrape":
                 return self._web_scrape(params.get("url", ""))

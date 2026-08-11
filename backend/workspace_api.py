@@ -179,7 +179,9 @@ async def mission_create(req: MissionReq):
 async def mission_plan(body: dict):
     mission_id = body.get("mission_id", "")
     engine = _get_mission_engine()
-    graph = engine.plan_mission(mission_id)
+    graph = engine._missions.get(mission_id)
+    if not graph:
+        return {"ok": False, "error": "Mission not found"}
     return {"ok": True, "mission": graph.to_dict()}
 
 
@@ -187,7 +189,98 @@ async def mission_plan(body: dict):
 async def mission_start(body: dict):
     mission_id = body.get("mission_id", "")
     engine = _get_mission_engine()
-    graph = engine.start_mission(mission_id)
+    graph = engine._missions.get(mission_id)
+    if not graph:
+        return {"ok": False, "error": "Mission not found"}
+
+    from mission_engine import get_task_compiler
+    compiler = get_task_compiler()
+    plan = compiler.compile_with_context(graph.objective, graph.workspace_id)
+
+    compiled_steps = []
+    for i, cs in enumerate(plan.steps):
+        compiled_steps.append({
+            "number": i + 1,
+            "action": cs.primitive,
+            "description": cs.description,
+            "params": cs.params,
+            "status": "pending",
+            "result": "",
+            "error": "",
+            "timestamp": 0,
+            "requires_approval": False,
+        })
+
+    graph.status = "running"
+    graph.started_at = time.time()
+    graph.nodes = {}
+    graph.steps = compiled_steps
+    graph.progress = 0.0
+
+    import threading
+    def _run():
+        total = len(plan.steps)
+        created_files = []
+
+        for i, cs in enumerate(plan.steps):
+            graph.progress = (i + 1) / total
+            graph.current_action = cs.description
+            compiled_steps[i]["status"] = "running"
+            compiled_steps[i]["timestamp"] = time.time()
+            graph.steps = list(compiled_steps)
+            time.sleep(0.8)
+
+            try:
+                result_dict = compiler._execute_primitive(cs, plan.workspace_id)
+                cs.result = result_dict
+                cs.status = "completed"
+                compiled_steps[i]["status"] = "completed"
+                compiled_steps[i]["result"] = json.dumps(result_dict) if result_dict else ""
+
+                if cs.primitive == "write" and result_dict.get("path"):
+                    created_files.append({
+                        "name": os.path.basename(result_dict["path"]),
+                        "path": result_dict["path"],
+                        "size": result_dict.get("bytes", result_dict.get("size", 0)),
+                    })
+            except Exception as e:
+                cs.status = "failed"
+                compiled_steps[i]["status"] = "failed"
+                compiled_steps[i]["error"] = str(e)
+
+            graph.steps = list(compiled_steps)
+            time.sleep(0.3)
+
+        graph.progress = 1.0
+        graph.current_action = "All steps complete"
+        graph.steps = list(compiled_steps)
+        graph.status = "completed"
+        graph.completed_at = time.time()
+        graph.created_files = created_files
+
+        try:
+            from mission_engine import get_mission_memory
+            mem = get_mission_memory()
+            caps_used = list(set(c.category for c in plan.capabilities_required))
+            mem.record_mission(
+                mission_id=graph.mission_id,
+                objective=graph.objective,
+                status=graph.status,
+                steps_taken=len(plan.steps),
+                steps_succeeded=sum(1 for s in plan.steps if s.status == "completed"),
+                duration_s=time.time() - graph.created_at,
+                truth_conditions_met=sum(1 for c in plan.truth_conditions if c.verified),
+                truth_conditions_total=len(plan.truth_conditions),
+                capabilities_used=caps_used,
+            )
+        except Exception:
+            pass
+        except Exception:
+            pass
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
     return {"ok": True, "mission": graph.to_dict()}
 
 
@@ -222,8 +315,14 @@ async def mission_status(mission_id: str = ""):
         m = engine.get_mission(mission_id)
         if m:
             return {"ok": True, "mission": m.to_dict()}
+        agent = _get_agent()
+        am = agent.get_mission(mission_id)
+        if am:
+            return {"ok": True, "mission": am}
         return {"ok": False, "error": "Mission not found"}
-    return {"ok": True, "missions": [m.to_dict() for m in engine.list_missions()]}
+    missions = [m.to_dict() for m in engine.list_missions()]
+    missions.extend(agent.list_missions() if (agent := _get_agent()) else [])
+    return {"ok": True, "missions": missions}
 
 
 # ── Approval System ──
